@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: logi-clinic-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: logi_clinic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: ./server/Dockerfile
+    container_name: logi-clinic-server
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/logi_clinic?schema=public
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: logi_clinic
+      PORT: 3000
+      NODE_ENV: production
+      JWT_SECRET: your-secret-key-change-in-production
+      CORS_ORIGIN: http://localhost:5173
+      # Optionnel: ID du projet Supabase pour appliquer les migrations automatiquement
+      SUPABASE_PROJECT_ID: ${SUPABASE_PROJECT_ID:-}
+      # Configuration Transcription Vocale
+      SPEECH_TO_TEXT_API_KEY: ${SPEECH_TO_TEXT_API_KEY:-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}
+      SPEECH_TO_TEXT_PROVIDER: ${SPEECH_TO_TEXT_PROVIDER:-openai}
+      SPEECH_TO_TEXT_API_URL: ${SPEECH_TO_TEXT_API_URL:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-francecentral}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server:/app
+      - ./supabase_migrations:/workspace/supabase_migrations:ro
+      - ./.devcontainer:/workspace/.devcontainer:ro
+      - /app/node_modules
+    # L'ENTRYPOINT du Dockerfile applique les migrations automatiquement
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: logi-clinic-client
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+

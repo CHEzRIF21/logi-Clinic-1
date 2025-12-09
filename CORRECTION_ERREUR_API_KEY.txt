@@ -1,0 +1,91 @@
+═══════════════════════════════════════════════════════════════════
+   🔧 CORRECTION ERREUR "Invalid API key"
+═══════════════════════════════════════════════════════════════════
+
+❌ PROBLÈME: L'application affiche "Invalid API key"
+
+✅ SOLUTION EN 3 ÉTAPES SIMPLES:
+
+───────────────────────────────────────────────────────────────────
+   ÉTAPE 1: Obtenir la Vraie Clé API Supabase
+───────────────────────────────────────────────────────────────────
+
+1. Ouvrir un navigateur
+2. Aller sur: https://supabase.com/dashboard/project/kfuqghnlrnqaiaiwzziv
+3. Menu gauche → Cliquer sur "Settings" (⚙️)
+4. Cliquer sur "API" dans le sous-menu
+5. Chercher la section "Project API keys"
+6. Vous verrez deux clés:
+   - anon public ← C'EST CELLE-CI QU'IL FAUT UTILISER
+   - service_role secret ← NE PAS UTILISER
+7. Cliquer sur l'icône "Copier" à côté de la clé "anon public"
+8. La clé commence par: eyJhbGci...
+
+───────────────────────────────────────────────────────────────────
+   ÉTAPE 2: Mettre à Jour le Code
+───────────────────────────────────────────────────────────────────
+
+1. Ouvrir VS Code
+2. Ouvrir le fichier: src/services/supabase.ts
+3. Aller à la ligne 4
+4. Vous verrez:
+   const supabaseAnonKey = 'eyJhbGci...Ej8Ej8Ej8Ej8Ej8';
+5. Remplacer cette ligne par:
+   const supabaseAnonKey = 'VOTRE_VRAIE_CLE_COPIEE_ICI';
+6. Coller la clé que vous avez copiée à l'étape 1
+7. Sauvegarder (Ctrl+S)
+
+───────────────────────────────────────────────────────────────────
+   ÉTAPE 3: Générer les Données de Démonstration
+───────────────────────────────────────────────────────────────────
+
+1. Dans VS Code, ouvrir: scripts/generate-complete-demo-data.sql
+2. Sélectionner TOUT le contenu (Ctrl+A)
+3. Copier (Ctrl+C)
+4. Retourner sur Supabase Dashboard
+5. Cliquer sur "SQL Editor" (menu gauche)
+6. Cliquer sur "New query"
+7. Coller le contenu (Ctrl+V)
+8. Cliquer sur "RUN" (ou Ctrl+Enter)
+9. Attendre le message "Success" ✅
+
+───────────────────────────────────────────────────────────────────
+   ÉTAPE 4: Vérifier que Ça Fonctionne
+───────────────────────────────────────────────────────────────────
+
+1. Retourner sur l'application (http://localhost:3000)
+2. Rafraîchir la page (Ctrl+R ou F5)
+3. Aller dans "Module Maternité"
+4. Onglet "Dossiers Maternité"
+5. ✅ Vous devriez voir 3 dossiers:
+   - MAT-2024-001 (Marie KOUASSI)
+   - MAT-2024-002 (Fatima GBEDJI)
+   - MAT-2024-003 (Aisha SOSSOU)
+
+───────────────────────────────────────────────────────────────────
+   ✅ SUCCÈS!
+───────────────────────────────────────────────────────────────────
+
+Si vous voyez les 3 dossiers, c'est que tout fonctionne!
+
+Vous pouvez maintenant:
+- Cliquer sur un dossier pour voir les détails
+- Voir les CPN dans l'onglet "Consultations CPN"
+- Créer de nouveaux dossiers
+- Tester toutes les fonctionnalités
+
+───────────────────────────────────────────────────────────────────
+   🆘 Si Ça Ne Fonctionne Toujours Pas
+───────────────────────────────────────────────────────────────────
+
+1. Vérifier que la clé API est bien copiée (sans espaces avant/après)
+2. Vérifier que les migrations SQL sont appliquées (voir GUIDE_INSTALLATION_ET_TEST.md)
+3. Ouvrir la console du navigateur (F12) pour voir les erreurs détaillées
+4. Vérifier que Supabase est accessible (connexion Internet)
+
+───────────────────────────────────────────────────────────────────
+
+📖 Pour plus de détails, voir: GUIDE_CONFIGURATION_SUPABASE.md
+
+═══════════════════════════════════════════════════════════════════
+

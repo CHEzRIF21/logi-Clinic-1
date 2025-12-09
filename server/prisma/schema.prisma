@@ -1,0 +1,488 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String
+  role      String // ADMIN, CAISSIER, CAISSE_MANAGER, SOIGNANT, PHARMACIEN, LABORANTIN
+  lastLogin DateTime?
+  clinic    Clinic?   @relation(fields: [clinicId], references: [id])
+  clinicId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  auditLogs      AuditLog[]
+  pricingHistory ClinicPricingHistory[]
+}
+
+model Patient {
+  id          String     @id @default(uuid())
+  firstName   String
+  lastName    String
+  sex         String
+  dob         DateTime
+  age         Int? // Calculé automatiquement
+  phones      String[] // Tableau de téléphones
+  address     String?
+  assurance   Assurance? @relation(fields: [assuranceId], references: [id])
+  assuranceId String?
+  ifu         String? // Identifiant fiscal
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  operations Operation[]
+  invoices   Invoice[]
+  coupons    Coupon[]
+}
+
+model Assurance {
+  id           String   @id @default(uuid())
+  organisme    String
+  numeroPolice String   @unique
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  patients Patient[]
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  code            String?  @unique
+  label           String
+  category        String // Consommable, Acte, Medicament, Chambre, Examen, Analyse
+  subCategory     String?
+  unit            String
+  price           Decimal  @db.Decimal(12, 2) // Prix par défaut
+  taxPercent      Decimal? @db.Decimal(5, 2)
+  compteComptable String?
+  stockQty        Int      @default(0)
+  stockMin        Int?     @default(0)
+  stockMax        Int?     @default(0)
+  consommable     Boolean  @default(false)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Champs spécifiques médicaments
+  form         String? // injectable, comprimé, etc.
+  dosage       String?
+  packaging    String?
+  manufacturer String?
+  pricePublic  Decimal? @db.Decimal(12, 2) // Prix public
+  priceCession Decimal? @db.Decimal(12, 2) // Prix cession
+  minStock     Int      @default(0) // Seuil alerte quantité min
+
+  operationLines OperationLine[]
+  invoiceLines   InvoiceLine[]
+  priceVersions  ProductPriceVersion[]
+  lots           Lot[]
+  stockMovements StockMovement[]
+
+  @@index([category])
+  @@index([code])
+}
+
+model ProductPriceVersion {
+  id        String    @id @default(uuid())
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  type      String // NORMAL, ASSURANCE, PROMOTION
+  price     Decimal   @db.Decimal(12, 2)
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  @@index([productId])
+}
+
+model Operation {
+  id        String   @id @default(uuid())
+  reference String   @unique // OP-DD-MM-YYYY-XXX
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  patientId String
+  date      DateTime @default(now())
+  status    String // EN_ATTENTE, DIFFERE, PAYEE, RESTANT
+  createdBy String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  invoiceId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines OperationLine[]
+
+  @@index([patientId])
+  @@index([date])
+  @@index([status])
+}
+
+model OperationLine {
+  id          String    @id @default(uuid())
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  operationId String
+  product     Product   @relation(fields: [productId], references: [id])
+  productId   String
+  qty         Int
+  unitPrice   Decimal   @db.Decimal(12, 2)
+  total       Decimal   @db.Decimal(12, 2)
+
+  @@index([operationId])
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  number        String   @unique // FAC-CODE-DATE-XXX
+  patient       Patient  @relation(fields: [patientId], references: [id])
+  patientId     String
+  dateEmission  DateTime @default(now())
+  totalHT       Decimal  @db.Decimal(12, 2)
+  totalTax      Decimal  @db.Decimal(12, 2)
+  totalDiscount Decimal  @db.Decimal(12, 2)
+  totalTTC      Decimal  @db.Decimal(12, 2)
+  amountPaid    Decimal  @default(0) @db.Decimal(12, 2)
+  status        String // EN_ATTENTE, PARTIELLE, PAYEE, ANNULEE
+  modePayment   String? // ESPECES, CB, CHEQUE, ASSURANCE, VIREMENT
+  aib           String? // Champ assurance ou code interne
+  typeFacture   String? // Type de facture
+  comment       String?
+  normalized    Boolean  @default(false)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  payments     Payment[]
+  invoiceLines InvoiceLine[]
+  operations   Operation[]
+  auditLogs    AuditLog[]
+
+  @@index([patientId])
+  @@index([dateEmission])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InvoiceLine {
+  id            String  @id @default(uuid())
+  invoice       Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  product       Product @relation(fields: [productId], references: [id])
+  productId     String
+  qty           Int
+  unitPrice     Decimal @db.Decimal(12, 2)
+  discount      Decimal @default(0) @db.Decimal(12, 2)
+  tax           Decimal @default(0) @db.Decimal(12, 2)
+  taxSpecifique Decimal @default(0) @db.Decimal(12, 2) // Taxe spécifique
+  total         Decimal @db.Decimal(12, 2)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId String
+  amount    Decimal  @db.Decimal(12, 2)
+  method    String // ESPECES, CB, CHEQUE, ASSURANCE, VIREMENT
+  reference String?
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@index([invoiceId])
+  @@index([createdAt])
+}
+
+model CaisseEntry {
+  id              String           @id @default(uuid())
+  type            String // DEPENSE, DEPOT
+  amount          Decimal          @db.Decimal(12, 2)
+  ligneBudgetaire LigneBudgetaire? @relation(fields: [ligneBudgetId], references: [id])
+  ligneBudgetId   String?
+  date            DateTime         @default(now())
+  description     String?
+  createdBy       String?
+  createdAt       DateTime         @default(now())
+
+  @@index([date])
+  @@index([type])
+}
+
+model LigneBudgetaire {
+  id        String   @id @default(uuid())
+  libelle   String
+  code      String?  @unique
+  type      String // DEPENSE, RECETTE
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  caisseEntries CaisseEntry[]
+}
+
+model Coupon {
+  id              String    @id @default(uuid())
+  numero          String    @unique
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+  patientId       String?
+  montant         Decimal   @db.Decimal(12, 2)
+  utilise         Boolean   @default(false)
+  dateUtilisation DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([patientId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  entity    String // INVOICE, PATIENT, PRODUCT, etc.
+  entityId  String
+  action    String // CREATE, UPDATE, DELETE, PRINT, etc.
+  oldValue  Json?
+  newValue  Json?
+  timestamp DateTime @default(now())
+
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  invoiceId String?
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([timestamp])
+}
+
+// Modèles pour la gestion complète des médicaments et stock
+
+model Lot {
+  id             String   @id @default(uuid())
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId      String
+  lotNumber      String
+  quantity       Int
+  quantityUsed   Int      @default(0)
+  unitCost       Decimal  @db.Decimal(12, 2)
+  dateEntry      DateTime @default(now())
+  datePeremption DateTime
+  source         String? // fournisseur ou réception interne
+  status         String   @default("ACTIF") // ACTIF, EXPIRED, QUARANTAINE, EPUISE
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stockMovements StockMovement[]
+
+  @@unique([lotNumber, productId])
+  @@index([productId])
+  @@index([datePeremption])
+  @@index([status])
+}
+
+model StockMovement {
+  id        String   @id @default(uuid())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  lot       Lot?     @relation(fields: [lotId], references: [id])
+  lotId     String?
+  type      String // IN, OUT, ADJUSTMENT, TRANSFER
+  reference String? // factureId, commandeId, prescriptionId
+  qty       Int
+  unitPrice Decimal? @db.Decimal(12, 2)
+  createdBy String
+  createdAt DateTime @default(now())
+  reason    String?
+
+  @@index([productId])
+  @@index([lotId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([reference])
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String
+  contact   String?
+  phone     String?
+  email     String?
+  address   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([name])
+}
+
+model Order {
+  id          String    @id @default(uuid())
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+  supplierId  String
+  reference   String?   @unique
+  status      String    @default("DRAFT") // DRAFT, SENT, RECEIVED, CANCELLED
+  items       Json // Array of {productId, qty, unitPrice}
+  totalAmount Decimal?  @db.Decimal(12, 2)
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  receivedAt  DateTime?
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ProductCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
+model PharmacySettings {
+  id                  String   @id @default(uuid())
+  alertExpirationDays Int      @default(30) // Délai alerte péremption (jours)
+  minStockAlertRatio  Decimal  @default(1.2) @db.Decimal(5, 2) // Ratio pour proche rupture
+  stockMethod         String   @default("FIFO") // FIFO, LIFO
+  enableNotifications Boolean  @default(true)
+  notificationEmail   String?
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+
+  @@unique([id])
+}
+
+model PrescriptionQueue {
+  id             String    @id @default(uuid())
+  consultationId String?
+  prescriptionId String?
+  patientId      String
+  items          Json // Array of {productId, qty, dosage, instructions}
+  status         String    @default("PENDING") // PENDING, RESERVED, DISPENSED, CANCELLED
+  reservedBy     String?
+  dispensedBy    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  dispensedAt    DateTime?
+
+  @@index([status])
+  @@index([patientId])
+  @@index([createdAt])
+}
+
+// Modèles pour le système de licence et sécurité de déploiement
+
+model License {
+  id             String    @id @default(uuid())
+  licenseKey     String    @unique
+  appId          String    @unique // Identifiant public de l'application (envoyé dans les headers)
+  appSecret      String    // Clé secrète de l'application (envoyée dans les headers)
+  domain         String
+  allowedDomains String[] // Liste des domaines autorisés
+  expiresAt      DateTime?
+  maxDeployments Int? // Nombre maximum de déploiements autorisés
+  active         Boolean   @default(true)
+  revoked        Boolean   @default(false) // Permet de révoquer une licence sans la supprimer
+  revokedAt      DateTime? // Date de révocation
+  revokedReason  String?   // Raison de la révocation
+  clinicId       String?   // Lien vers la clinique associée
+  metadata       Json? // Métadonnées supplémentaires
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  deploymentAttempts DeploymentAttempt[]
+
+  @@index([licenseKey])
+  @@index([appId])
+  @@index([domain])
+  @@index([active])
+  @@index([clinicId])
+}
+
+model DeploymentAttempt {
+  id         String   @id @default(uuid())
+  domain     String
+  ip         String
+  userAgent  String
+  licenseKey String?
+  licenseId  String?
+  license    License? @relation(fields: [licenseId], references: [id])
+  success    Boolean
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([domain])
+  @@index([licenseKey])
+  @@index([licenseId])
+  @@index([success])
+  @@index([createdAt])
+}
+
+// Modèles pour le système de tarification multi-clinique
+
+model Clinic {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  address   String?
+  phone     String?
+  email     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users   User[]
+  pricing ClinicPricing[]
+
+  @@index([code])
+  @@index([active])
+}
+
+model ClinicPricing {
+  id        String   @id @default(uuid())
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinicId  String
+  serviceId String // Référence vers services_facturables (UUID)
+  tarifBase Decimal  @db.Decimal(12, 2)
+  unite     String   @default("unité")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  history ClinicPricingHistory[]
+
+  @@unique([clinicId, serviceId])
+  @@index([clinicId])
+  @@index([serviceId])
+  @@index([clinicId, serviceId])
+  @@index([active])
+}
+
+model ClinicPricingHistory {
+  id              String        @id @default(uuid())
+  clinicPricing   ClinicPricing @relation(fields: [clinicPricingId], references: [id], onDelete: Cascade)
+  clinicPricingId String
+  tarifAncien     Decimal       @db.Decimal(12, 2)
+  tarifNouveau    Decimal       @db.Decimal(12, 2)
+  dateDebut       DateTime      @default(now())
+  dateFin         DateTime?
+  modifiedBy      User?         @relation(fields: [modifiedById], references: [id])
+  modifiedById    String?
+  createdAt       DateTime      @default(now())
+
+  @@index([clinicPricingId])
+  @@index([dateDebut])
+  @@index([modifiedById])
+}

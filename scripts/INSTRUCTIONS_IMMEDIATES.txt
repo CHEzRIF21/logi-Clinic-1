@@ -1,0 +1,115 @@
+═══════════════════════════════════════════════════════════════════
+   🚀 MODULE MATERNITÉ - INSTRUCTIONS IMMÉDIATES
+═══════════════════════════════════════════════════════════════════
+
+✅ L'APPLICATION EST EN COURS DE DÉMARRAGE...
+
+Elle sera accessible dans quelques secondes sur:
+👉 http://localhost:3000
+
+═══════════════════════════════════════════════════════════════════
+   ⚡ ACTIONS À FAIRE MAINTENANT (pendant que ça démarre)
+═══════════════════════════════════════════════════════════════════
+
+📌 ÉTAPE 1: Ouvrir Supabase
+   
+   1. Ouvrir un nouvel onglet de navigateur
+   2. Aller sur: https://supabase.com/dashboard/project/kfuqghnlrnqaiaiwzziv
+   3. Cliquer sur "SQL Editor" (menu de gauche)
+
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 2: Appliquer les 4 Migrations SQL (DANS L'ORDRE !)
+
+   Pour chaque fichier ci-dessous:
+   - Ouvrir le fichier dans VS Code
+   - Sélectionner TOUT le contenu (Ctrl+A)
+   - Copier (Ctrl+C)
+   - Dans Supabase SQL Editor → New Query
+   - Coller (Ctrl+V)
+   - Cliquer "RUN" (ou Ctrl+Enter)
+   - Attendre "Success" ✅
+
+   📁 Migration 1: supabase_migrations/create_dossier_obstetrical_table.sql
+   📁 Migration 2: supabase_migrations/create_cpn_tables.sql
+   📁 Migration 3: supabase_migrations/create_accouchement_tables.sql
+   📁 Migration 4: supabase_migrations/create_post_partum_tables.sql
+
+   ⏱️ Temps estimé: 2-3 minutes
+
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 3: Générer les Données de Démonstration
+
+   📁 Fichier: scripts/generate-demo-data.sql
+   
+   - Ouvrir le fichier
+   - Copier TOUT le contenu
+   - Dans Supabase SQL Editor → New Query
+   - Coller et RUN
+   
+   ✨ Ce script crée:
+      • 3 patientes de test
+      • 3 dossiers obstétricaux
+      • 6 consultations CPN
+      • 1 accouchement avec Score Apgar (8-10-10)
+      • 8 observations post-partum
+
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 4: Tester l'Application
+
+   Une fois l'app démarrée (http://localhost:3000):
+
+   ✓ Aller dans "Module Maternité"
+   ✓ Voir les 3 dossiers de démonstration
+   ✓ Cliquer sur un dossier
+   ✓ Naviguer dans les onglets:
+     - Dossiers Maternité
+     - Consultations CPN (voir CPN1-4 complètes)
+     - Accouchements
+     - Suivi Post-Partum
+
+───────────────────────────────────────────────────────────────────
+
+🎯 FONCTIONNALITÉS À VÉRIFIER:
+
+   ⭐ Calcul automatique DPA (Date + 280 jours)
+   ⭐ Calcul automatique Score Apgar (0-10)
+   ⭐ Détection automatique HPP (saignement > 500 mL)
+   ⭐ Génération automatique 8 créneaux post-partum
+   ⭐ Alertes visuelles en temps réel (🔥 🚨 💓 ✅)
+
+───────────────────────────────────────────────────────────────────
+
+📊 VÉRIFICATION RAPIDE (dans Supabase SQL Editor):
+
+   SELECT 
+     'Tables créées' as check_type, 
+     COUNT(*) as total 
+   FROM information_schema.tables 
+   WHERE table_name LIKE '%obstetrical%' 
+      OR table_name LIKE '%cpn%'
+      OR table_name LIKE '%accouchement%'
+      OR table_name LIKE '%post_partum%';
+
+   👉 Résultat attendu: 23 tables
+
+───────────────────────────────────────────────────────────────────
+
+❓ PROBLÈMES ?
+
+   • Application ne démarre pas → Vérifier terminal pour erreurs
+   • Dossiers invisibles → Vérifier que migrations sont appliquées
+   • Erreurs console → Ouvrir F12 dans le navigateur
+
+   📖 Documentation complète: GUIDE_INSTALLATION_ET_TEST.md
+
+═══════════════════════════════════════════════════════════════════
+
+✅ STATUT: Tout est prêt ! Suivez les étapes ci-dessus.
+
+🎉 BON TEST !
+
+═══════════════════════════════════════════════════════════════════
+

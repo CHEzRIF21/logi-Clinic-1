@@ -1,0 +1,76 @@
+═══════════════════════════════════════════════════════════════════
+   ✅ CLÉ API SUPABASE CONFIGURÉE !
+═══════════════════════════════════════════════════════════════════
+
+✅ La clé API a été mise à jour dans le code avec succès.
+
+───────────────────────────────────────────────────────────────────
+   ⚡ PROCHAINES ÉTAPES (5 minutes)
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 1: Appliquer les Migrations SQL (3 minutes)
+
+   1. Aller sur: https://supabase.com/dashboard/project/bngfemmllokvetmohiqch
+   2. Cliquer sur "SQL Editor" (menu gauche)
+   3. Pour chaque fichier ci-dessous:
+      - Ouvrir le fichier dans VS Code
+      - Copier TOUT (Ctrl+A puis Ctrl+C)
+      - Dans Supabase: New Query → Coller → RUN
+   
+   📁 Fichiers à exécuter (dans l'ordre):
+   
+   1️⃣ supabase_migrations/create_dossier_obstetrical_table.sql
+   2️⃣ supabase_migrations/create_cpn_tables.sql
+   3️⃣ supabase_migrations/create_accouchement_tables.sql
+   4️⃣ supabase_migrations/create_post_partum_tables.sql
+
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 2: Générer les Données de Démonstration (1 minute)
+
+   1. Ouvrir: scripts/generate-complete-demo-data.sql
+   2. Copier TOUT le contenu (Ctrl+A puis Ctrl+C)
+   3. Dans Supabase SQL Editor:
+      - New Query
+      - Coller (Ctrl+V)
+      - RUN (Ctrl+Enter)
+   4. Attendre "Success" ✅
+
+───────────────────────────────────────────────────────────────────
+
+📌 ÉTAPE 3: Vérifier dans l'Application (1 minute)
+
+   1. Rafraîchir la page (Ctrl+R)
+   2. Aller dans "Module Maternité"
+   3. Onglet "Dossiers Maternité"
+   4. ✅ Vous devriez voir 3 dossiers:
+      - MAT-2024-001 (Marie KOUASSI)
+      - MAT-2024-002 (Fatima GBEDJI)
+      - MAT-2024-003 (Aisha SOSSOU)
+
+───────────────────────────────────────────────────────────────────
+   📊 CE QUI SERA CRÉÉ
+───────────────────────────────────────────────────────────────────
+
+✅ 3 Patientes complètes (nom, prénom, téléphone, adresse, etc.)
+✅ 3 Dossiers obstétricaux (1 normal, 1 à risque, 1 adolescente)
+✅ 6 Consultations CPN (4 CPN complètes pour dossier 1)
+✅ 2 Vaccinations VAT (1 complète 5/5, 1 en cours 3/5)
+✅ Soins promotionnels (moustiquaire, fer, déparasitage)
+
+───────────────────────────────────────────────────────────────────
+   🎯 RÉSULTAT ATTENDU
+───────────────────────────────────────────────────────────────────
+
+Après ces étapes:
+✅ L'erreur "Invalid API key" disparaît
+✅ Les 3 dossiers s'affichent dans l'application
+✅ Vous pouvez créer/modifier des dossiers
+✅ Toutes les fonctionnalités sont opérationnelles
+
+───────────────────────────────────────────────────────────────────
+
+📖 Guide détaillé: GENERER_DONNEES_DEMO.md
+
+═══════════════════════════════════════════════════════════════════
+

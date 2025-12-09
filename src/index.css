@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+/* Variables CSS pour le thème médical professionnel */
+:root {
+  /* Couleurs principales - Bleu médical professionnel */
+  --primary: #2563eb;
+  --primary-light: #3b82f6;
+  --primary-dark: #1d4ed8;
+  
+  /* Couleurs secondaires - Vert santé */
+  --secondary: #16a34a;
+  --secondary-light: #22c55e;
+  --secondary-dark: #15803d;
+  
+  /* Arrière-plans */
+  --background: #f8fafc;
+  --card: #ffffff;
+  --foreground: #0f172a;
+  
+  /* Texte */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  
+  /* Bordures et séparateurs */
+  --border: #e2e8f0;
+  --divider: #e2e8f0;
+  
+  /* États */
+  --success: #16a34a;
+  --warning: #f97316;
+  --error: #dc2626;
+  --info: #3b82f6;
+  
+  /* Ombres modernes */
+  --shadow-sm: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+  --shadow: 0px 1px 3px 0px rgba(0, 0, 0, 0.1), 0px 1px 2px 0px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0px 10px 15px -3px rgba(0, 0, 0, 0.1), 0px 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  /* Typographie */
+  --font-sans: 'Inter', 'Outfit', 'Roboto', sans-serif;
+  --radius: 12px;
+}
+
+/* Mode sombre - Variables alignées avec Material-UI */
+.dark {
+  --background: #0a0e1a;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --primary: #2563eb;
+  --primary-light: #3b82f6;
+  --primary-dark: #1d4ed8;
+  --secondary: #16a34a;
+  --secondary-light: #22c55e;
+  --secondary-dark: #15803d;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border: #334155;
+  --divider: #334155;
+  --success: #16a34a;
+  --warning: #f97316;
+  --error: #dc2626;
+  --info: #3b82f6;
+}
+
+/* Styles globaux */
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  letter-spacing: var(--tracking-normal);
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Mode sombre - styles de base (Material-UI gère le reste) */
+body.dark,
+html.dark body {
+  background-color: #0a0e1a !important;
+  color: #f8fafc !important;
+}
+
+html.dark {
+  background-color: #0a0e1a;
+}
+
+/* Mode clair - s'assurer que le mode clair fonctionne */
+body:not(.dark),
+html:not(.dark) body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Améliorations pour Material-UI */
+.MuiCard-root {
+  border: 1px solid var(--border);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.MuiPaper-root {
+  border: 1px solid var(--border);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Mode sombre - Material-UI gère les couleurs via le thème */
+/* Ne pas forcer les couleurs avec !important - laisser Material-UI gérer */
+
+/* Mode sombre - Conserver uniquement les couleurs secondaires pour les chips */
+/* Material-UI gère tous les autres styles via le thème */
+.dark .MuiChip-colorPrimary {
+  background-color: rgba(37, 99, 235, 0.25);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.dark .MuiChip-colorSuccess {
+  background-color: rgba(22, 163, 74, 0.25);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.dark .MuiChip-colorWarning {
+  background-color: rgba(249, 115, 22, 0.25);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.4);
+}
+
+.dark .MuiChip-colorError {
+  background-color: rgba(220, 38, 38, 0.25);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+
+.dark .MuiChip-colorInfo {
+  background-color: rgba(59, 130, 246, 0.25);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+}
+
+.MuiChip-root {
+  font-weight: 500;
+}
+
+/* Animations personnalisées */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Scrollbar mode sombre */
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
