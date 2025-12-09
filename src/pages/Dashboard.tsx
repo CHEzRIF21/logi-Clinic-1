@@ -1,8 +1,13 @@
 import React from 'react';
 import DashboardModern from './DashboardModern';
+import { User } from '../types/auth';
 
-const Dashboard: React.FC = () => {
-  return <DashboardModern />;
+interface DashboardProps {
+  user: User | null;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ user }) => {
+  return <DashboardModern user={user} />;
 };
 
 export default Dashboard;

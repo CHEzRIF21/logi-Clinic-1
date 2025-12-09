@@ -101,7 +101,7 @@ function App() {
         element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
-              <Dashboard />
+              <Dashboard user={user} />
             </Layout>
           </ProtectedRoute>
         }
