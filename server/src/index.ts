@@ -23,6 +23,7 @@ import monitoringRouter from './routes/monitoring';
 import speechToTextRouter from './routes/speechToText';
 import clinicsRouter from './routes/clinics';
 import pricingRouter from './routes/pricing';
+import authRouter from './routes/auth';
 
 const app = express();
 
@@ -83,6 +84,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/auth', authRouter);
 app.use('/api/license', licenseRouter);
 app.use('/api/monitoring', monitoringRouter);
 app.use('/api/invoices', invoicesRouter);

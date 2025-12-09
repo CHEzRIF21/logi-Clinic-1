@@ -101,6 +101,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const contactRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // S'assurer que la page est au top au chargement et empêcher le défilement horizontal
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+      document.body.style.overflowX = 'hidden';
+      document.documentElement.style.overflowX = 'hidden';
+      
+      return () => {
+        document.body.style.overflowX = '';
+        document.documentElement.style.overflowX = '';
+      };
+    }
+  }, []);
+
+  useEffect(() => {
     // Vérifier que GSAP est disponible et que nous sommes dans le navigateur
     if (typeof window === 'undefined' || typeof gsap === 'undefined') {
       return;
@@ -576,7 +590,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 
         (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-        'http://localhost:5000/api';
+        'http://localhost:3000/api';
       const response = await fetch(`${API_BASE_URL}/auth/register-request`, {
         method: 'POST',
         headers: {
@@ -635,7 +649,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         },
       });
     } catch (error: any) {
-      setError(error.message || 'Erreur lors de la soumission de la demande d\'inscription');
+      console.error('Erreur lors de l\'inscription:', error);
+      
+      // Gérer spécifiquement l'erreur "Failed to fetch"
+      if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 
+          (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
+          'http://localhost:3000/api';
+        setError(`Impossible de se connecter au serveur. Vérifiez que le backend est démarré sur ${API_BASE_URL} et que votre connexion Internet fonctionne.`);
+      } else if (error?.message) {
+        setError(error.message);
+      } else {
+        setError('Erreur lors de la soumission de la demande d\'inscription. Veuillez réessayer.');
+      }
     } finally {
       setSignupLoading(false);
     }
@@ -699,7 +725,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   ];
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ 
+      minHeight: '100vh', 
+      bgcolor: 'background.default',
+      overflowX: 'hidden',
+      width: '100%',
+      position: 'relative',
+    }}>
       {/* Section Hero */}
       <Box
         ref={heroRef}
@@ -745,7 +777,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           ))}
         </Box>
 
-        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: '100%', px: { xs: 2, sm: 3, md: 4 } }}>
           <Box className="hero-container" sx={{ textAlign: 'center', mb: 6 }}>
             <Box>
               <Box
@@ -826,7 +858,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     fontStyle: 'italic',
                   }}
                 >
-                  Nouvelle clinique ? Créez votre compte et obtenez votre espace de travail après validation
+                  Inscrivez-vous pour créer votre compte et obtenir votre espace de travail après validation
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -882,7 +914,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     },
                   }}
                 >
-                  Nouvelle clinique ? S'inscrire ici
+                  Inscrivez-vous
                 </Button>
               </Box>
             </Box>
@@ -1042,8 +1074,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             sx={{
               p: { xs: 3, md: 5 },
               borderRadius: 4,
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.98) 100%)',
+              // Fond adaptatif selon le thème
+              background: theme.palette.mode === 'dark' 
+                ? 'linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%)'
+                : 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.98) 100%)',
               backdropFilter: 'blur(10px)',
+              border: theme.palette.mode === 'dark' 
+                ? `1px solid ${alpha(theme.palette.divider, 0.5)}`
+                : 'none',
             }}
           >
             <Tabs
@@ -1077,7 +1115,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 iconPosition="start"
               />
               <Tab 
-                label="Inscription - Nouvelle clinique" 
+                label="Inscription" 
                 value="signup"
                 icon={<PersonAdd sx={{ mb: 0.5 }} />}
                 iconPosition="start"
@@ -1098,8 +1136,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             {loginTab === 'login' ? (
             <Box component="form" onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid w-full items-center gap-1.5 mb-4">
-                <Label htmlFor="clinicCode">Code clinique</Label>
+              <div className="grid w-full items-center gap-2 mb-5">
+                <Label 
+                  htmlFor="clinicCode"
+                  className="text-sm font-semibold"
+                  style={{ 
+                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.9)'
+                  }}
+                >
+                  Code clinique
+                </Label>
                 <Input
                   required
                   id="clinicCode"
@@ -1111,11 +1157,28 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   disabled={isLoading}
                   placeholder="Ex: CLINIC001"
                 />
-                <Typography variant="caption" color="textSecondary">Code unique de votre clinique</Typography>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(15, 23, 42, 0.65)',
+                    fontSize: '0.75rem',
+                    mt: 0.5
+                  }}
+                >
+                  Code unique de votre clinique
+                </Typography>
               </div>
 
-              <div className="grid w-full items-center gap-1.5 mb-4">
-                <Label htmlFor="username">Nom d'utilisateur</Label>
+              <div className="grid w-full items-center gap-2 mb-5">
+                <Label 
+                  htmlFor="username"
+                  className="text-sm font-semibold"
+                  style={{ 
+                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.9)'
+                  }}
+                >
+                  Nom d'utilisateur
+                </Label>
                 <Input
                   required
                   id="username"
@@ -1124,11 +1187,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   value={credentials.username}
                   onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
                   disabled={isLoading}
+                  placeholder="Entrez votre nom d'utilisateur"
                 />
               </div>
 
-              <div className="grid w-full items-center gap-1.5 mb-6">
-                <Label htmlFor="password">Mot de passe</Label>
+              <div className="grid w-full items-center gap-2 mb-6">
+                <Label 
+                  htmlFor="password"
+                  className="text-sm font-semibold"
+                  style={{ 
+                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.9)'
+                  }}
+                >
+                  Mot de passe
+                </Label>
                 <Input
                   required
                   name="password"
@@ -1138,6 +1210,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   value={credentials.password}
                   onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
                   disabled={isLoading}
+                  placeholder="Entrez votre mot de passe"
                 />
               </div>
 
@@ -1161,7 +1234,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       contactRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }, 100);
                   }}
-                  sx={{ textTransform: 'none' }}
+                  sx={{ 
+                    textTransform: 'none',
+                    color: theme.palette.mode === 'dark' 
+                      ? theme.palette.primary.light 
+                      : theme.palette.primary.main,
+                    '&:hover': {
+                      backgroundColor: theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.primary.main, 0.08),
+                    },
+                  }}
                 >
                   Mot de passe oublié ?
                 </Button>
@@ -1459,13 +1542,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </Box>
             )}
             {loginTab === 'login' && (
-            <Box sx={{ mt: 4, p: 2, bgcolor: alpha(theme.palette.info.main, 0.15), borderRadius: 2, border: `1px solid ${alpha(theme.palette.info.main, 0.3)}` }}>
+            <Box sx={{ 
+              mt: 4, 
+              p: 3, 
+              bgcolor: theme.palette.mode === 'dark' 
+                ? alpha(theme.palette.info.main, 0.2)
+                : alpha(theme.palette.info.main, 0.15), 
+              borderRadius: 2, 
+              border: `1px solid ${alpha(theme.palette.info.main, theme.palette.mode === 'dark' ? 0.4 : 0.3)}`,
+              backdropFilter: 'blur(8px)',
+            }}>
               <Typography 
                 variant="subtitle2" 
                 sx={{ 
                   fontWeight: 600, 
                   mb: 1.5, 
-                  color: theme.palette.info.main,
+                  color: theme.palette.mode === 'dark' 
+                    ? theme.palette.info.light 
+                    : theme.palette.info.main,
                   opacity: 1,
                 }}
               >
@@ -1475,8 +1569,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 variant="body2" 
                 sx={{ 
                   mb: 2,
-                  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
+                  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.85)',
                   opacity: 1,
+                  fontWeight: 500,
                 }}
               >
                 <strong>Code clinique :</strong> CLINIC001

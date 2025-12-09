@@ -57,6 +57,7 @@ export const PatientSearchAdvanced: React.FC<PatientSearchAdvancedProps> = ({
   const [patients, setPatients] = useState<Patient[]>([]);
   const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'nom' | 'dossier' | 'telephone'>('all');
   const [filterService, setFilterService] = useState<string>('all');
   const [filterStatut, setFilterStatut] = useState<string>('all');
@@ -71,11 +72,25 @@ export const PatientSearchAdvanced: React.FC<PatientSearchAdvancedProps> = ({
 
   const loadPatients = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await PatientService.getAllPatients();
       setPatients(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors du chargement des patients:', error);
+      
+      // Gérer les différents types d'erreurs
+      let errorMessage = 'Erreur lors du chargement des patients';
+      
+      if (error?.message?.includes('Failed to fetch') || error?.code === '') {
+        errorMessage = 'Impossible de se connecter à la base de données. Vérifiez votre connexion Internet et la configuration Supabase.';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.hint) {
+        errorMessage = `${error.message || 'Erreur de base de données'}: ${error.hint}`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -219,6 +234,15 @@ export const PatientSearchAdvanced: React.FC<PatientSearchAdvancedProps> = ({
               </FormControl>
             </Grid>
           </Grid>
+
+          {error && (
+            <Box sx={{ mb: 2, p: 2, bgcolor: 'error.light', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Warning color="error" />
+              <Typography variant="body2" color="error">
+                {error}
+              </Typography>
+            </Box>
+          )}
 
           {selectedPatient && (
             <Paper sx={{ p: 2, bgcolor: 'primary.light', color: 'primary.contrastText', mb: 2 }}>

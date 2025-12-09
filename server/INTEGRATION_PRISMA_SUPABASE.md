@@ -340,3 +340,4 @@ npx prisma migrate dev --name nom_de_la_migration
 
 
 
+
