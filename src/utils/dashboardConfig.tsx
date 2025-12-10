@@ -479,4 +479,3 @@ function getDefaultConfig(stats: any): DashboardConfig {
   };
 }
 
-

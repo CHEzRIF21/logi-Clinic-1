@@ -279,10 +279,12 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
           let value = 0;
           if (user.role === 'admin' || user.role === 'caissier' || user.role === 'comptable') {
             value = Math.floor(Math.random() * 100000) + 50000; // Revenus simulés
-          } else if (user.role === 'admin' || user.role === 'medecin') {
+          } else if (user.role === 'medecin' || user.role === 'infirmier' || user.role === 'secretaire') {
             value = Math.floor(Math.random() * 20) + 5; // Consultations simulées
           } else if (user.role === 'pharmacien') {
             value = Math.floor(Math.random() * 15) + 3; // Dispensations simulées
+          } else if (user.role === 'laborantin') {
+            value = Math.floor(Math.random() * 10) + 2; // Analyses simulées
           }
           
           trendDataArray.push({
