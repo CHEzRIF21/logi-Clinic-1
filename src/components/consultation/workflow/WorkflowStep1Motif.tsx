@@ -4,7 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  TextField,
   MenuItem,
   FormControl,
   InputLabel,
@@ -14,6 +13,7 @@ import {
 } from '@mui/material';
 import { Assignment } from '@mui/icons-material';
 import { Consultation } from '../../../services/consultationService';
+import { SpeechTextField } from '../../common/SpeechTextField';
 
 interface WorkflowStep1MotifProps {
   consultation: Consultation;
@@ -99,17 +99,18 @@ export const WorkflowStep1Motif: React.FC<WorkflowStep1MotifProps> = ({
             </Select>
           </FormControl>
 
-          <TextField
+          <SpeechTextField
             fullWidth
             label="Motif de consultation"
             placeholder="Ex: Fièvre et toux depuis 3 jours"
             value={motif}
-            onChange={(e) => handleMotifChange(e.target.value)}
+            onChange={handleMotifChange}
             required={required}
             multiline
             rows={3}
             error={!!error && !motif.trim()}
             helperText={error && !motif.trim() ? error : 'Décrivez brièvement le motif de consultation'}
+            enableSpeech={true}
           />
         </Box>
       </CardContent>

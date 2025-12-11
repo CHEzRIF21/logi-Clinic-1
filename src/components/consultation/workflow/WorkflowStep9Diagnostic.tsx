@@ -4,7 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  TextField,
   Autocomplete,
   RadioGroup,
   FormControlLabel,
@@ -17,6 +16,7 @@ import {
 } from '@mui/material';
 import { Science } from '@mui/icons-material';
 import { DiagnosticService, DiagnosticCode } from '../../../services/diagnosticService';
+import { SpeechTextField } from '../../common/SpeechTextField';
 
 interface WorkflowStep9DiagnosticProps {
   diagnostics: string[];
@@ -129,10 +129,11 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
               onChange={(_, newValue) => handlePrincipalSelect(newValue)}
               onInputChange={(_, newInputValue) => setSearchQuery(newInputValue)}
               renderInput={(params) => (
-                <TextField
+                <SpeechTextField
                   {...params}
                   label="Rechercher un code CIM-10"
                   placeholder="Tapez pour rechercher..."
+                  enableSpeech={true}
                 />
               )}
               renderOption={(props, option) => (
@@ -165,14 +166,15 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
             <Typography variant="subtitle2" gutterBottom>
               Diagnostics Secondaires (texte libre)
             </Typography>
-            <TextField
+            <SpeechTextField
               fullWidth
               multiline
               rows={3}
               label="Diagnostics secondaires"
               value={secondaire}
-              onChange={(e) => setSecondaire(e.target.value)}
+              onChange={setSecondaire}
               placeholder="Séparez les diagnostics par des virgules"
+              enableSpeech={true}
             />
           </Box>
         </Box>

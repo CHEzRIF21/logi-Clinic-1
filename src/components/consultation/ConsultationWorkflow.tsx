@@ -1,17 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  Button,
-  Typography,
-  Card,
-  CardContent,
   Alert,
-  Divider,
-  Paper,
 } from '@mui/material';
 import {
   Assignment,
@@ -23,12 +13,11 @@ import {
   Science,
   Medication,
   CheckCircle,
-  ArrowForward,
-  ArrowBack,
 } from '@mui/icons-material';
 import { Consultation } from '../../services/consultationService';
 import { Patient } from '../../services/supabase';
 import { ConsultationService } from '../../services/consultationService';
+import { ModernConsultationLayout } from './ModernConsultationLayout';
 import { WorkflowStep1Motif } from './workflow/WorkflowStep1Motif';
 import { WorkflowStep2Anamnese } from './workflow/WorkflowStep2Anamnese';
 import { WorkflowStep3TraitementEnCours } from './workflow/WorkflowStep3TraitementEnCours';
@@ -75,6 +64,49 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
   const [stepData, setStepData] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(false);
 
+  // Initialiser stepData depuis consultation au montage
+  useEffect(() => {
+    const initialData: Record<number, any> = {};
+    
+    // Étape 1: Motifs
+    if (consultation.motifs && consultation.motifs.length > 0) {
+      initialData[0] = {
+        motif: consultation.motifs[0],
+        categorie_motif: (consultation as any).categorie_motif || '',
+      };
+    }
+    
+    // Étape 2: Anamnèse
+    if (consultation.anamnese) {
+      initialData[1] = { anamnese: consultation.anamnese };
+    }
+    
+    // Étape 3: Traitement en cours
+    if (consultation.traitement_en_cours) {
+      initialData[2] = { traitement_en_cours: consultation.traitement_en_cours };
+    }
+    
+    // Étape 4: Antécédents
+    if ((consultation as any).antecedents_consultation) {
+      initialData[3] = { antecedents: (consultation as any).antecedents_consultation };
+    }
+    
+    // Étape 8: Examens cliniques
+    if (consultation.examens_cliniques) {
+      initialData[7] = { examens_cliniques: consultation.examens_cliniques };
+    }
+    
+    // Étape 9: Diagnostics
+    if (consultation.diagnostics) {
+      initialData[8] = {
+        diagnostics: consultation.diagnostics,
+        diagnostics_detail: (consultation as any).diagnostics_detail || [],
+      };
+    }
+    
+    setStepData(initialData);
+  }, [consultation]);
+
   // Vérifier quelles étapes sont complètes
   useEffect(() => {
     const completed = new Set<number>();
@@ -110,13 +142,33 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     const currentStep = STEPS[activeStep];
     const stepNumber = activeStep + 1;
 
-    // Sauvegarder les données de l'étape
-    if (stepData[activeStep] || stepNumber === 11) {
+    // Validation pour les étapes obligatoires - bloquer la navigation si non complétée
+    if (currentStep.required) {
+      const currentData = stepData[activeStep];
+      if (activeStep === 0) {
+        // Étape 1: Vérifier motif
+        if (!currentData?.motif && !consultation.motifs?.length) {
+          console.warn('Étape obligatoire non complétée: Le motif de consultation est requis');
+          return;
+        }
+      }
+      if (activeStep === 10) {
+        // Étape 11: Vérifier clôture
+        if (consultation.status !== 'CLOTURE') {
+          console.warn('La consultation doit être clôturée avant de terminer');
+          return;
+        }
+      }
+    }
+
+    // Sauvegarder les données de l'étape si disponibles (en arrière-plan, ne bloque pas la navigation)
+    const dataToSave = stepData[activeStep] || {};
+    if (Object.keys(dataToSave).length > 0 || stepNumber === 11) {
       setLoading(true);
       try {
         // Utiliser le service pour sauvegarder l'étape
-        await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, stepData[activeStep] || {});
-        await onStepComplete(stepNumber, stepData[activeStep] || {});
+        await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave);
+        await onStepComplete(stepNumber, dataToSave);
         setCompletedSteps((prev) => {
           const newSet = new Set(prev);
           newSet.add(activeStep);
@@ -124,15 +176,42 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         });
       } catch (error) {
         console.error('Erreur lors de la sauvegarde:', error);
-        return;
+        // Ne pas bloquer la navigation même en cas d'erreur de sauvegarde
+        // L'utilisateur peut toujours naviguer et réessayer plus tard
       } finally {
         setLoading(false);
       }
+    } else {
+      // Même sans données à sauvegarder, marquer l'étape comme complétée si elle est optionnelle
+      if (!currentStep.required) {
+        setCompletedSteps((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(activeStep);
+          return newSet;
+        });
+      }
     }
 
+    // Navigation vers l'étape suivante
     if (activeStep < STEPS.length - 1) {
       setActiveStep((prev) => prev + 1);
     }
+  };
+
+  const canGoNext = () => {
+    const currentStep = STEPS[activeStep];
+    if (!currentStep.required) return true;
+    
+    const currentData = stepData[activeStep];
+    if (activeStep === 0) {
+      // Étape 1: Vérifier motif
+      return currentData?.motif || consultation.motifs?.length > 0;
+    }
+    if (activeStep === 10) {
+      // Étape 11: Vérifier clôture
+      return consultation.status === 'CLOTURE';
+    }
+    return true;
   };
 
   const handleBack = () => {
@@ -142,22 +221,31 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
   };
 
   const handleStepClick = (step: number) => {
-    // Permettre de revenir aux étapes précédentes
+    // Permettre de revenir aux étapes précédentes ou complétées
     if (step <= activeStep || completedSteps.has(step)) {
       setActiveStep(step);
     }
+  };
+
+  const updateStepData = (stepIndex: number, data: any) => {
+    setStepData((prev) => ({
+      ...prev,
+      [stepIndex]: { ...prev[stepIndex], ...data },
+    }));
   };
 
   const getStepComponent = (stepIndex: number) => {
     const step = STEPS[stepIndex];
     const data = stepData[stepIndex] || {};
 
-    // Banner d'alertes allergies persistant (étape 6)
-    const allergiesBanner = patient.allergies ? (
-      <WorkflowStep6Allergies
-        patient={patient}
-        onAllergiesChange={() => {}}
-      />
+    // Banner d'alertes allergies persistant (sauf étape 6)
+    const allergiesBanner = patient.allergies && step.id !== 6 ? (
+      <Box sx={{ mb: 2 }}>
+        <WorkflowStep6Allergies
+          patient={patient}
+          onAllergiesChange={() => {}}
+        />
+      </Box>
     ) : null;
 
     switch (step.id) {
@@ -168,7 +256,7 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
             <WorkflowStep1Motif
               consultation={consultation}
               onMotifChange={(motif, categorie) =>
-                setStepData({ ...stepData, [stepIndex]: { motif, categorie_motif: categorie } })
+                updateStepData(stepIndex, { motif, categorie_motif: categorie })
               }
               required={true}
             />
@@ -179,9 +267,9 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
           <>
             {allergiesBanner}
             <WorkflowStep2Anamnese
-              anamnese={consultation.anamnese || {}}
+              anamnese={data.anamnese || consultation.anamnese || {}}
               onAnamneseChange={(anamnese) =>
-                setStepData({ ...stepData, [stepIndex]: { anamnese } })
+                updateStepData(stepIndex, { anamnese })
               }
             />
           </>
@@ -192,9 +280,9 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
             {allergiesBanner}
             <WorkflowStep3TraitementEnCours
               patient={patient}
-              traitementEnCours={consultation.traitement_en_cours || ''}
+              traitementEnCours={data.traitement_en_cours || consultation.traitement_en_cours || ''}
               onTraitementChange={(traitement) =>
-                setStepData({ ...stepData, [stepIndex]: { traitement_en_cours: traitement } })
+                updateStepData(stepIndex, { traitement_en_cours: traitement })
               }
             />
           </>
@@ -205,9 +293,9 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
             {allergiesBanner}
             <WorkflowStep4Antecedents
               patient={patient}
-              antecedents={(consultation as any).antecedents_consultation || {}}
+              antecedents={data.antecedents || (consultation as any).antecedents_consultation || {}}
               onAntecedentsChange={(antecedents) =>
-                setStepData({ ...stepData, [stepIndex]: { antecedents } })
+                updateStepData(stepIndex, { antecedents })
               }
             />
           </>
@@ -238,9 +326,9 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
             <WorkflowStep8ExamenPhysique
               consultationId={consultation.id}
               patientId={consultation.patient_id}
-              examensCliniques={consultation.examens_cliniques || {}}
+              examensCliniques={data.examens_cliniques || consultation.examens_cliniques || {}}
               onExamensChange={(examens) =>
-                setStepData({ ...stepData, [stepIndex]: { examens_cliniques: examens } })
+                updateStepData(stepIndex, { examens_cliniques: examens })
               }
               userId={userId}
             />
@@ -251,10 +339,10 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
           <>
             {allergiesBanner}
             <WorkflowStep9Diagnostic
-              diagnostics={consultation.diagnostics || []}
-              diagnosticsDetail={(consultation as any).diagnostics_detail || []}
+              diagnostics={data.diagnostics || consultation.diagnostics || []}
+              diagnosticsDetail={data.diagnostics_detail || (consultation as any).diagnostics_detail || []}
               onDiagnosticsChange={(diagnostics, diagnosticsDetail) =>
-                setStepData({ ...stepData, [stepIndex]: { diagnostics, diagnostics_detail: diagnosticsDetail } })
+                updateStepData(stepIndex, { diagnostics, diagnostics_detail: diagnosticsDetail })
               }
             />
           </>
@@ -294,94 +382,20 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     }
   };
 
-  const isStepOptional = (step: number) => {
-    return !STEPS[step].required;
-  };
-
-  const isStepCompleted = (step: number) => {
-    return completedSteps.has(step);
-  };
-
   return (
-    <Box>
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h5" gutterBottom>
-            Workflow de Consultation
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Suivez les étapes pour compléter la consultation du patient
-          </Typography>
-        </CardContent>
-      </Card>
-
-      <Paper sx={{ p: 3 }}>
-        <Stepper activeStep={activeStep} orientation="vertical">
-          {STEPS.map((step, index) => {
-            const StepIcon = step.icon;
-            const isOptional = isStepOptional(index);
-            const isCompleted = isStepCompleted(index);
-
-            return (
-              <Step key={step.id} completed={isCompleted}>
-                <StepLabel
-                  optional={
-                    isOptional ? (
-                      <Typography variant="caption">Optionnel</Typography>
-                    ) : (
-                      <Typography variant="caption" color="error">
-                        Obligatoire
-                      </Typography>
-                    )
-                  }
-                  StepIconComponent={() => (
-                    <Box
-                      sx={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: isCompleted ? 'success.main' : activeStep === index ? 'primary.main' : 'grey.300',
-                        color: 'white',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => handleStepClick(index)}
-                    >
-                      <StepIcon />
-                    </Box>
-                  )}
-                >
-                  {step.label}
-                </StepLabel>
-                <StepContent>
-                  {getStepComponent(index)}
-                  <Box sx={{ mb: 2, mt: 2 }}>
-                    <Button
-                      variant="contained"
-                      onClick={handleNext}
-                      sx={{ mt: 1, mr: 1 }}
-                      disabled={loading}
-                      endIcon={<ArrowForward />}
-                    >
-                      {index === STEPS.length - 1 ? 'Terminer' : 'Suivant'}
-                    </Button>
-                    <Button
-                      disabled={index === 0 || loading}
-                      onClick={handleBack}
-                      sx={{ mt: 1, mr: 1 }}
-                      startIcon={<ArrowBack />}
-                    >
-                      Retour
-                    </Button>
-                  </Box>
-                </StepContent>
-              </Step>
-            );
-          })}
-        </Stepper>
-      </Paper>
+    <Box sx={{ height: '100%' }}>
+      <ModernConsultationLayout
+        steps={STEPS}
+        activeStep={activeStep}
+        completedSteps={completedSteps}
+        onStepClick={handleStepClick}
+        onNext={handleNext}
+        onBack={handleBack}
+        canGoNext={canGoNext()}
+        loading={loading}
+      >
+        {getStepComponent(activeStep)}
+      </ModernConsultationLayout>
     </Box>
   );
 };

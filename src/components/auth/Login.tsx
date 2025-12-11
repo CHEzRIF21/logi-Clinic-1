@@ -1747,7 +1747,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </Typography>
                     <Typography 
                       component="a"
-                      href="mailto:babocher21@gmail.com"
+                      href="mailto:groupita25@gmail.com"
                       variant="body2"
                       sx={{
                         color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
@@ -1760,7 +1760,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      babocher21@gmail.com
+                      groupita25@gmail.com
                     </Typography>
                   </Box>
                 </Box>
@@ -1793,7 +1793,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         opacity: 1,
                       }}
                     >
-                      +229 0169274680
+                      (00229) 0152818100
                     </Typography>
                   </Box>
                 </Box>
@@ -2002,13 +2002,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   opacity: 1,
                 }}
               >
-                Développé à Parakou, Bénin par{' '}
+                ©️ ITA INNOVATE – Conception et direction du projet {' '}
                 <Box component="span" sx={{ fontWeight: 600, color: theme.palette.primary.main }}>
-                  CHEzRIF Agency
+                Développé par CHEzRIF Agency
                 </Box>
-                {' '}et{' '}
+                {' '}
                 <Box component="span" sx={{ fontWeight: 600, color: theme.palette.secondary.main }}>
-                  ITA Innovate
+                  
                 </Box>
               </Typography>
             </Box>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -7,6 +7,7 @@ import {
   Typography,
   Paper,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import {
   FormatBold,
@@ -17,7 +18,10 @@ import {
   FormatQuote,
   Undo,
   Redo,
+  Mic,
+  Stop,
 } from '@mui/icons-material';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 
 interface EditorRichTextProps {
   value: string;
@@ -27,6 +31,7 @@ interface EditorRichTextProps {
   minRows?: number;
   maxRows?: number;
   fullWidth?: boolean;
+  enableSpeech?: boolean;
 }
 
 export const EditorRichText: React.FC<EditorRichTextProps> = ({
@@ -37,10 +42,41 @@ export const EditorRichText: React.FC<EditorRichTextProps> = ({
   minRows = 4,
   maxRows,
   fullWidth = true,
+  enableSpeech = true,
 }) => {
   const textFieldRef = useRef<HTMLTextAreaElement>(null);
   const [history, setHistory] = useState<string[]>([value]);
   const [historyIndex, setHistoryIndex] = useState(0);
+
+  // Hook de reconnaissance vocale
+  const {
+    isListening,
+    transcript,
+    error: speechError,
+    startListening,
+    stopListening,
+    resetTranscript,
+    isSupported,
+  } = useSpeechRecognition('fr-FR', true, true);
+
+  // Mettre à jour avec la transcription vocale
+  useEffect(() => {
+    if (transcript && isListening && enableSpeech) {
+      const currentValue = value || '';
+      const newValue = currentValue ? `${currentValue} ${transcript.trim()}` : transcript.trim();
+      onChange(newValue);
+      resetTranscript();
+    }
+  }, [transcript, isListening, value, onChange, resetTranscript, enableSpeech]);
+
+  const handleMicClick = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
+    }
+  };
 
   const executeCommand = (command: string, value?: string) => {
     document.execCommand(command, false, value);
@@ -159,6 +195,22 @@ export const EditorRichText: React.FC<EditorRichTextProps> = ({
           >
             <Redo fontSize="small" />
           </IconButton>
+
+          {enableSpeech && isSupported && (
+            <>
+              <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+              <Tooltip title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée'}>
+                <IconButton
+                  size="small"
+                  onClick={handleMicClick}
+                  color={isListening ? 'error' : 'default'}
+                  title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée'}
+                >
+                  {isListening ? <Stop fontSize="small" /> : <Mic fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
         </Toolbar>
 
         {/* Textarea */}

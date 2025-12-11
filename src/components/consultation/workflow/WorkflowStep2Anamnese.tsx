@@ -10,11 +10,14 @@ import {
   MenuItem,
   Button,
   Alert,
-  Divider
+  Divider,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { History, InsertDriveFile } from '@mui/icons-material';
+import { History, InsertDriveFile, Mic, Stop } from '@mui/icons-material';
 import { EditorRichText } from '../EditorRichText';
 import { AnamneseTemplateService } from '../../../services/anamneseTemplateService';
+import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
 
 interface WorkflowStep2AnamneseProps {
   anamnese: any;
@@ -32,6 +35,17 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
+  // Hook de reconnaissance vocale
+  const {
+    isListening,
+    transcript,
+    error: speechError,
+    startListening,
+    stopListening,
+    resetTranscript,
+    isSupported,
+  } = useSpeechRecognition('fr-FR', true, true);
+
   useEffect(() => {
     loadTemplates();
   }, []);
@@ -39,6 +53,25 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
   useEffect(() => {
     onAnamneseChange({ texte: anamneseText, updated_at: new Date().toISOString() });
   }, [anamneseText, onAnamneseChange]);
+
+  // Mettre à jour avec la transcription vocale
+  useEffect(() => {
+    if (transcript && isListening) {
+      const currentValue = anamneseText || '';
+      const newValue = currentValue ? `${currentValue} ${transcript.trim()}` : transcript.trim();
+      setAnamneseText(newValue);
+      resetTranscript();
+    }
+  }, [transcript, isListening, anamneseText, resetTranscript]);
+
+  const handleMicClick = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      resetTranscript();
+      startListening();
+    }
+  };
 
   const loadTemplates = async () => {
     try {
@@ -101,10 +134,30 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
         </Box>
 
         <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Anamnèse
+            </Typography>
+            {isSupported && (
+              <Tooltip title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée'}>
+                <IconButton
+                  onClick={handleMicClick}
+                  color={isListening ? 'error' : 'primary'}
+                  size="small"
+                >
+                  {isListening ? <Stop /> : <Mic />}
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+          {speechError && (
+            <Alert severity="warning" sx={{ mb: 1 }}>
+              {speechError}
+            </Alert>
+          )}
           <EditorRichText
             value={anamneseText}
             onChange={setAnamneseText}
-            label="Anamnèse"
             placeholder="Décrivez l'histoire de la maladie, les symptômes, l'évolution..."
             minRows={8}
             fullWidth

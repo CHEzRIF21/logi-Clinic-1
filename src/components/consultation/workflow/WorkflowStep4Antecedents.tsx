@@ -4,7 +4,6 @@ import {
   Card,
   CardContent,
   Typography,
-  TextField,
   Tabs,
   Tab,
   Grid,
@@ -13,6 +12,7 @@ import {
 } from '@mui/material';
 import { LocalHospital, Healing, FamilyRestroom } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
+import { SpeechTextField } from '../../common/SpeechTextField';
 
 interface Antecedent {
   nom: string;
@@ -146,19 +146,21 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             {medicaux.map((antecedent, index) => (
               <Grid item xs={12} key={index}>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
+                  <SpeechTextField
                     fullWidth
                     label="Maladie"
                     value={antecedent.nom}
-                    onChange={(e) => updateAntecedent('medicaux', index, 'nom', e.target.value)}
+                    onChange={(value) => updateAntecedent('medicaux', index, 'nom', value)}
                     placeholder="Ex: Diabète"
+                    enableSpeech={true}
                   />
-                  <TextField
+                  <SpeechTextField
                     sx={{ width: 150 }}
                     label="Année"
                     value={antecedent.annee}
-                    onChange={(e) => updateAntecedent('medicaux', index, 'annee', e.target.value)}
+                    onChange={(value) => updateAntecedent('medicaux', index, 'annee', value)}
                     placeholder="2020"
+                    enableSpeech={false}
                   />
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography
@@ -190,19 +192,21 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             {chirurgicaux.map((antecedent, index) => (
               <Grid item xs={12} key={index}>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
+                  <SpeechTextField
                     fullWidth
                     label="Intervention"
                     value={antecedent.nom}
-                    onChange={(e) => updateAntecedent('chirurgicaux', index, 'nom', e.target.value)}
+                    onChange={(value) => updateAntecedent('chirurgicaux', index, 'nom', value)}
                     placeholder="Ex: Appendicectomie"
+                    enableSpeech={true}
                   />
-                  <TextField
+                  <SpeechTextField
                     sx={{ width: 150 }}
                     label="Année"
                     value={antecedent.annee}
-                    onChange={(e) => updateAntecedent('chirurgicaux', index, 'annee', e.target.value)}
+                    onChange={(value) => updateAntecedent('chirurgicaux', index, 'annee', value)}
                     placeholder="2020"
+                    enableSpeech={false}
                   />
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography
@@ -234,12 +238,13 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             {familiaux.map((familial, index) => (
               <Grid item xs={12} key={index}>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <TextField
+                  <SpeechTextField
                     fullWidth
                     label="Antécédent familial"
                     value={familial}
-                    onChange={(e) => updateFamilial(index, e.target.value)}
+                    onChange={(value) => updateFamilial(index, value)}
                     placeholder="Ex: Père diabétique, Mère hypertendue"
+                    enableSpeech={true}
                   />
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Typography
