@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material';
 import { FacturationService, Facture, Paiement } from '../../services/facturationService';
 import { useFacturationPermissions } from '../../hooks/useFacturationPermissions';
+import { PAYMENT_METHODS, getPaymentMethodLabel, getPaymentMethodConfig } from '../../constants/paymentMethods';
 
 interface GestionPaiementsProps {
   factureId?: string;
@@ -171,15 +172,7 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
   };
 
   const getModePaiementLabel = (mode: string) => {
-    const labels: Record<string, string> = {
-      especes: 'Espèces',
-      mobile_money: 'Mobile Money',
-      carte_bancaire: 'Carte Bancaire',
-      virement: 'Virement',
-      cheque: 'Chèque',
-      prise_en_charge: 'Prise en Charge'
-    };
-    return labels[mode] || mode;
+    return getPaymentMethodLabel(mode);
   };
 
   return (
@@ -353,25 +346,28 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
                   onChange={(e) => setFormPaiement({ ...formPaiement, mode_paiement: e.target.value as any })}
                   label="Mode de Paiement"
                 >
-                  <MenuItem value="especes">Espèces</MenuItem>
-                  <MenuItem value="mobile_money">Mobile Money</MenuItem>
-                  <MenuItem value="carte_bancaire">Carte Bancaire</MenuItem>
-                  <MenuItem value="virement">Virement</MenuItem>
-                  <MenuItem value="cheque">Chèque</MenuItem>
-                  <MenuItem value="prise_en_charge">Prise en Charge</MenuItem>
+                  {PAYMENT_METHODS.map((method) => (
+                    <MenuItem key={method.value} value={method.value}>
+                      {method.label}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>
-            {formPaiement.mode_paiement === 'mobile_money' && (
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Numéro de Transaction"
-                  value={formPaiement.numero_transaction}
-                  onChange={(e) => setFormPaiement({ ...formPaiement, numero_transaction: e.target.value })}
-                />
-              </Grid>
-            )}
+            {(() => {
+              const methodConfig = getPaymentMethodConfig(formPaiement.mode_paiement);
+              return methodConfig?.requiresTransactionNumber && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Numéro de Transaction"
+                    value={formPaiement.numero_transaction || ''}
+                    onChange={(e) => setFormPaiement({ ...formPaiement, numero_transaction: e.target.value })}
+                    required
+                  />
+                </Grid>
+              );
+            })()}
             {formPaiement.mode_paiement === 'virement' && (
               <>
                 <Grid item xs={12}>

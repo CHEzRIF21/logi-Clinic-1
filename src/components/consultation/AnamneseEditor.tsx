@@ -31,14 +31,29 @@ import {
   Vaccines,
   Warning,
   Stop,
+  Delete,
+  Edit,
 } from '@mui/icons-material';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
+import { VaccinationService, Vaccine, PatientVaccination } from '../../services/vaccinationService';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  MenuItem,
+  Select,
+  InputLabel,
+} from '@mui/material';
 
 interface AnamneseEditorProps {
   value: string;
   onChange: (value: string) => void;
   onSave?: () => Promise<void>;
   patient?: {
+    id?: string;
     sexe?: string;
     date_naissance?: string;
   };
@@ -98,9 +113,30 @@ export const AnamneseEditor: React.FC<AnamneseEditorProps> = ({
   const [alcoolDetails, setAlcoolDetails] = useState('');
   const [nutrition, setNutrition] = useState('');
   
-  // Vaccinations
-  const [vaccinations, setVaccinations] = useState<string[]>([]);
-  const [newVaccination, setNewVaccination] = useState('');
+  // Vaccinations - Structure améliorée
+  interface VaccinationFormData {
+    id?: string;
+    vaccine_id: string;
+    vaccine_name: string;
+    dose_ordre: number;
+    date_administration: string;
+    date_rappel?: string;
+    statut: 'valide' | 'annule';
+    lieu?: string;
+    numero_lot?: string;
+    vaccinateur?: string;
+  }
+
+  const [vaccinations, setVaccinations] = useState<VaccinationFormData[]>([]);
+  const [availableVaccines, setAvailableVaccines] = useState<Vaccine[]>([]);
+  const [newVaccination, setNewVaccination] = useState<VaccinationFormData>({
+    vaccine_id: '',
+    vaccine_name: '',
+    dose_ordre: 1,
+    date_administration: new Date().toISOString().split('T')[0],
+    statut: 'valide',
+  });
+  const [loadingVaccines, setLoadingVaccines] = useState(false);
   
   // Checkboxes obligatoires selon protocole
   const [grossessePossible, setGrossessePossible] = useState(false);
@@ -204,6 +240,62 @@ export const AnamneseEditor: React.FC<AnamneseEditorProps> = ({
   
   const isFemaleInChildbearingAge = patient?.sexe === 'Féminin' && calculateAge(patient.date_naissance) >= 15 && calculateAge(patient.date_naissance) <= 50;
 
+  // Charger les vaccins disponibles
+  useEffect(() => {
+    const loadVaccines = async () => {
+      try {
+        setLoadingVaccines(true);
+        const vaccines = await VaccinationService.listVaccines();
+        setAvailableVaccines(vaccines);
+      } catch (error) {
+        console.error('Erreur lors du chargement des vaccins:', error);
+      } finally {
+        setLoadingVaccines(false);
+      }
+    };
+    loadVaccines();
+  }, []);
+
+  // Charger les vaccinations existantes du patient
+  useEffect(() => {
+    const loadPatientVaccinations = async () => {
+      if (!patient?.id) return;
+      try {
+        const patientCard = await VaccinationService.getPatientCard(patient.id);
+        if (patientCard?.doses && availableVaccines.length > 0) {
+          const formattedVaccinations: VaccinationFormData[] = patientCard.doses.map((dose: PatientVaccination) => {
+            const vaccine = availableVaccines.find(v => v.id === dose.vaccine_id);
+            // Calculer la date de rappel si nécessaire
+            let dateRappel: string | undefined;
+            if (vaccine?.rappel_necessaire && vaccine.rappel_intervalle_jours) {
+              const rappelDate = new Date(dose.date_administration);
+              rappelDate.setDate(rappelDate.getDate() + vaccine.rappel_intervalle_jours);
+              dateRappel = rappelDate.toISOString().split('T')[0];
+            }
+            return {
+              id: dose.id,
+              vaccine_id: dose.vaccine_id,
+              vaccine_name: vaccine?.libelle || 'Vaccin inconnu',
+              dose_ordre: dose.dose_ordre,
+              date_administration: dose.date_administration.split('T')[0],
+              date_rappel: dateRappel,
+              statut: dose.statut,
+              lieu: dose.lieu || undefined,
+              numero_lot: dose.numero_lot || undefined,
+              vaccinateur: dose.vaccinateur || undefined,
+            };
+          });
+          setVaccinations(formattedVaccinations);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement des vaccinations du patient:', error);
+      }
+    };
+    if (patient?.id && availableVaccines.length > 0) {
+      loadPatientVaccinations();
+    }
+  }, [patient?.id, availableVaccines]);
+
   // Gestion unifiée des signes cliniques (fusion signes positifs/négatifs)
   const handleAddSigne = () => {
     if (!newSigne.trim()) return;
@@ -243,15 +335,88 @@ export const AnamneseEditor: React.FC<AnamneseEditorProps> = ({
     setBilans(bilans.filter((_, i) => i !== index));
   };
 
-  const handleAddVaccination = () => {
-    if (newVaccination.trim()) {
-      setVaccinations([...vaccinations, newVaccination.trim()]);
-      setNewVaccination('');
+  const handleAddVaccination = async () => {
+    if (!newVaccination.vaccine_id || !newVaccination.date_administration) {
+      return;
+    }
+
+    if (!patient?.id) {
+      // Si pas de patient, ajouter juste en local
+      setVaccinations([...vaccinations, { ...newVaccination }]);
+      setNewVaccination({
+        vaccine_id: '',
+        vaccine_name: '',
+        dose_ordre: 1,
+        date_administration: new Date().toISOString().split('T')[0],
+        statut: 'valide',
+      });
+      return;
+    }
+
+    // Sauvegarder dans la base de données
+    try {
+      const vaccine = availableVaccines.find(v => v.id === newVaccination.vaccine_id);
+      if (!vaccine) return;
+
+      const savedVaccination = await VaccinationService.recordDose({
+        patient_id: patient.id,
+        vaccine_id: newVaccination.vaccine_id,
+        schedule_id: null,
+        dose_ordre: newVaccination.dose_ordre,
+        date_administration: newVaccination.date_administration,
+        lieu: newVaccination.lieu || undefined,
+        numero_lot: newVaccination.numero_lot || undefined,
+        vaccinateur: newVaccination.vaccinateur || undefined,
+        statut: newVaccination.statut,
+      } as any);
+
+      // Calculer la date de rappel si nécessaire
+      let dateRappel: string | undefined;
+      if (vaccine.rappel_necessaire && vaccine.rappel_intervalle_jours) {
+        const rappelDate = new Date(newVaccination.date_administration);
+        rappelDate.setDate(rappelDate.getDate() + vaccine.rappel_intervalle_jours);
+        dateRappel = rappelDate.toISOString().split('T')[0];
+      }
+
+      setVaccinations([...vaccinations, {
+        id: savedVaccination.id,
+        ...newVaccination,
+        date_rappel: dateRappel,
+      }]);
+
+      setNewVaccination({
+        vaccine_id: '',
+        vaccine_name: '',
+        dose_ordre: 1,
+        date_administration: new Date().toISOString().split('T')[0],
+        statut: 'valide',
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'ajout de la vaccination:', error);
+      // En cas d'erreur, ajouter quand même en local
+      setVaccinations([...vaccinations, { ...newVaccination }]);
     }
   };
 
-  const handleRemoveVaccination = (index: number) => {
+  const handleRemoveVaccination = async (index: number) => {
+    const vaccination = vaccinations[index];
+    if (vaccination.id && patient?.id) {
+      try {
+        await VaccinationService.cancelDose(vaccination.id);
+      } catch (error) {
+        console.error('Erreur lors de la suppression de la vaccination:', error);
+      }
+    }
     setVaccinations(vaccinations.filter((_, i) => i !== index));
+  };
+
+  const handleVaccineChange = (vaccineId: string) => {
+    const vaccine = availableVaccines.find(v => v.id === vaccineId);
+    setNewVaccination({
+      ...newVaccination,
+      vaccine_id: vaccineId,
+      vaccine_name: vaccine?.libelle || '',
+    });
   };
 
   return (
@@ -572,45 +737,156 @@ export const AnamneseEditor: React.FC<AnamneseEditorProps> = ({
               <Typography variant="subtitle1" gutterBottom>
                 Vaccinations
               </Typography>
-              <Box display="flex" gap={1} mb={2}>
-                <TextField
-                  fullWidth
-                  size="small"
-                  placeholder="Ex: BCG, DTP, Hépatite B, COVID-19..."
-                  value={newVaccination}
-                  onChange={(e) => setNewVaccination(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      handleAddVaccination();
-                    }
-                  }}
-                  InputProps={{
-                    endAdornment: renderDictationButton('newVaccination'),
-                  }}
-                />
-                <Button
-                  variant="outlined"
-                  onClick={handleAddVaccination}
-                  startIcon={<Add />}
-                >
-                  Ajouter
-                </Button>
-              </Box>
-              <Box display="flex" flexWrap="wrap" gap={1}>
-                {vaccinations.map((vaccination, index) => (
-                  <Chip
-                    key={index}
-                    label={vaccination}
-                    icon={<Vaccines />}
-                    onDelete={() => handleRemoveVaccination(index)}
-                    color="primary"
-                  />
-                ))}
-              </Box>
-              {vaccinations.length === 0 && (
+
+              {/* Formulaire d'ajout */}
+              <Paper sx={{ p: 2, mb: 3, bgcolor: 'grey.50' }}>
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Vaccin</InputLabel>
+                      <Select
+                        value={newVaccination.vaccine_id}
+                        label="Vaccin"
+                        onChange={(e) => handleVaccineChange(e.target.value)}
+                        disabled={loadingVaccines}
+                      >
+                        {availableVaccines.map((vaccine) => (
+                          <MenuItem key={vaccine.id} value={vaccine.id}>
+                            {vaccine.libelle}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="number"
+                      label="Dose"
+                      value={newVaccination.dose_ordre}
+                      onChange={(e) => setNewVaccination({
+                        ...newVaccination,
+                        dose_ordre: parseInt(e.target.value) || 1,
+                      })}
+                      inputProps={{ min: 1 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="date"
+                      label="Date"
+                      value={newVaccination.date_administration}
+                      onChange={(e) => setNewVaccination({
+                        ...newVaccination,
+                        date_administration: e.target.value,
+                      })}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={2}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      type="date"
+                      label="Rappel"
+                      value={newVaccination.date_rappel || ''}
+                      onChange={(e) => setNewVaccination({
+                        ...newVaccination,
+                        date_rappel: e.target.value || undefined,
+                      })}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={2}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Statut</InputLabel>
+                      <Select
+                        value={newVaccination.statut}
+                        label="Statut"
+                        onChange={(e) => setNewVaccination({
+                          ...newVaccination,
+                          statut: e.target.value as 'valide' | 'annule',
+                        })}
+                      >
+                        <MenuItem value="valide">Valide</MenuItem>
+                        <MenuItem value="annule">Annulé</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={1}>
+                    <Button
+                      variant="contained"
+                      onClick={handleAddVaccination}
+                      startIcon={<Add />}
+                      fullWidth
+                      disabled={!newVaccination.vaccine_id || !newVaccination.date_administration}
+                    >
+                      Ajouter
+                    </Button>
+                  </Grid>
+                </Grid>
+              </Paper>
+
+              {/* Tableau des vaccinations */}
+              {vaccinations.length === 0 ? (
                 <Alert severity="info" sx={{ mt: 2 }}>
                   Aucune vaccination enregistrée. Ajoutez les vaccinations du patient.
                 </Alert>
+              ) : (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Vaccin</strong></TableCell>
+                        <TableCell align="center"><strong>Dose</strong></TableCell>
+                        <TableCell><strong>Date</strong></TableCell>
+                        <TableCell><strong>Rappel</strong></TableCell>
+                        <TableCell align="center"><strong>Statut</strong></TableCell>
+                        <TableCell align="center"><strong>Actions</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {vaccinations.map((vaccination, index) => (
+                        <TableRow key={vaccination.id || index} hover>
+                          <TableCell>
+                            <Box display="flex" alignItems="center" gap={1}>
+                              <Vaccines fontSize="small" color="primary" />
+                              {vaccination.vaccine_name}
+                            </Box>
+                          </TableCell>
+                          <TableCell align="center">{vaccination.dose_ordre}</TableCell>
+                          <TableCell>
+                            {new Date(vaccination.date_administration).toLocaleDateString('fr-FR')}
+                          </TableCell>
+                          <TableCell>
+                            {vaccination.date_rappel
+                              ? new Date(vaccination.date_rappel).toLocaleDateString('fr-FR')
+                              : '-'}
+                          </TableCell>
+                          <TableCell align="center">
+                            <Chip
+                              label={vaccination.statut === 'valide' ? 'Valide' : 'Annulé'}
+                              size="small"
+                              color={vaccination.statut === 'valide' ? 'success' : 'error'}
+                            />
+                          </TableCell>
+                          <TableCell align="center">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleRemoveVaccination(index)}
+                            >
+                              <Delete />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               )}
             </Box>
           </TabPanel>

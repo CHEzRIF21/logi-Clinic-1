@@ -118,9 +118,16 @@ Date: ${new Date(date).toLocaleDateString()}
 RECETTES
 --------
 Espèces: ${rapport.journal?.recettes_especes?.toLocaleString() || 0} FCFA
-Mobile Money: ${rapport.journal?.recettes_mobile_money?.toLocaleString() || 0} FCFA
+Orange Money: ${rapport.journal?.recettes_orange_money?.toLocaleString() || 0} FCFA
+MTN Mobile Money: ${rapport.journal?.recettes_mtn_mobile_money?.toLocaleString() || 0} FCFA
+Moov Money: ${rapport.journal?.recettes_moov_money?.toLocaleString() || 0} FCFA
+Wave: ${rapport.journal?.recettes_wave?.toLocaleString() || 0} FCFA
+Flooz: ${rapport.journal?.recettes_flooz?.toLocaleString() || 0} FCFA
+T-Money: ${rapport.journal?.recettes_t_money?.toLocaleString() || 0} FCFA
 Carte Bancaire: ${rapport.journal?.recettes_carte?.toLocaleString() || 0} FCFA
 Virement: ${rapport.journal?.recettes_virement?.toLocaleString() || 0} FCFA
+Chèque: ${rapport.journal?.recettes_cheque?.toLocaleString() || 0} FCFA
+Prise en Charge: ${rapport.journal?.recettes_prise_en_charge?.toLocaleString() || 0} FCFA
 Total Recettes: ${rapport.journal?.total_recettes?.toLocaleString() || 0} FCFA
 
 DÉPENSES
@@ -271,12 +278,54 @@ Total payé: ${rapport.statistiques?.totalPaye?.toLocaleString() || 0} FCFA
                             {journal.recettes_especes.toLocaleString()} FCFA
                           </TableCell>
                         </TableRow>
-                        <TableRow>
-                          <TableCell>Mobile Money</TableCell>
-                          <TableCell align="right">
-                            {journal.recettes_mobile_money.toLocaleString()} FCFA
-                          </TableCell>
-                        </TableRow>
+                        {journal.recettes_orange_money !== undefined && journal.recettes_orange_money > 0 && (
+                          <TableRow>
+                            <TableCell>Orange Money</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_orange_money.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_mtn_mobile_money !== undefined && journal.recettes_mtn_mobile_money > 0 && (
+                          <TableRow>
+                            <TableCell>MTN Mobile Money</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_mtn_mobile_money.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_moov_money !== undefined && journal.recettes_moov_money > 0 && (
+                          <TableRow>
+                            <TableCell>Moov Money</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_moov_money.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_wave !== undefined && journal.recettes_wave > 0 && (
+                          <TableRow>
+                            <TableCell>Wave</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_wave.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_flooz !== undefined && journal.recettes_flooz > 0 && (
+                          <TableRow>
+                            <TableCell>Flooz</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_flooz.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_t_money !== undefined && journal.recettes_t_money > 0 && (
+                          <TableRow>
+                            <TableCell>T-Money</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_t_money.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
                         <TableRow>
                           <TableCell>Carte Bancaire</TableCell>
                           <TableCell align="right">
@@ -289,6 +338,22 @@ Total payé: ${rapport.statistiques?.totalPaye?.toLocaleString() || 0} FCFA
                             {journal.recettes_virement.toLocaleString()} FCFA
                           </TableCell>
                         </TableRow>
+                        {journal.recettes_cheque !== undefined && journal.recettes_cheque > 0 && (
+                          <TableRow>
+                            <TableCell>Chèque</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_cheque.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        {journal.recettes_prise_en_charge !== undefined && journal.recettes_prise_en_charge > 0 && (
+                          <TableRow>
+                            <TableCell>Prise en Charge</TableCell>
+                            <TableCell align="right">
+                              {journal.recettes_prise_en_charge.toLocaleString()} FCFA
+                            </TableCell>
+                          </TableRow>
+                        )}
                         <TableRow>
                           <TableCell>Autres</TableCell>
                           <TableCell align="right">

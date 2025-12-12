@@ -238,6 +238,7 @@ async function main() {
   console.log('✅ Opérations créées');
 
   // Créer des factures
+  // Facture 1: Payée en espèces
   const invoice1 = await prisma.invoice.create({
     data: {
       number: 'FAC-202412-0001',
@@ -248,7 +249,7 @@ async function main() {
       totalTTC: new Decimal(3000.00),
       amountPaid: new Decimal(3000.00),
       status: 'PAYEE',
-      modePayment: 'ESPECE',
+      modePayment: 'especes', // Nouveau format West Africa
       createdBy: admin.id,
       invoiceLines: {
         create: [
@@ -280,11 +281,12 @@ async function main() {
     data: {
       invoiceId: invoice1.id,
       amount: new Decimal(3000.00),
-      method: 'ESPECE',
+      method: 'especes', // Nouveau format West Africa
       createdBy: admin.id,
     },
   });
 
+  // Facture 2: Partiellement payée par Orange Money
   const invoice2 = await prisma.invoice.create({
     data: {
       number: 'FAC-202412-0002',
@@ -295,7 +297,7 @@ async function main() {
       totalTTC: new Decimal(6200.00),
       amountPaid: new Decimal(3000.00),
       status: 'PARTIELLE',
-      modePayment: 'CARTE',
+      modePayment: 'orange_money', // Mobile Money West Africa
       createdBy: admin.id,
       invoiceLines: {
         create: [
@@ -327,8 +329,49 @@ async function main() {
     data: {
       invoiceId: invoice2.id,
       amount: new Decimal(3000.00),
-      method: 'CARTE',
-      reference: 'CARTE-001',
+      method: 'orange_money', // Mobile Money West Africa
+      reference: 'OM-TXN-20241220-001',
+      createdBy: admin.id,
+    },
+  });
+
+  // Facture 3: Exemple avec Wave (nouveau)
+  const invoice3 = await prisma.invoice.create({
+    data: {
+      number: 'FAC-202412-0003',
+      patientId: patients[0].id,
+      totalHT: new Decimal(3000.00),
+      totalTax: new Decimal(0),
+      totalDiscount: new Decimal(0),
+      totalTTC: new Decimal(3000.00),
+      amountPaid: new Decimal(3000.00),
+      status: 'PAYEE',
+      modePayment: 'wave', // Wave - Mobile Money populaire en Afrique de l'Ouest
+      createdBy: admin.id,
+      invoiceLines: {
+        create: [
+          {
+            productId: products[4].id,
+            qty: 1,
+            unitPrice: products[4].price,
+            discount: new Decimal(0),
+            tax: new Decimal(0),
+            total: products[4].price,
+          },
+        ],
+      },
+      operations: {
+        connect: { id: operation2.id },
+      },
+    },
+  });
+
+  await prisma.payment.create({
+    data: {
+      invoiceId: invoice3.id,
+      amount: new Decimal(3000.00),
+      method: 'wave', // Wave
+      reference: 'WAVE-TXN-20241220-001',
       createdBy: admin.id,
     },
   });

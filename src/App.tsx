@@ -26,7 +26,6 @@ import UtilisateursPermissions from './pages/UtilisateursPermissions';
 import Vaccination from './pages/Vaccination';
 import Laboratoire from './pages/Laboratoire';
 import Imagerie from './pages/Imagerie';
-import Facturation from './pages/Facturation';
 import AccountRecoveryManagement from './pages/AccountRecoveryManagement';
 import RegistrationRequests from './pages/RegistrationRequests';
 
@@ -264,16 +263,6 @@ function App() {
           <ProtectedModuleRoute user={user} requiredModule="imagerie">
             <Layout user={user} onLogout={handleLogout}>
               <Imagerie />
-            </Layout>
-          </ProtectedModuleRoute>
-        }
-      />
-      <Route
-        path="/facturation"
-        element={
-          <ProtectedModuleRoute user={user} requiredModule="facturation">
-            <Layout user={user} onLogout={handleLogout}>
-              <Facturation />
             </Layout>
           </ProtectedModuleRoute>
         }

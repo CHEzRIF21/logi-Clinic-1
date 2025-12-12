@@ -27,11 +27,32 @@ export class PaymentController {
         });
       }
 
-      const validMethods = ['ESPECE', 'CARTE', 'MOBILE', 'ASSURANCE', 'VIREMENT'];
-      if (!validMethods.includes(method)) {
+      // Moyens de paiement spécifiques à l'Afrique de l'Ouest (XOF)
+      const validMethods = [
+        'especes',
+        'orange_money',
+        'mtn_mobile_money',
+        'moov_money',
+        'wave',
+        'flooz',
+        't_money',
+        'carte_bancaire',
+        'virement',
+        'cheque',
+        'prise_en_charge',
+        // Rétro-compatibilité avec les anciens codes
+        'ESPECE',
+        'CARTE',
+        'MOBILE',
+        'ASSURANCE',
+        'VIREMENT',
+      ];
+      const methodLower = method.toLowerCase();
+      const normalizedMethod = validMethods.includes(method) ? method : methodLower;
+      if (!validMethods.map(m => m.toLowerCase()).includes(methodLower)) {
         return res.status(400).json({
           success: false,
-          message: `Mode de paiement invalide. Valeurs acceptées: ${validMethods.join(', ')}`,
+          message: `Mode de paiement invalide. Valeurs acceptées: especes, orange_money, mtn_mobile_money, moov_money, wave, flooz, t_money, carte_bancaire, virement, cheque, prise_en_charge`,
         });
       }
 

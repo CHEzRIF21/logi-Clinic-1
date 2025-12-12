@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { PaymentMethod, getPaymentMethodLabel } from '../constants/paymentMethods';
 
 // ============================================
 // TYPES ET INTERFACES
@@ -64,7 +65,7 @@ export interface Paiement {
   numero_paiement?: string;
   date_paiement: string;
   montant: number;
-  mode_paiement: 'especes' | 'mobile_money' | 'carte_bancaire' | 'virement' | 'cheque' | 'prise_en_charge';
+  mode_paiement: PaymentMethod;
   numero_transaction?: string;
   banque?: string;
   numero_cheque?: string;
@@ -149,6 +150,12 @@ export interface RapportFinancier {
   etatPaiements: {
     especes: number;
     mobile_money: number;
+    orange_money: number;
+    mtn_mobile_money: number;
+    moov_money: number;
+    wave: number;
+    flooz: number;
+    t_money: number;
     carte_bancaire: number;
     virement: number;
     cheque: number;
@@ -167,9 +174,16 @@ export interface JournalCaisse {
   date_journal: string;
   caissier_id: string;
   recettes_especes: number;
-  recettes_mobile_money: number;
+  recettes_orange_money?: number;
+  recettes_mtn_mobile_money?: number;
+  recettes_moov_money?: number;
+  recettes_wave?: number;
+  recettes_flooz?: number;
+  recettes_t_money?: number;
   recettes_carte: number;
   recettes_virement: number;
+  recettes_cheque?: number;
+  recettes_prise_en_charge?: number;
   recettes_autres: number;
   total_recettes: number;
   depenses_especes: number;
@@ -817,10 +831,23 @@ export class FacturationService {
       }
     });
 
-    // État des paiements
+    // État des paiements (regroupement par type)
+    const orangeMoney = paiements?.filter(p => p.mode_paiement === 'orange_money').reduce((sum, p) => sum + p.montant, 0) || 0;
+    const mtnMobileMoney = paiements?.filter(p => p.mode_paiement === 'mtn_mobile_money').reduce((sum, p) => sum + p.montant, 0) || 0;
+    const moovMoney = paiements?.filter(p => p.mode_paiement === 'moov_money').reduce((sum, p) => sum + p.montant, 0) || 0;
+    const waveMoney = paiements?.filter(p => p.mode_paiement === 'wave').reduce((sum, p) => sum + p.montant, 0) || 0;
+    const floozMoney = paiements?.filter(p => p.mode_paiement === 'flooz').reduce((sum, p) => sum + p.montant, 0) || 0;
+    const tMoney = paiements?.filter(p => p.mode_paiement === 't_money').reduce((sum, p) => sum + p.montant, 0) || 0;
+    
     const etatPaiements = {
       especes: paiements?.filter(p => p.mode_paiement === 'especes').reduce((sum, p) => sum + p.montant, 0) || 0,
-      mobile_money: paiements?.filter(p => p.mode_paiement === 'mobile_money').reduce((sum, p) => sum + p.montant, 0) || 0,
+      mobile_money: orangeMoney + mtnMobileMoney + moovMoney + waveMoney + floozMoney + tMoney,
+      orange_money: orangeMoney,
+      mtn_mobile_money: mtnMobileMoney,
+      moov_money: moovMoney,
+      wave: waveMoney,
+      flooz: floozMoney,
+      t_money: tMoney,
       carte_bancaire: paiements?.filter(p => p.mode_paiement === 'carte_bancaire').reduce((sum, p) => sum + p.montant, 0) || 0,
       virement: paiements?.filter(p => p.mode_paiement === 'virement').reduce((sum, p) => sum + p.montant, 0) || 0,
       cheque: paiements?.filter(p => p.mode_paiement === 'cheque').reduce((sum, p) => sum + p.montant, 0) || 0,

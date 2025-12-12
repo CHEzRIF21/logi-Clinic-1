@@ -37,6 +37,7 @@ import { FacturationService, ServiceFacturable, LigneFacture } from '../../servi
 import { supabase, Patient } from '../../services/supabase';
 import { useFacturationPermissions } from '../../hooks/useFacturationPermissions';
 import ExamCatalogService, { ExamCatalogEntry } from '../../services/examCatalogService';
+import { LaboratoireTarificationService, AnalyseTarif } from '../../services/laboratoireTarificationService';
 
 interface CreationFactureProps {
   patientId?: string;
@@ -50,6 +51,8 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
   const [services, setServices] = useState<ServiceFacturable[]>([]);
   const [examCatalog, setExamCatalog] = useState<ExamCatalogEntry[]>([]);
   const [examCatalogLoading, setExamCatalogLoading] = useState(false);
+  const [analysesLaboratoire, setAnalysesLaboratoire] = useState<AnalyseTarif[]>([]);
+  const [rechercheAnalyse, setRechercheAnalyse] = useState('');
   const [lignes, setLignes] = useState<LigneFacture[]>([]);
   const [ligneEnCours, setLigneEnCours] = useState<Partial<LigneFacture>>({
     libelle: '',
@@ -67,6 +70,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
       chargerServices();
       chargerExamCatalog();
       chargerPatients();
+      chargerAnalysesLaboratoire();
       if (patientId) {
         chargerPatient(patientId);
       }
@@ -103,6 +107,25 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
     }
   };
 
+  const chargerAnalysesLaboratoire = () => {
+    const analyses = LaboratoireTarificationService.getAllTarifs();
+    setAnalysesLaboratoire(analyses);
+  };
+
+  const analysesFiltrees = rechercheAnalyse 
+    ? LaboratoireTarificationService.rechercherAnalyses(rechercheAnalyse)
+    : analysesLaboratoire;
+
+  const selectionnerAnalyseLaboratoire = (analyse: AnalyseTarif | null) => {
+    if (!analyse) return;
+    setLigneEnCours((prev) => ({
+      ...prev,
+      libelle: analyse.nom,
+      prix_unitaire: analyse.prix,
+      code_service: analyse.code,
+    }));
+  };
+
   const chargerPatients = async () => {
     try {
       const { data, error } = await supabase
@@ -118,6 +141,13 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
 
   const chargerPatient = async (id: string) => {
     try {
+      // Valider que l'ID est un UUID valide
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(id)) {
+        setError('ID patient invalide. Veuillez sélectionner un patient valide.');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -199,6 +229,13 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
       return;
     }
 
+    // Valider que l'ID patient est un UUID valide
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(patient.id)) {
+      setError('ID patient invalide. Veuillez sélectionner un patient valide.');
+      return;
+    }
+
     if (lignes.length === 0) {
       setError('Veuillez ajouter au moins une ligne à la facture');
       return;
@@ -210,7 +247,18 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
     try {
       // Récupérer l'ID de l'utilisateur actuel depuis le localStorage ou le contexte
       const userData = localStorage.getItem('user');
-      const caissierId = userData ? JSON.parse(userData).id : undefined;
+      let caissierId: string | undefined;
+      
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          if (user.id && uuidRegex.test(user.id)) {
+            caissierId = user.id;
+          }
+        } catch (e) {
+          console.warn('Erreur lors de la récupération de l\'ID utilisateur:', e);
+        }
+      }
 
       await FacturationService.createFacture({
         patient_id: patient.id,
@@ -251,8 +299,23 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
           </Box>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-              {error}
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 2,
+                border: (theme) => `2px solid ${theme.palette.error.main}`,
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? 'rgba(211, 47, 47, 0.1)' 
+                  : 'rgba(211, 47, 47, 0.05)',
+              }} 
+              onClose={() => setError(null)}
+            >
+              <Typography variant="body1" fontWeight="bold" gutterBottom>
+                Erreur
+              </Typography>
+              <Typography variant="body2">
+                {error}
+              </Typography>
             </Alert>
           )}
 
@@ -263,7 +326,12 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
                 <InputLabel>Patient</InputLabel>
                 <Select
                   value={patient?.id || ''}
-                  onChange={(e) => chargerPatient(e.target.value)}
+                  onChange={(e) => {
+                    const selectedId = e.target.value as string;
+                    if (selectedId && selectedId !== '') {
+                      chargerPatient(selectedId);
+                    }
+                  }}
                   label="Patient"
                   disabled={!!patientId}
                 >
@@ -278,7 +346,21 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
 
             {patient && (
               <Grid item xs={12} md={6}>
-                <Box display="flex" alignItems="center" gap={2} p={2} bgcolor="grey.50" borderRadius={1}>
+                <Box 
+                  display="flex" 
+                  alignItems="center" 
+                  gap={2} 
+                  p={2} 
+                  sx={{
+                    bgcolor: (theme) => theme.palette.mode === 'dark' 
+                      ? 'rgba(255, 255, 255, 0.05)' 
+                      : 'rgba(0, 0, 0, 0.02)',
+                    border: (theme) => `1px solid ${theme.palette.mode === 'dark' 
+                      ? 'rgba(255, 255, 255, 0.1)' 
+                      : 'rgba(0, 0, 0, 0.1)'}`,
+                    borderRadius: 1,
+                  }}
+                >
                   <Person color="primary" />
                   <Box>
                     <Typography variant="body1" fontWeight="bold">
@@ -368,6 +450,57 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                Analyses de Laboratoire
+              </Typography>
+              <TextField
+                fullWidth
+                label="Rechercher une analyse"
+                value={rechercheAnalyse}
+                onChange={(e) => setRechercheAnalyse(e.target.value)}
+                sx={{ mb: 2 }}
+                placeholder="Tapez le nom ou le numéro de l'analyse..."
+              />
+              <Box sx={{ maxHeight: 200, overflow: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
+                {analysesFiltrees.map((analyse) => (
+                  <Box
+                    key={analyse.code}
+                    onClick={() => selectionnerAnalyseLaboratoire(analyse)}
+                    sx={{
+                      p: 1.5,
+                      mb: 0.5,
+                      cursor: 'pointer',
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                        borderColor: 'primary.main'
+                      },
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        {analyse.numero}. {analyse.nom}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {analyse.tube}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                      {LaboratoireTarificationService.formaterPrix(analyse.prix)}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
+                Catalogue général des examens / actes
+              </Typography>
               <Autocomplete
                 options={examCatalog}
                 loading={examCatalogLoading}

@@ -8,7 +8,8 @@ import {
   Tab,
   Grid,
   Divider,
-  Alert
+  Alert,
+  Button
 } from '@mui/material';
 import { LocalHospital, Healing, FamilyRestroom } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
@@ -17,6 +18,7 @@ import { SpeechTextField } from '../../common/SpeechTextField';
 interface Antecedent {
   nom: string;
   annee?: string;
+  _id?: string; // ID unique pour la stabilité des clés
 }
 
 interface WorkflowStep4AntecedentsProps {
@@ -49,21 +51,45 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
   const [medicaux, setMedicaux] = useState<Antecedent[]>([]);
   const [chirurgicaux, setChirurgicaux] = useState<Antecedent[]>([]);
   const [familiaux, setFamiliaux] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
+    // Éviter les re-initialisations multiples
+    if (initialized) return;
+
     // Pré-remplir depuis le patient
-    if (patient.antecedents_medicaux) {
+    if (patient.antecedents_medicaux && medicaux.length === 0) {
       const lines = patient.antecedents_medicaux.split('\n').filter(l => l.trim());
-      setMedicaux(lines.map(line => ({ nom: line, annee: '' })));
+      if (lines.length > 0) {
+        setMedicaux(lines.map((line, idx) => ({ 
+          nom: line, 
+          annee: '',
+          _id: `med-${idx}-${Date.now()}` 
+        } as Antecedent & { _id?: string })));
+      }
     }
 
     // Charger depuis antecedents si disponible
     if (antecedents) {
-      if (antecedents.medicaux) setMedicaux(antecedents.medicaux);
-      if (antecedents.chirurgicaux) setChirurgicaux(antecedents.chirurgicaux);
-      if (antecedents.familiaux) setFamiliaux(antecedents.familiaux);
+      if (antecedents.medicaux && Array.isArray(antecedents.medicaux) && antecedents.medicaux.length > 0) {
+        setMedicaux(antecedents.medicaux.map((a: Antecedent, idx: number) => ({
+          ...a,
+          _id: (a as any)._id || `med-${idx}-${Date.now()}`
+        })));
+      }
+      if (antecedents.chirurgicaux && Array.isArray(antecedents.chirurgicaux) && antecedents.chirurgicaux.length > 0) {
+        setChirurgicaux(antecedents.chirurgicaux.map((a: Antecedent, idx: number) => ({
+          ...a,
+          _id: (a as any)._id || `chir-${idx}-${Date.now()}`
+        })));
+      }
+      if (antecedents.familiaux && Array.isArray(antecedents.familiaux) && antecedents.familiaux.length > 0) {
+        setFamiliaux(antecedents.familiaux);
+      }
     }
-  }, [patient, antecedents]);
+
+    setInitialized(true);
+  }, [patient, antecedents, initialized, medicaux.length]);
 
   useEffect(() => {
     onAntecedentsChange({
@@ -74,10 +100,11 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
   }, [medicaux, chirurgicaux, familiaux, onAntecedentsChange]);
 
   const addAntecedent = (type: 'medicaux' | 'chirurgicaux') => {
+    const newId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     if (type === 'medicaux') {
-      setMedicaux([...medicaux, { nom: '', annee: '' }]);
+      setMedicaux([...medicaux, { nom: '', annee: '', _id: newId }]);
     } else {
-      setChirurgicaux([...chirurgicaux, { nom: '', annee: '' }]);
+      setChirurgicaux([...chirurgicaux, { nom: '', annee: '', _id: newId }]);
     }
   };
 
@@ -143,43 +170,60 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             4a. Antécédents Personnels Médicaux
           </Typography>
           <Grid container spacing={2}>
-            {medicaux.map((antecedent, index) => (
-              <Grid item xs={12} key={index}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <SpeechTextField
-                    fullWidth
-                    label="Maladie"
-                    value={antecedent.nom}
-                    onChange={(value) => updateAntecedent('medicaux', index, 'nom', value)}
-                    placeholder="Ex: Diabète"
-                    enableSpeech={true}
-                  />
-                  <SpeechTextField
-                    sx={{ width: 150 }}
-                    label="Année"
-                    value={antecedent.annee}
-                    onChange={(value) => updateAntecedent('medicaux', index, 'annee', value)}
-                    placeholder="2020"
-                    enableSpeech={false}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography
-                      onClick={() => removeAntecedent('medicaux', index)}
-                      sx={{ cursor: 'pointer', color: 'error.main' }}
-                    >
-                      ✕
-                    </Typography>
+            {medicaux.map((antecedent, index) => {
+              const uniqueKey = antecedent._id || `medicaux-${index}`;
+              return (
+                <Grid item xs={12} key={uniqueKey}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <SpeechTextField
+                      fullWidth
+                      label="Maladie"
+                      value={antecedent.nom || ''}
+                      onChange={(value) => updateAntecedent('medicaux', index, 'nom', value)}
+                      placeholder="Ex: Diabète"
+                      enableSpeech={true}
+                      key={`${uniqueKey}-nom`}
+                    />
+                    <SpeechTextField
+                      sx={{ width: 150 }}
+                      label="Année"
+                      value={antecedent.annee || ''}
+                      onChange={(value) => updateAntecedent('medicaux', index, 'annee', value)}
+                      placeholder="2020"
+                      enableSpeech={false}
+                      key={`${uniqueKey}-annee`}
+                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 40, justifyContent: 'center' }}>
+                      <Button
+                        onClick={() => removeAntecedent('medicaux', index)}
+                        sx={{ 
+                          minWidth: 'auto', 
+                          width: 36, 
+                          height: 36,
+                          color: 'error.main',
+                          '&:hover': { bgcolor: 'error.light', color: 'error.dark' }
+                        }}
+                        size="small"
+                      >
+                        ✕
+                      </Button>
+                    </Box>
                   </Box>
-                </Box>
-              </Grid>
-            ))}
+                </Grid>
+              );
+            })}
             <Grid item xs={12}>
-              <Typography
+              <Button
                 onClick={() => addAntecedent('medicaux')}
-                sx={{ cursor: 'pointer', color: 'primary.main', textDecoration: 'underline' }}
+                sx={{ 
+                  color: 'primary.main', 
+                  textTransform: 'none',
+                  '&:hover': { textDecoration: 'underline' }
+                }}
+                variant="text"
               >
                 + Ajouter un antécédent médical
-              </Typography>
+              </Button>
             </Grid>
           </Grid>
         </TabPanel>
@@ -189,43 +233,60 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             4b. Antécédents Chirurgicaux
           </Typography>
           <Grid container spacing={2}>
-            {chirurgicaux.map((antecedent, index) => (
-              <Grid item xs={12} key={index}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <SpeechTextField
-                    fullWidth
-                    label="Intervention"
-                    value={antecedent.nom}
-                    onChange={(value) => updateAntecedent('chirurgicaux', index, 'nom', value)}
-                    placeholder="Ex: Appendicectomie"
-                    enableSpeech={true}
-                  />
-                  <SpeechTextField
-                    sx={{ width: 150 }}
-                    label="Année"
-                    value={antecedent.annee}
-                    onChange={(value) => updateAntecedent('chirurgicaux', index, 'annee', value)}
-                    placeholder="2020"
-                    enableSpeech={false}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography
-                      onClick={() => removeAntecedent('chirurgicaux', index)}
-                      sx={{ cursor: 'pointer', color: 'error.main' }}
-                    >
-                      ✕
-                    </Typography>
+            {chirurgicaux.map((antecedent, index) => {
+              const uniqueKey = antecedent._id || `chirurgicaux-${index}`;
+              return (
+                <Grid item xs={12} key={uniqueKey}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <SpeechTextField
+                      fullWidth
+                      label="Intervention"
+                      value={antecedent.nom || ''}
+                      onChange={(value) => updateAntecedent('chirurgicaux', index, 'nom', value)}
+                      placeholder="Ex: Appendicectomie"
+                      enableSpeech={true}
+                      key={`${uniqueKey}-nom`}
+                    />
+                    <SpeechTextField
+                      sx={{ width: 150 }}
+                      label="Année"
+                      value={antecedent.annee || ''}
+                      onChange={(value) => updateAntecedent('chirurgicaux', index, 'annee', value)}
+                      placeholder="2020"
+                      enableSpeech={false}
+                      key={`${uniqueKey}-annee`}
+                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 40, justifyContent: 'center' }}>
+                      <Button
+                        onClick={() => removeAntecedent('chirurgicaux', index)}
+                        sx={{ 
+                          minWidth: 'auto', 
+                          width: 36, 
+                          height: 36,
+                          color: 'error.main',
+                          '&:hover': { bgcolor: 'error.light', color: 'error.dark' }
+                        }}
+                        size="small"
+                      >
+                        ✕
+                      </Button>
+                    </Box>
                   </Box>
-                </Box>
-              </Grid>
-            ))}
+                </Grid>
+              );
+            })}
             <Grid item xs={12}>
-              <Typography
+              <Button
                 onClick={() => addAntecedent('chirurgicaux')}
-                sx={{ cursor: 'pointer', color: 'primary.main', textDecoration: 'underline' }}
+                sx={{ 
+                  color: 'primary.main', 
+                  textTransform: 'none',
+                  '&:hover': { textDecoration: 'underline' }
+                }}
+                variant="text"
               >
                 + Ajouter un antécédent chirurgical
-              </Typography>
+              </Button>
             </Grid>
           </Grid>
         </TabPanel>
@@ -235,35 +296,51 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
             4c. Antécédents Familiaux
           </Typography>
           <Grid container spacing={2}>
-            {familiaux.map((familial, index) => (
-              <Grid item xs={12} key={index}>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <SpeechTextField
-                    fullWidth
-                    label="Antécédent familial"
-                    value={familial}
-                    onChange={(value) => updateFamilial(index, value)}
-                    placeholder="Ex: Père diabétique, Mère hypertendue"
-                    enableSpeech={true}
-                  />
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography
-                      onClick={() => removeFamilial(index)}
-                      sx={{ cursor: 'pointer', color: 'error.main' }}
-                    >
-                      ✕
-                    </Typography>
+            {familiaux.map((familial, index) => {
+              const uniqueKey = `familiaux-${index}-${familial.substring(0, 10)}`;
+              return (
+                <Grid item xs={12} key={uniqueKey}>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <SpeechTextField
+                      fullWidth
+                      label="Antécédent familial"
+                      value={familial || ''}
+                      onChange={(value) => updateFamilial(index, value)}
+                      placeholder="Ex: Père diabétique, Mère hypertendue"
+                      enableSpeech={true}
+                      key={`${uniqueKey}-input`}
+                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 40, justifyContent: 'center' }}>
+                      <Button
+                        onClick={() => removeFamilial(index)}
+                        sx={{ 
+                          minWidth: 'auto', 
+                          width: 36, 
+                          height: 36,
+                          color: 'error.main',
+                          '&:hover': { bgcolor: 'error.light', color: 'error.dark' }
+                        }}
+                        size="small"
+                      >
+                        ✕
+                      </Button>
+                    </Box>
                   </Box>
-                </Box>
-              </Grid>
-            ))}
+                </Grid>
+              );
+            })}
             <Grid item xs={12}>
-              <Typography
+              <Button
                 onClick={addFamilial}
-                sx={{ cursor: 'pointer', color: 'primary.main', textDecoration: 'underline' }}
+                sx={{ 
+                  color: 'primary.main', 
+                  textTransform: 'none',
+                  '&:hover': { textDecoration: 'underline' }
+                }}
+                variant="text"
               >
                 + Ajouter un antécédent familial
-              </Typography>
+              </Button>
             </Grid>
           </Grid>
         </TabPanel>

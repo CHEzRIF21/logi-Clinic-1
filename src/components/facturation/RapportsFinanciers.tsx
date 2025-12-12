@@ -91,7 +91,12 @@ ${rapport.statistiquesMensuelles.map(stat =>
 
 4. ÉTAT DES PAIEMENTS
   Espèces: ${rapport.etatPaiements.especes.toLocaleString()} FCFA
-  Mobile Money: ${rapport.etatPaiements.mobile_money.toLocaleString()} FCFA
+  Orange Money: ${rapport.etatPaiements.orange_money?.toLocaleString() || 0} FCFA
+  MTN Mobile Money: ${rapport.etatPaiements.mtn_mobile_money?.toLocaleString() || 0} FCFA
+  Moov Money: ${rapport.etatPaiements.moov_money?.toLocaleString() || 0} FCFA
+  Wave: ${rapport.etatPaiements.wave?.toLocaleString() || 0} FCFA
+  Flooz: ${rapport.etatPaiements.flooz?.toLocaleString() || 0} FCFA
+  T-Money: ${rapport.etatPaiements.t_money?.toLocaleString() || 0} FCFA
   Carte Bancaire: ${rapport.etatPaiements.carte_bancaire.toLocaleString()} FCFA
   Virement: ${rapport.etatPaiements.virement.toLocaleString()} FCFA
   Chèque: ${rapport.etatPaiements.cheque.toLocaleString()} FCFA

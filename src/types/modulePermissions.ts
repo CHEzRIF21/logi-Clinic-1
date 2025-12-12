@@ -12,7 +12,6 @@ export type ModuleName =
   | 'stock_medicaments'
   | 'bilan'
   | 'caisse'
-  | 'facturation'
   | 'rendez_vous'
   | 'gestion_patients'
   | 'utilisateurs_permissions';
@@ -87,11 +86,7 @@ export const ALL_MODULES: Record<ModuleName, { label: string; submodules?: strin
   },
   caisse: {
     label: 'Caisse',
-    submodules: ['operations', 'journal', 'rapports', 'cloture']
-  },
-  facturation: {
-    label: 'Facturation',
-    submodules: ['creation', 'paiements', 'remboursements', 'rapports']
+    submodules: ['tableau_bord', 'tickets', 'creation_facture', 'paiements', 'journal', 'rapports', 'cloture']
   },
   rendez_vous: {
     label: 'Rendez-vous',

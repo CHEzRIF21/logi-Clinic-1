@@ -193,7 +193,7 @@ model Payment {
   invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   invoiceId String
   amount    Decimal  @db.Decimal(12, 2)
-  method    String // ESPECES, CB, CHEQUE, ASSURANCE, VIREMENT
+  method    String // Moyens de paiement West Africa: especes, orange_money, mtn_mobile_money, moov_money, wave, flooz, t_money, carte_bancaire, virement, cheque, prise_en_charge
   reference String?
   createdAt DateTime @default(now())
   createdBy String?

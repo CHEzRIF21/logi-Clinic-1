@@ -12,11 +12,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  DialogContentText
+  DialogContentText,
+  Snackbar
 } from '@mui/material';
 import { CheckCircle, CalendarToday } from '@mui/icons-material';
-import { Consultation } from '../../../services/consultationService';
-import { ConsultationService } from '../../../services/consultationService';
+import { Consultation, ConsultationService } from '../../../services/consultationService';
+import { ConsultationIntegrationService } from '../../../services/consultationIntegrationService';
 
 interface WorkflowStep11ClotureProps {
   consultation: Consultation;
@@ -33,18 +34,58 @@ export const WorkflowStep11Cloture: React.FC<WorkflowStep11ClotureProps> = ({
   const [motifSuivi, setMotifSuivi] = useState<string>('');
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   const handleCloture = async () => {
     try {
       setLoading(true);
-      await ConsultationService.clotureConsultation(
+      
+      // Mettre à jour la consultation avec la date de prochaine consultation si fournie
+      if (prochaineConsultation) {
+        await ConsultationService.updateConsultation(
+          consultation.id,
+          { prochaine_consultation: prochaineConsultation } as any,
+          userId,
+          'prochaine_consultation'
+        );
+      }
+
+      // Utiliser le service d'intégration pour clôturer avec toutes les intégrations
+      const result = await ConsultationIntegrationService.closeConsultationWithIntegrations(
         consultation.id,
-        prochaineConsultation || undefined
+        consultation.patient_id,
+        userId
       );
-      await onClose();
-    } catch (error) {
+
+      if (result.success) {
+        setSnackbar({
+          open: true,
+          message: `Consultation clôturée avec succès. ${result.messages.join(', ')}`,
+          severity: 'success'
+        });
+        
+        // Attendre un peu avant de fermer pour que l'utilisateur voie le message
+        setTimeout(async () => {
+          await onClose();
+        }, 2000);
+      } else {
+        setSnackbar({
+          open: true,
+          message: result.messages.join(', ') || 'Erreur lors de la clôture',
+          severity: 'error'
+        });
+      }
+    } catch (error: any) {
       console.error('Erreur lors de la clôture:', error);
-      alert('Erreur lors de la clôture de la consultation');
+      setSnackbar({
+        open: true,
+        message: error?.message || 'Erreur lors de la clôture de la consultation',
+        severity: 'error'
+      });
     } finally {
       setLoading(false);
       setConfirmDialogOpen(false);
@@ -123,6 +164,21 @@ export const WorkflowStep11Cloture: React.FC<WorkflowStep11ClotureProps> = ({
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </CardContent>
     </Card>
   );

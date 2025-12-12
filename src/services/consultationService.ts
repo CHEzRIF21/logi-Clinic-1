@@ -1070,33 +1070,68 @@ export class ConsultationService {
   static async saveWorkflowStep(
     consultationId: string,
     stepNumber: number,
-    stepData: any
+    stepData: any,
+    userId?: string
   ): Promise<Consultation> {
-    // Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
-    const API_URL = import.meta.env.VITE_API_URL || 
-      (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-      'http://localhost:3000';
-    const token = localStorage.getItem('token');
-
-    const response = await fetch(
-      `${API_URL}/api/consultations/${consultationId}/workflow/step/${stepNumber}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(stepData)
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors de la sauvegarde de l\'étape');
+    // Mapper les données de l'étape vers les champs de la consultation
+    const updates: Partial<Consultation> = {};
+    
+    switch (stepNumber) {
+      case 1: // Motif
+        if (stepData.motif) {
+          updates.motifs = [stepData.motif];
+          if (stepData.categorie_motif) {
+            (updates as any).categorie_motif = stepData.categorie_motif;
+          }
+        }
+        break;
+      case 2: // Anamnèse
+        if (stepData.anamnese) {
+          updates.anamnese = stepData.anamnese;
+        }
+        break;
+      case 3: // Traitement en cours
+        if (stepData.traitement_en_cours) {
+          updates.traitement_en_cours = stepData.traitement_en_cours;
+        }
+        break;
+      case 4: // Antécédents
+        if (stepData.antecedents) {
+          (updates as any).antecedents_consultation = stepData.antecedents;
+        }
+        break;
+      case 8: // Examens cliniques
+        if (stepData.examens_cliniques) {
+          updates.examens_cliniques = stepData.examens_cliniques;
+        }
+        break;
+      case 9: // Diagnostics
+        if (stepData.diagnostics) {
+          updates.diagnostics = stepData.diagnostics;
+          if (stepData.diagnostics_detail) {
+            (updates as any).diagnostics_detail = stepData.diagnostics_detail;
+          }
+        }
+        break;
+      case 11: // Clôture
+        if (stepData.prochaine_consultation) {
+          updates.prochaine_consultation = stepData.prochaine_consultation;
+        }
+        break;
     }
 
-    const result = await response.json();
-    return result.data;
+    // Utiliser updateConsultation pour sauvegarder
+    if (Object.keys(updates).length > 0 && userId) {
+      return await this.updateConsultation(
+        consultationId,
+        updates,
+        userId,
+        `workflow_step_${stepNumber}`
+      );
+    }
+
+    // Si pas de userId ou pas de mises à jour, retourner la consultation actuelle
+    return await this.getConsultationById(consultationId) || {} as Consultation;
   }
 
   /**

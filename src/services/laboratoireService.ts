@@ -10,6 +10,11 @@ export interface LabPrescription {
   date_prescription: string;
   origine: 'consultation' | 'urgence' | 'labo';
   statut: 'prescrit' | 'preleve' | 'annule';
+  montant_total?: number;
+  statut_paiement?: 'non_paye' | 'en_attente' | 'paye' | 'partiel';
+  facture_id?: string;
+  ticket_facturation_id?: string;
+  consultation_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +27,28 @@ export interface LabPrescriptionForm {
   details?: string;
   origine?: 'consultation' | 'urgence' | 'labo';
   date_prescription?: string;
+  montant_total?: number;
+  analyses_selectionnees?: Array<{
+    numero: string;
+    nom: string;
+    code?: string;
+    prix: number;
+    tube: string;
+  }>;
+}
+
+export interface LabPrescriptionAnalyse {
+  id: string;
+  prescription_id: string;
+  numero_analyse: string;
+  nom_analyse: string;
+  code_analyse?: string;
+  prix: number;
+  tube_requis?: string;
+  quantite: number;
+  montant_ligne: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface LabPrelevement {
@@ -32,6 +59,10 @@ export interface LabPrelevement {
   date_prelevement: string;
   agent_preleveur?: string;
   commentaires?: string;
+  statut_echantillon?: 'conforme' | 'non_conforme' | 'rejete';
+  motif_rejet?: string;
+  date_rejet?: string;
+  agent_rejet?: string;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +85,14 @@ export interface LabAnalyse {
   valeur_numerique?: number | null;
   valeur_qualitative?: string | null;
   bornes_reference?: string | null;
+  valeur_min_reference?: number | null;
+  valeur_max_reference?: number | null;
+  est_pathologique?: boolean;
+  resultat_precedent_id?: string | null;
+  valeur_precedente_numerique?: number | null;
+  valeur_precedente_qualitative?: string | null;
+  date_resultat_precedent?: string | null;
+  evolution?: 'amelioration' | 'stabilite' | 'aggravation' | 'nouveau';
   statut: 'en_attente' | 'en_cours' | 'termine';
   technicien?: string | null;
   valide_par?: string | null;
@@ -93,19 +132,176 @@ export interface LabRapport {
   updated_at: string;
 }
 
+export interface LabModeleExamen {
+  id: string;
+  code_examen: string;
+  libelle_examen: string;
+  type_examen: string;
+  parametres: Array<{
+    nom: string;
+    unite?: string;
+    type: 'qualitatif' | 'quantitatif';
+    ref_min?: number;
+    ref_max?: number;
+    ref_selon_age_sexe?: boolean;
+    valeurs_possibles?: string[];
+    condition?: string;
+  }>;
+  actif: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LabValeurReference {
+  id: string;
+  parametre: string;
+  sexe: 'Masculin' | 'Féminin' | 'Tous';
+  age_min?: number;
+  age_max?: number;
+  valeur_min?: number;
+  valeur_max?: number;
+  unite?: string;
+  commentaire?: string;
+}
+
+export interface LabStockReactif {
+  id: string;
+  medicament_id?: string;
+  code_reactif: string;
+  libelle: string;
+  unite: string;
+  quantite_disponible: number;
+  seuil_alerte: number;
+  date_peremption?: string;
+  fournisseur?: string;
+  numero_lot?: string;
+  actif: boolean;
+}
+
+export interface LabAlerte {
+  id: string;
+  type_alerte: 'resultat_critique' | 'appareil_defaut' | 'stock_critique' | 'peremption' | 'autre';
+  priorite: 'faible' | 'moyenne' | 'haute' | 'critique';
+  titre: string;
+  message: string;
+  analyse_id?: string;
+  reactif_id?: string;
+  appareil?: string;
+  statut: 'nouvelle' | 'en_cours' | 'resolue' | 'ignoree';
+  date_alerte: string;
+  date_resolution?: string;
+  resolu_par?: string;
+}
+
 export class LaboratoireService {
   static async createPrescription(form: LabPrescriptionForm): Promise<LabPrescription> {
-    const payload = { ...form } as any;
+    const payload: any = { ...form };
+    
+    // Calculer le montant total si des analyses sont sélectionnées
+    if (form.analyses_selectionnees && form.analyses_selectionnees.length > 0) {
+      payload.montant_total = form.analyses_selectionnees.reduce((sum, a) => sum + a.prix, 0);
+    } else if (form.montant_total) {
+      payload.montant_total = form.montant_total;
+    } else {
+      payload.montant_total = 0;
+    }
+    
+    // Valeurs par défaut
     if (!payload.origine) payload.origine = 'consultation';
     if (!payload.date_prescription) payload.date_prescription = new Date().toISOString();
     if (!payload.statut) payload.statut = 'prescrit';
-    const { data, error } = await supabase
+    if (!payload.statut_paiement) payload.statut_paiement = 'non_paye';
+    
+    // Supprimer analyses_selectionnees du payload (on va les insérer séparément)
+    const analyses = payload.analyses_selectionnees;
+    delete payload.analyses_selectionnees;
+    
+    // Créer la prescription
+    const { data: prescription, error } = await supabase
       .from('lab_prescriptions')
       .insert([payload])
       .select('*')
       .single();
+    
     if (error) throw error;
-    return data as LabPrescription;
+    
+    // Insérer les analyses sélectionnées si présentes
+    if (analyses && analyses.length > 0 && prescription) {
+      const analysesToInsert = analyses.map(a => ({
+        prescription_id: prescription.id,
+        numero_analyse: a.numero,
+        nom_analyse: a.nom,
+        code_analyse: a.code || a.nom.toUpperCase().replace(/\s+/g, '_'),
+        prix: a.prix,
+        tube_requis: a.tube,
+        quantite: 1,
+        montant_ligne: a.prix
+      }));
+      
+      const { error: analysesError } = await supabase
+        .from('lab_prescriptions_analyses')
+        .insert(analysesToInsert);
+      
+      if (analysesError) {
+        console.error('Erreur lors de l\'insertion des analyses:', analysesError);
+        // Ne pas échouer la création de la prescription si les analyses échouent
+      }
+    }
+    
+    return prescription as LabPrescription;
+  }
+  
+  /**
+   * Récupère les analyses associées à une prescription
+   */
+  static async getPrescriptionAnalyses(prescriptionId: string): Promise<LabPrescriptionAnalyse[]> {
+    const { data, error } = await supabase
+      .from('lab_prescriptions_analyses')
+      .select('*')
+      .eq('prescription_id', prescriptionId)
+      .order('numero_analyse');
+    
+    if (error) throw error;
+    return data || [];
+  }
+  
+  /**
+   * Ajoute une analyse à une prescription existante
+   */
+  static async addAnalyseToPrescription(
+    prescriptionId: string,
+    analyse: { numero: string; nom: string; code?: string; prix: number; tube: string }
+  ): Promise<LabPrescriptionAnalyse> {
+    const { data, error } = await supabase
+      .from('lab_prescriptions_analyses')
+      .insert([{
+        prescription_id: prescriptionId,
+        numero_analyse: analyse.numero,
+        nom_analyse: analyse.nom,
+        code_analyse: analyse.code || analyse.nom.toUpperCase().replace(/\s+/g, '_'),
+        prix: analyse.prix,
+        tube_requis: analyse.tube,
+        quantite: 1,
+        montant_ligne: analyse.prix
+      }])
+      .select('*')
+      .single();
+    
+    if (error) throw error;
+    return data as LabPrescriptionAnalyse;
+  }
+  
+  /**
+   * Supprime une analyse d'une prescription
+   */
+  static async removeAnalyseFromPrescription(prescriptionId: string, analyseId: string): Promise<void> {
+    const { error } = await supabase
+      .from('lab_prescriptions_analyses')
+      .delete()
+      .eq('id', analyseId)
+      .eq('prescription_id', prescriptionId);
+    
+    if (error) throw error;
   }
 
   static async listPrescriptions(patientId?: string): Promise<LabPrescription[]> {
@@ -517,6 +713,257 @@ export class LaboratoireService {
     });
 
     return { prescriptionsTotal, byService, byType, avgDelayHours, totalConsumptions, positivityRate, analysesCompleted, byTypeAnalyses };
+  }
+
+  // Phase 3 - Nouvelles fonctionnalités améliorées
+
+  // Gestion du rejet d'échantillons
+  static async rejeterEchantillon(prelevementId: string, motif: string, agent: string): Promise<LabPrelevement> {
+    const { data, error } = await supabase
+      .from('lab_prelevements')
+      .update({
+        statut_echantillon: 'rejete',
+        motif_rejet: motif,
+        agent_rejet: agent,
+        date_rejet: new Date().toISOString()
+      })
+      .eq('id', prelevementId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as LabPrelevement;
+  }
+
+  // Récupération des modèles d'examens
+  static async getModelesExamens(): Promise<LabModeleExamen[]> {
+    const { data, error } = await supabase
+      .from('lab_modeles_examens')
+      .select('*')
+      .eq('actif', true)
+      .order('libelle_examen');
+    if (error) throw error;
+    return (data || []).map(d => ({
+      ...d,
+      parametres: typeof d.parametres === 'string' ? JSON.parse(d.parametres) : d.parametres
+    })) as LabModeleExamen[];
+  }
+
+  static async getModeleExamenByCode(code: string): Promise<LabModeleExamen | null> {
+    const { data, error } = await supabase
+      .from('lab_modeles_examens')
+      .select('*')
+      .eq('code_examen', code)
+      .eq('actif', true)
+      .single();
+    if (error) return null;
+    return {
+      ...data,
+      parametres: typeof data.parametres === 'string' ? JSON.parse(data.parametres) : data.parametres
+    } as LabModeleExamen;
+  }
+
+  // Récupération des valeurs de référence selon âge et sexe
+  static async getValeursReference(parametre: string, age?: number, sexe?: 'Masculin' | 'Féminin'): Promise<LabValeurReference | null> {
+    let query = supabase
+      .from('lab_valeurs_reference')
+      .select('*')
+      .eq('parametre', parametre);
+    
+    // Filtrer par sexe si fourni
+    if (sexe) {
+      query = query.or(`sexe.eq.${sexe},sexe.eq.Tous`);
+    } else {
+      query = query.eq('sexe', 'Tous');
+    }
+    
+    // Filtrer par âge si fourni
+    if (age !== undefined) {
+      query = query.or(`age_min.is.null,age_min.lte.${age}`)
+                   .or(`age_max.is.null,age_max.gte.${age}`);
+    }
+    
+    const { data, error } = await query.order('age_min', { ascending: true }).limit(1);
+    if (error || !data || data.length === 0) return null;
+    return data[0] as LabValeurReference;
+  }
+
+  // Création d'analyse avec valeurs de référence automatiques et Delta Check
+  static async createAnalyseAvecReference(
+    form: LabAnalyseForm,
+    patientAge?: number,
+    patientSexe?: 'Masculin' | 'Féminin'
+  ): Promise<LabAnalyse> {
+    // Récupérer les valeurs de référence si quantitatif
+    let valeurMinRef: number | undefined;
+    let valeurMaxRef: number | undefined;
+    
+    if (form.type_resultat === 'quantitatif' && form.parametre) {
+      const ref = await this.getValeursReference(form.parametre, patientAge, patientSexe);
+      if (ref) {
+        valeurMinRef = ref.valeur_min || undefined;
+        valeurMaxRef = ref.valeur_max || undefined;
+      }
+    }
+
+    // Chercher le résultat précédent pour Delta Check
+    let resultatPrecedent: LabAnalyse | null = null;
+    if (form.prelevement_id) {
+      // Récupérer le prélèvement pour obtenir le patient_id
+      const prelevement = await this.getPrelevementById(form.prelevement_id);
+      if (prelevement) {
+        const prescription = await this.getPrescriptionById(prelevement.prescription_id);
+        if (prescription) {
+          // Chercher le dernier résultat pour ce paramètre chez ce patient
+          const { data: analysesPrecedentes } = await supabase
+            .from('lab_analyses')
+            .select('*, lab_prelevements!inner(prescription_id), lab_prescriptions!inner(patient_id)')
+            .eq('lab_prescriptions.patient_id', prescription.patient_id)
+            .eq('parametre', form.parametre)
+            .neq('prelevement_id', form.prelevement_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          if (analysesPrecedentes && analysesPrecedentes.length > 0) {
+            resultatPrecedent = analysesPrecedentes[0] as LabAnalyse;
+          }
+        }
+      }
+    }
+
+    // Calculer l'évolution si résultat précédent existe
+    let evolution: 'amelioration' | 'stabilite' | 'aggravation' | 'nouveau' = 'nouveau';
+    let valeurPrecedenteNum: number | undefined;
+    let valeurPrecedenteQual: string | undefined;
+    
+    if (resultatPrecedent) {
+      valeurPrecedenteNum = resultatPrecedent.valeur_numerique || undefined;
+      valeurPrecedenteQual = resultatPrecedent.valeur_qualitative || undefined;
+      
+      if (form.type_resultat === 'quantitatif' && form.valeur_numerique !== undefined && valeurPrecedenteNum !== undefined) {
+        const diff = form.valeur_numerique - valeurPrecedenteNum;
+        const tolerance = (valeurMaxRef && valeurMinRef) ? (valeurMaxRef - valeurMinRef) * 0.1 : 0;
+        if (Math.abs(diff) <= tolerance) {
+          evolution = 'stabilite';
+        } else if (diff < 0) {
+          evolution = 'amelioration';
+        } else {
+          evolution = 'aggravation';
+        }
+      }
+    }
+
+    // Créer l'analyse avec toutes les informations
+    const analyseData: any = {
+      ...form,
+      valeur_min_reference: valeurMinRef,
+      valeur_max_reference: valeurMaxRef,
+      resultat_precedent_id: resultatPrecedent?.id || null,
+      valeur_precedente_numerique: valeurPrecedenteNum,
+      valeur_precedente_qualitative: valeurPrecedenteQual,
+      date_resultat_precedent: resultatPrecedent?.created_at || null,
+      evolution
+    };
+
+    const { data, error } = await supabase
+      .from('lab_analyses')
+      .insert([analyseData])
+      .select('*')
+      .single();
+    
+    if (error) throw error;
+    
+    // Déduction automatique de réactifs si fourni
+    if (form.consumable_medicament_id && form.consumable_quantite && form.consumable_quantite > 0) {
+      await this.deductConsumable(form.consumable_medicament_id, form.consumable_quantite, form.consumable_lot_numero);
+    }
+    
+    return data as LabAnalyse;
+  }
+
+  // Récupération des alertes
+  static async getAlertes(statut?: LabAlerte['statut']): Promise<LabAlerte[]> {
+    let query = supabase.from('lab_alertes').select('*').order('date_alerte', { ascending: false });
+    if (statut) query = query.eq('statut', statut);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async resoudreAlerte(alerteId: string, resoluPar: string): Promise<LabAlerte> {
+    const { data, error } = await supabase
+      .from('lab_alertes')
+      .update({
+        statut: 'resolue',
+        resolu_par: resoluPar,
+        date_resolution: new Date().toISOString()
+      })
+      .eq('id', alerteId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as LabAlerte;
+  }
+
+  // Gestion des stocks de réactifs
+  static async getStocksReactifs(): Promise<LabStockReactif[]> {
+    const { data, error } = await supabase
+      .from('lab_stocks_reactifs')
+      .select('*')
+      .eq('actif', true)
+      .order('libelle');
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async getStocksReactifsAlerte(): Promise<LabStockReactif[]> {
+    const { data, error } = await supabase
+      .from('lab_stocks_reactifs')
+      .select('*')
+      .eq('actif', true)
+      .or(`quantite_disponible.lte.seuil_alerte,date_peremption.lte.${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()}`)
+      .order('quantite_disponible');
+    if (error) throw error;
+    return data || [];
+  }
+
+  // File d'attente des prélèvements
+  static async getFileAttentePrelevements(): Promise<LabPrelevement[]> {
+    const { data: prescriptions, error: rxErr } = await supabase
+      .from('lab_prescriptions')
+      .select('id')
+      .eq('statut', 'prescrit')
+      .order('date_prescription', { ascending: true });
+    
+    if (rxErr) throw rxErr;
+    const prescriptionIds = (prescriptions || []).map(p => p.id);
+    
+    if (prescriptionIds.length === 0) return [];
+    
+    const { data: prelevements, error: plErr } = await supabase
+      .from('lab_prelevements')
+      .select('*')
+      .in('prescription_id', prescriptionIds)
+      .order('date_prelevement', { ascending: true });
+    
+    if (plErr) throw plErr;
+    return prelevements || [];
+  }
+
+  // Examens en cours (non validés)
+  static async getExamensEnCours(): Promise<LabAnalyse[]> {
+    const { data, error } = await supabase
+      .from('lab_analyses')
+      .select('*')
+      .in('statut', ['en_attente', 'en_cours'])
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Génération de code-barres pour étiquettes
+  static generateBarcodeData(patientId: string, prelevementId: string): string {
+    // Format: PATIENT_ID|PRELEVEMENT_ID|TIMESTAMP
+    return `${patientId}|${prelevementId}|${Date.now()}`;
   }
 }
 

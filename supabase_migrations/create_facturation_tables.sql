@@ -87,7 +87,19 @@ CREATE TABLE IF NOT EXISTS paiements (
   numero_paiement VARCHAR(50) UNIQUE NOT NULL,
   date_paiement TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   montant DECIMAL(12, 2) NOT NULL,
-  mode_paiement VARCHAR(30) CHECK (mode_paiement IN ('especes', 'mobile_money', 'carte_bancaire', 'virement', 'cheque', 'prise_en_charge')) NOT NULL,
+  mode_paiement VARCHAR(30) CHECK (mode_paiement IN (
+    'especes', 
+    'orange_money', 
+    'mtn_mobile_money', 
+    'moov_money', 
+    'wave', 
+    'flooz', 
+    't_money', 
+    'carte_bancaire', 
+    'virement', 
+    'cheque', 
+    'prise_en_charge'
+  )) NOT NULL,
   
   -- Détails selon le mode de paiement
   numero_transaction VARCHAR(100), -- Pour mobile money, virement, etc.
@@ -147,9 +159,16 @@ CREATE TABLE IF NOT EXISTS journal_caisse (
   
   -- Recettes
   recettes_especes DECIMAL(12, 2) DEFAULT 0,
-  recettes_mobile_money DECIMAL(12, 2) DEFAULT 0,
+  recettes_orange_money DECIMAL(12, 2) DEFAULT 0,
+  recettes_mtn_mobile_money DECIMAL(12, 2) DEFAULT 0,
+  recettes_moov_money DECIMAL(12, 2) DEFAULT 0,
+  recettes_wave DECIMAL(12, 2) DEFAULT 0,
+  recettes_flooz DECIMAL(12, 2) DEFAULT 0,
+  recettes_t_money DECIMAL(12, 2) DEFAULT 0,
   recettes_carte DECIMAL(12, 2) DEFAULT 0,
   recettes_virement DECIMAL(12, 2) DEFAULT 0,
+  recettes_cheque DECIMAL(12, 2) DEFAULT 0,
+  recettes_prise_en_charge DECIMAL(12, 2) DEFAULT 0,
   recettes_autres DECIMAL(12, 2) DEFAULT 0,
   total_recettes DECIMAL(12, 2) DEFAULT 0,
   

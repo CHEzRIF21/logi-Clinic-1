@@ -91,8 +91,7 @@ const menuItemsConfig: MenuItemConfig[] = [
   { text: 'Maternité', icon: <PregnantWoman />, path: '/maternite', badge: null, module: 'maternite' },
   { text: 'Stock Médicaments', icon: <Inventory />, path: '/stock-medicaments', badge: null, module: 'stock' },
   { text: 'Bilan', icon: <Assessment />, path: '/bilan', badge: null, module: null },
-  { text: 'Caisse', icon: <Payment />, path: '/caisse', badge: null, module: 'caisse' },
-  { text: 'Facturation', icon: <Receipt />, path: '/facturation', badge: null, module: 'facturation' },
+  { text: 'Caisse', icon: <Receipt />, path: '/caisse', badge: null, module: 'caisse' },
   { text: 'Rendez-vous', icon: <Event />, path: '/rendez-vous', badge: 5, module: 'rendezvous' },
   { text: 'Gestion Patients', icon: <People />, path: '/patients', badge: null, module: 'patients' },
   { text: "Utilisateur et permission", icon: <AccountCircle />, path: '/utilisateurs-permissions', badge: null, module: 'utilisateurs', requiresAdmin: true },
@@ -100,7 +99,7 @@ const menuItemsConfig: MenuItemConfig[] = [
   { text: "Demandes d'inscription", icon: <PersonAdd />, path: '/registration-requests', badge: null, module: null, requiresAdmin: true },
 ];
 
-type NotificationCategory = 'consultation' | 'laboratoire' | 'stock' | 'facturation';
+type NotificationCategory = 'consultation' | 'laboratoire' | 'stock' | 'caisse';
 
 interface NotificationItem {
   id: number;
@@ -208,7 +207,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
           background: alpha(theme.palette.warning.main, 0.2),
           icon: <Inventory fontSize="small" />,
         };
-      case 'facturation':
+      case 'caisse':
       default:
         return {
           color: theme.palette.info.main,

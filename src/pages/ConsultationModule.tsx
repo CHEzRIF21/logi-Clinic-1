@@ -53,6 +53,8 @@ import { ConsultationIntegrationService } from '../services/consultationIntegrat
 import { AuditService } from '../services/auditService';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { LaboratoireIntegrationService } from '../services/laboratoireIntegrationService';
+import { LaboratoireTarificationService } from '../services/laboratoireTarificationService';
 import {
   Table,
   TableBody,
@@ -101,6 +103,51 @@ export const ConsultationModule: React.FC = () => {
   // Récupérer l'userId et le rôle depuis Supabase Auth ou localStorage
   const [userId, setUserId] = useState<string>('');
   const [userIdLoading, setUserIdLoading] = useState(true);
+
+  // Écouter les événements de reprise de consultation depuis PatientInfoPanel
+  useEffect(() => {
+    const handleResumeConsultationEvent = async (event: CustomEvent) => {
+      const { consultationId } = event.detail;
+      if (consultationId) {
+        try {
+          // Charger la consultation directement depuis l'API
+          const consultationToResume = await ConsultationService.getConsultationById(consultationId);
+          if (consultationToResume) {
+            // Charger le patient associé
+            if (consultationToResume.patient_id) {
+              try {
+                const patientData = await PatientService.getPatientById(consultationToResume.patient_id);
+                if (patientData) {
+                  setPatient(patientData);
+                  // Recharger les consultations du patient
+                  await loadPatientConsultations(patientData.id);
+                }
+              } catch (patientError) {
+                console.error('Erreur lors du chargement du patient:', patientError);
+                showSnackbar('Consultation reprise mais patient introuvable', 'info');
+              }
+            }
+            
+            // Reprendre la consultation
+            await handleResumeConsultation(consultationToResume);
+            
+            // Passer à l'étape 1 (Anamnèse) pour afficher la consultation
+            setActiveStep(1);
+          } else {
+            showSnackbar('Consultation introuvable', 'error');
+          }
+        } catch (error: any) {
+          console.error('Erreur lors de la récupération de la consultation:', error);
+          showSnackbar(`Erreur: ${error?.message || 'Erreur lors de la récupération de la consultation'}`, 'error');
+        }
+      }
+    };
+
+    window.addEventListener('resumeConsultation' as any, handleResumeConsultationEvent as EventListener);
+    return () => {
+      window.removeEventListener('resumeConsultation' as any, handleResumeConsultationEvent as EventListener);
+    };
+  }, []); // Pas de dépendances pour éviter les re-renders inutiles
 
   // Récupérer l'utilisateur authentifié depuis Supabase
   useEffect(() => {
@@ -209,10 +256,26 @@ export const ConsultationModule: React.FC = () => {
 
   const handleResumeConsultation = async (selectedConsultation: Consultation) => {
     try {
+      setLoading(true);
       // Charger la consultation complète
       const fullConsultation = await ConsultationService.getConsultationById(selectedConsultation.id);
       if (fullConsultation) {
         setConsultation(fullConsultation);
+        
+        // S'assurer que le patient est chargé
+        if (fullConsultation.patient_id && !patient) {
+          try {
+            const patientData = await PatientService.getPatientById(fullConsultation.patient_id);
+            if (patientData) {
+              setPatient(patientData);
+              // Recharger les consultations du patient
+              await loadPatientConsultations(patientData.id);
+            }
+          } catch (patientError) {
+            console.error('Erreur lors du chargement du patient:', patientError);
+          }
+        }
+        
         showSnackbar(`Consultation reprise: ${selectedConsultation.type || 'Médecine générale'}`, 'success');
         
         // Traçabilité : Reprise de consultation
@@ -237,6 +300,8 @@ export const ConsultationModule: React.FC = () => {
     } catch (error: any) {
       console.error('Erreur lors de la reprise de la consultation:', error);
       showSnackbar(`Erreur: ${error?.message || 'Erreur lors de la reprise'}`, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -507,13 +572,83 @@ export const ConsultationModule: React.FC = () => {
   };
 
   const handleSaveLabRequest = async (request: any) => {
-    if (!consultation) return;
+    if (!consultation || !consultation.patient_id) return;
 
     setLoading(true);
     try {
-      const labRequest = await ConsultationApiService.createLabRequest(consultation.id, consultation.patient_id, request, userId);
+      // 1. Créer la demande labo dans le module Consultation
+      const labRequest = await ConsultationApiService.createLabRequest(
+        consultation.id, 
+        consultation.patient_id, 
+        request, 
+        userId
+      );
       
-      // Ajouter aux examens prescrits pour génération automatique de RDV
+      // 2. Convertir les tests en analyses avec tarifs pour le module Laboratoire
+      let analysesAvecTarifs: Array<{ numero: string; nom: string; code?: string; prix: number; tube: string }> = [];
+      let montantTotal = 0;
+      
+      if (request.tests && Array.isArray(request.tests) && request.tests.length > 0) {
+        // Pour chaque test, chercher le tarif correspondant
+        for (const test of request.tests) {
+          const nomTest = test.nom || test.libelle || test.code || String(test);
+          const codeTest = test.code || test.nom?.toUpperCase().replace(/\s+/g, '_');
+          
+          // Chercher dans la fiche de tarification
+          const tarif = codeTest 
+            ? LaboratoireTarificationService.getTarifByCode(codeTest)
+            : LaboratoireTarificationService.getTarifByNom(nomTest);
+          
+          if (tarif) {
+            analysesAvecTarifs.push({
+              numero: tarif.numero,
+              nom: tarif.nom,
+              code: tarif.code,
+              prix: tarif.prix,
+              tube: tarif.tube
+            });
+            montantTotal += tarif.prix;
+          } else {
+            // Si pas trouvé, créer une entrée avec prix 0 (sera à définir manuellement)
+            console.warn(`Tarif non trouvé pour: ${nomTest}`);
+            analysesAvecTarifs.push({
+              numero: '00',
+              nom: nomTest,
+              code: codeTest,
+              prix: 0,
+              tube: 'À définir'
+            });
+          }
+        }
+      }
+      
+      // 3. Créer la prescription dans le module Laboratoire avec les analyses et tarifs
+      if (analysesAvecTarifs.length > 0 || request.type_examen) {
+        try {
+          const typeExamen = request.type_examen || 
+            (analysesAvecTarifs.length > 0 
+              ? analysesAvecTarifs.map(a => a.nom).join(', ')
+              : 'Examens de laboratoire');
+          
+          const prescriptionLabo = await LaboratoireIntegrationService.createPrescriptionFromConsultation(
+            consultation.id,
+            consultation.patient_id,
+            typeExamen,
+            request.clinical_info || request.details || `Demande depuis consultation ${consultation.id}`,
+            undefined, // prescripteur - peut être récupéré depuis le contexte utilisateur
+            'Consultation',
+            montantTotal > 0 ? montantTotal : undefined,
+            analysesAvecTarifs.length > 0 ? analysesAvecTarifs : undefined
+          );
+          
+          console.log('Prescription laboratoire créée:', prescriptionLabo.id);
+        } catch (laboError) {
+          console.error('Erreur lors de la création de la prescription laboratoire (non bloquant):', laboError);
+          // Ne pas bloquer si l'intégration échoue
+        }
+      }
+      
+      // 4. Ajouter aux examens prescrits pour génération automatique de RDV
       if (request.tests && request.tests.length > 0) {
         const newExamens = request.tests.map((test: any) => ({
           type: 'labo' as const,
@@ -523,7 +658,7 @@ export const ConsultationModule: React.FC = () => {
         setExamensPrescrits((prev) => [...prev, ...newExamens]);
       }
       
-      // Traçabilité : Création de demande labo
+      // 5. Traçabilité : Création de demande labo
       await AuditService.logAction({
         consult_id: consultation.id,
         actor_id: userId,
@@ -532,13 +667,19 @@ export const ConsultationModule: React.FC = () => {
         details: {
           request_id: labRequest.id,
           tests_count: request.tests?.length || 0,
+          analyses_count: analysesAvecTarifs.length,
+          montant_total: montantTotal,
         },
       });
 
-      showSnackbar('Demande d\'examens de laboratoire créée avec succès', 'success');
-    } catch (error) {
+      const message = montantTotal > 0
+        ? `Demande d'examens créée avec succès. Montant total: ${LaboratoireTarificationService.formaterPrix(montantTotal)}`
+        : 'Demande d\'examens de laboratoire créée avec succès';
+      
+      showSnackbar(message, 'success');
+    } catch (error: any) {
       console.error('Erreur lors de la création de la demande labo:', error);
-      showSnackbar('Erreur lors de la création de la demande labo', 'error');
+      showSnackbar(`Erreur: ${error?.message || 'Erreur lors de la création de la demande labo'}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -759,7 +900,7 @@ export const ConsultationModule: React.FC = () => {
         return (
           <Box>
             <GlassCard sx={{ mb: 2 }}>
-              <CardContent>
+              <CardContent sx={{ p: 2 }}>
                 <PatientSearchAdvanced
                   onPatientSelect={handlePatientSelect}
                   selectedPatient={patient}
@@ -769,7 +910,7 @@ export const ConsultationModule: React.FC = () => {
 
             {patient && (
               <GlassCard>
-                <CardContent>
+                <CardContent sx={{ p: 2 }}>
                   <Box display="flex" alignItems="center" gap={2} mb={2}>
                     <LocalHospital color="primary" fontSize="large" />
                     <Box flex={1}>
@@ -890,7 +1031,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <AnamneseEditor
                 value={
                   typeof consultation.anamnese === 'string'
@@ -906,6 +1047,7 @@ export const ConsultationModule: React.FC = () => {
                     : JSON.stringify(consultation.anamnese || {})
                 )}
                 patient={{
+                  id: patient.id,
                   sexe: patient.sexe,
                   date_naissance: patient.date_naissance,
                 }}
@@ -928,7 +1070,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <SignesVitauxSection
@@ -970,7 +1112,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <DiagnosticsDetailedForm
                 diagnosticsProbables={diagnosticsProbables}
                 diagnosticsDifferentiels={diagnosticsDifferentiels}
@@ -998,7 +1140,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <PrescriptionsCompleteManager
                 consultationId={consultation.id}
                 patientId={consultation.patient_id || patient.id}
@@ -1027,7 +1169,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <PlanTraitementForm
                 value={planTraitementData}
                 onChange={setPlanTraitementData}
@@ -1051,7 +1193,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <ConsultationWorkflowStep10
                 consultationId={consultation.id}
                 patientId={consultation.patient_id || patient.id}
@@ -1082,7 +1224,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <ConsultationWorkflowStep11
                 consultation={consultation}
                 patientId={consultation.patient_id || (patient ? patient.id : '')}
@@ -1111,7 +1253,7 @@ export const ConsultationModule: React.FC = () => {
         }
         return (
           <GlassCard>
-            <CardContent>
+            <CardContent sx={{ p: 2 }}>
               <ConsultationWorkflowStep12
                 consultation={consultation}
                 onClose={async () => {

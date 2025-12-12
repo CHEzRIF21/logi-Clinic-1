@@ -25,6 +25,7 @@ import {
   Phone,
   CalendarToday,
   Info,
+  Edit,
 } from '@mui/icons-material';
 import { Patient } from '../../services/supabase';
 import { ConsultationApiService } from '../../services/consultationApiService';
@@ -230,7 +231,28 @@ export const PatientInfoPanel: React.FC<PatientInfoPanelProps> = ({ patient }) =
           ) : (
             <List>
               {consultations.map((consult) => (
-                <ListItem key={consult.id} divider>
+                <ListItem 
+                  key={consult.id} 
+                  divider
+                  secondaryAction={
+                    consult.status === 'EN_COURS' ? (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<Edit />}
+                        onClick={() => {
+                          // Émettre un événement personnalisé pour reprendre la consultation
+                          window.dispatchEvent(new CustomEvent('resumeConsultation', { 
+                            detail: { consultationId: consult.id } 
+                          }));
+                        }}
+                        color="primary"
+                      >
+                        Reprendre
+                      </Button>
+                    ) : null
+                  }
+                >
                   <ListItemText
                     primary={
                       <Box display="flex" alignItems="center" gap={1}>
@@ -241,7 +263,7 @@ export const PatientInfoPanel: React.FC<PatientInfoPanelProps> = ({ patient }) =
                         <Chip
                           label={consult.status}
                           size="small"
-                          color={consult.status === 'CLOTURE' ? 'success' : 'default'}
+                          color={consult.status === 'CLOTURE' ? 'success' : consult.status === 'EN_COURS' ? 'primary' : 'default'}
                         />
                       </Box>
                     }

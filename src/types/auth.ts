@@ -18,7 +18,6 @@ export type ModulePermission =
   | 'laboratoire'
   | 'imagerie'
   | 'vaccination'
-  | 'facturation'
   | 'caisse'
   | 'rendezvous'
   | 'stock'

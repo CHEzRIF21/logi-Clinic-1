@@ -12,7 +12,8 @@ import {
   FormLabel,
   Alert,
   Divider,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import { Science } from '@mui/icons-material';
 import { DiagnosticService, DiagnosticCode } from '../../../services/diagnosticService';
@@ -129,11 +130,10 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
               onChange={(_, newValue) => handlePrincipalSelect(newValue)}
               onInputChange={(_, newInputValue) => setSearchQuery(newInputValue)}
               renderInput={(params) => (
-                <SpeechTextField
+                <TextField
                   {...params}
                   label="Rechercher un code CIM-10"
                   placeholder="Tapez pour rechercher..."
-                  enableSpeech={true}
                 />
               )}
               renderOption={(props, option) => (

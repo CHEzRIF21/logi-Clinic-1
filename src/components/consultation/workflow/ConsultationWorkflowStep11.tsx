@@ -33,6 +33,7 @@ import { Consultation } from '../../../services/consultationApiService';
 import { ConsultationBillingService } from '../../../services/consultationBillingService';
 import { ConsultationIntegrationService } from '../../../services/consultationIntegrationService';
 import { FacturationService, Paiement } from '../../../services/facturationService';
+import { PAYMENT_METHODS, getPaymentMethodConfig } from '../../../constants/paymentMethods';
 
 interface ConsultationWorkflowStep11Props {
   consultation: Consultation;
@@ -496,12 +497,14 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
                           value={modePaiement}
                           onChange={(e) => setModePaiement(e.target.value as Paiement['mode_paiement'])}
                         >
-                          <FormControlLabel value="especes" control={<Radio />} label="Espèces" />
-                          <FormControlLabel value="mobile_money" control={<Radio />} label="Mobile Money" />
-                          <FormControlLabel value="carte_bancaire" control={<Radio />} label="Carte Bancaire" />
-                          <FormControlLabel value="virement" control={<Radio />} label="Virement" />
-                          <FormControlLabel value="cheque" control={<Radio />} label="Chèque" />
-                          <FormControlLabel value="prise_en_charge" control={<Radio />} label="Prise en Charge" />
+                          {PAYMENT_METHODS.map((method) => (
+                            <FormControlLabel
+                              key={method.value}
+                              value={method.value}
+                              control={<Radio />}
+                              label={method.label}
+                            />
+                          ))}
                         </RadioGroup>
                       </CardContent>
                     </Card>
@@ -528,16 +531,20 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
                             />
                           </Grid>
 
-                          {(modePaiement === 'mobile_money' || modePaiement === 'virement' || modePaiement === 'carte_bancaire') && (
-                            <Grid item xs={12}>
-                              <TextField
-                                fullWidth
-                                label="Numéro de transaction"
-                                value={numeroTransaction}
-                                onChange={(e) => setNumeroTransaction(e.target.value)}
-                              />
-                            </Grid>
-                          )}
+                          {(() => {
+                            const methodConfig = getPaymentMethodConfig(modePaiement);
+                            return methodConfig?.requiresTransactionNumber && (
+                              <Grid item xs={12}>
+                                <TextField
+                                  fullWidth
+                                  label="Numéro de transaction"
+                                  value={numeroTransaction}
+                                  onChange={(e) => setNumeroTransaction(e.target.value)}
+                                  required
+                                />
+                              </Grid>
+                            );
+                          })()}
 
                           {(modePaiement === 'virement' || modePaiement === 'cheque') && (
                             <Grid item xs={12}>

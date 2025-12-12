@@ -40,7 +40,6 @@ export function getAccessibleModules(user: User | null): ModulePermission[] {
       'laboratoire',
       'imagerie',
       'vaccination',
-      'facturation',
       'caisse',
       'rendezvous',
       'stock',

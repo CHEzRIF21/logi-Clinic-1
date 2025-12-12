@@ -418,7 +418,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               'laboratoire',
               'imagerie',
               'vaccination',
-              'facturation',
               'caisse',
               'rendezvous',
               'stock',
@@ -470,7 +469,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               'laboratoire',
               'imagerie',
               'vaccination',
-              'facturation',
               'caisse',
               'rendezvous',
               'stock',
@@ -712,8 +710,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     },
     {
       icon: <Receipt fontSize="large" />,
-      title: 'Facturation',
-      description: 'Gestion complète de la facturation et des paiements.',
+      title: 'Caisse',
+      description: 'Gestion complète de la facturation, paiements, encaissements et journal de caisse.',
       color: '#f59e0b',
     },
     {

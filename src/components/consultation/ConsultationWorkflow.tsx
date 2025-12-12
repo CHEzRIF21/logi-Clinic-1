@@ -39,17 +39,17 @@ interface ConsultationWorkflowProps {
 }
 
 const STEPS = [
-  { id: 1, label: 'Motif de Consultation', icon: Assignment, required: true },
-  { id: 2, label: 'Anamnèse (Histoire de la Maladie)', icon: History, required: false },
-  { id: 3, label: 'Traitement en Cours', icon: Medication, required: false },
-  { id: 4, label: 'Antécédents (Background)', icon: History, required: false },
-  { id: 5, label: 'Prévention (Vaccination & Déparasitage)', icon: Vaccines, required: false },
-  { id: 6, label: 'Allergies (Sécurité Critique)', icon: Warning, required: false },
-  { id: 7, label: 'Bilans Antérieurs', icon: Description, required: false },
-  { id: 8, label: 'Examen Physique', icon: LocalHospital, required: false },
-  { id: 9, label: 'Diagnostic', icon: Science, required: false },
-  { id: 10, label: 'Traitement (Ordonnance)', icon: Medication, required: false },
-  { id: 11, label: 'Rendez-vous (RDV) & Clôture', icon: CheckCircle, required: true },
+  { id: 1, label: 'Motif de Consultation', icon: Assignment, required: true, description: 'Raison principale de la consultation' },
+  { id: 2, label: 'Anamnèse (Histoire de la Maladie)', icon: History, required: false, description: 'Description détaillée avec dictée vocale' },
+  { id: 3, label: 'Traitement en Cours', icon: Medication, required: false, description: 'Médicaments actuellement pris par le patient' },
+  { id: 4, label: 'Antécédents (Background)', icon: History, required: false, description: 'Antécédents médicaux et familiaux' },
+  { id: 5, label: 'Prévention (Vaccination & Déparasitage)', icon: Vaccines, required: false, description: 'Historique vaccinal et déparasitage' },
+  { id: 6, label: 'Allergies (Sécurité Critique)', icon: Warning, required: false, description: 'Allergies connues et réactions' },
+  { id: 7, label: 'Bilans Antérieurs', icon: Description, required: false, description: 'Examens et bilans précédents' },
+  { id: 8, label: 'Examen Physique', icon: LocalHospital, required: false, description: 'Signes vitaux et examen physique' },
+  { id: 9, label: 'Diagnostic', icon: Science, required: false, description: 'Diagnostics probables et différentiels' },
+  { id: 10, label: 'Traitement (Ordonnance)', icon: Medication, required: false, description: 'Médicaments, examens et hospitalisation' },
+  { id: 11, label: 'Rendez-vous (RDV) & Clôture', icon: CheckCircle, required: true, description: 'Rendez-vous de suivi et clôture' },
 ];
 
 export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
@@ -166,8 +166,8 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     if (Object.keys(dataToSave).length > 0 || stepNumber === 11) {
       setLoading(true);
       try {
-        // Utiliser le service pour sauvegarder l'étape
-        await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave);
+        // Utiliser le service pour sauvegarder l'étape avec userId
+        await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave, userId);
         await onStepComplete(stepNumber, dataToSave);
         setCompletedSteps((prev) => {
           const newSet = new Set(prev);

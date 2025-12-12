@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { FacturationService } from './facturationService';
 
 // Types pour les dispensations
 export interface DispensationLigne {
@@ -436,6 +437,32 @@ export class DispensationService {
         utilisateur_id: utilisateurId,
         details: { type: 'creation', lignes: data.lignes.length },
       });
+
+      // Création automatique du ticket de facturation vers le module Caisse
+      // Uniquement pour les dispensations patient (pas les services internes)
+      if (data.type_dispensation === 'patient' && data.patient_id) {
+        const montantTotal = data.lignes.reduce((sum, ligne) => sum + ligne.prix_total, 0);
+        
+        if (montantTotal > 0) {
+          try {
+            // Construire la description des médicaments
+            const descriptionMedicaments = data.lignes
+              .map(l => `${l.medicament_nom} (x${l.quantite_delivree})`)
+              .join(', ');
+
+            await FacturationService.creerTicketFacturation(
+              data.patient_id,
+              'pharmacie', // serviceOrigine
+              dispensation.id, // referenceOrigine
+              `Dispensation: ${descriptionMedicaments}`, // typeActe
+              montantTotal // montant
+            );
+          } catch (ticketError) {
+            // Log mais ne pas bloquer la dispensation si le ticket échoue
+            console.error('Erreur création ticket facturation dispensation:', ticketError);
+          }
+        }
+      }
 
       // Récupérer la dispensation complète avec ses lignes
       return await this.getDispensationById(dispensation.id);
