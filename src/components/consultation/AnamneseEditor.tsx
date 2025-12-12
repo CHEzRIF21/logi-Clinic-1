@@ -183,7 +183,7 @@ export const AnamneseEditor: React.FC<AnamneseEditorProps> = ({
           setNewBilan(transcript.trim());
           break;
         case 'newVaccination':
-          setNewVaccination(transcript.trim());
+          // La vaccination n'est pas un champ texte simple, on ignore la dictée pour ce champ
           break;
         default:
           break;

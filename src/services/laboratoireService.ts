@@ -28,6 +28,7 @@ export interface LabPrescriptionForm {
   origine?: 'consultation' | 'urgence' | 'labo';
   date_prescription?: string;
   montant_total?: number;
+  consultation_id?: string;
   analyses_selectionnees?: Array<{
     numero: string;
     nom: string;
