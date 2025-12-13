@@ -19,7 +19,7 @@ export default defineConfig({
   build: {
     outDir: 'build',
     sourcemap: true,
-    chunkSizeWarningLimit: 1000, // Augmente la limite d'avertissement à 1MB
+    chunkSizeWarningLimit: 2000, // Augmente la limite d'avertissement à 2MB
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -37,9 +37,29 @@ export default defineConfig({
             if (id.includes('@supabase')) {
               return 'vendor-supabase';
             }
-            // Autres dépendances importantes
-            if (id.includes('html2canvas')) {
-              return 'vendor-html2canvas';
+            // PDF et impression
+            if (id.includes('jspdf') || id.includes('html2canvas')) {
+              return 'vendor-pdf';
+            }
+            // Graphiques
+            if (id.includes('recharts') || id.includes('d3')) {
+              return 'vendor-charts';
+            }
+            // Formulaires et validation
+            if (id.includes('react-hook-form') || id.includes('yup') || id.includes('zod')) {
+              return 'vendor-forms';
+            }
+            // Dates
+            if (id.includes('date-fns') || id.includes('moment') || id.includes('dayjs')) {
+              return 'vendor-dates';
+            }
+            // Radix UI
+            if (id.includes('@radix-ui')) {
+              return 'vendor-radix';
+            }
+            // Autres dépendances importantes mais plus petites
+            if (id.includes('axios') || id.includes('jwt-decode')) {
+              return 'vendor-utils';
             }
             // Toutes les autres dépendances node_modules
             return 'vendor-other';

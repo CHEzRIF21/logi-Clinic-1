@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { FacturationService } from './facturationService';
+import { StockService } from './stockService';
 
 // ============================================
 // TYPES
@@ -569,8 +571,7 @@ export class ConsultationService {
     const protocol = await this.getProtocolById(protocolId);
     if (!protocol) throw new Error('Protocole non trouvé');
 
-    // Importer le service de facturation
-    const { FacturationService } = await import('./facturationService');
+    // Utiliser le service de facturation (déjà importé)
 
     // Créer des tickets de facturation pour chaque item du protocole
     const ticketIds: string[] = [];
@@ -699,8 +700,7 @@ export class ConsultationService {
     const prescription = await this.getPrescriptionById(prescriptionId);
     if (!prescription) throw new Error('Prescription non trouvée');
 
-    // Intégration avec le module Pharmacie/Stock
-    const { StockService } = await import('./stockService');
+    // Intégration avec le module Pharmacie/Stock (déjà importé)
 
     // Préparer les lignes de dispensation
     const lignesDispensation = linesToDispense.map((l) => ({
@@ -846,7 +846,6 @@ export class ConsultationService {
         : 'Analyses biologiques';
       const montantEstime = testsList.reduce((sum, exam) => sum + getExamAmount(exam), 0);
 
-      const { FacturationService } = await import('./facturationService');
       try {
         await FacturationService.creerTicketFacturation(
           patientId,
@@ -935,7 +934,6 @@ export class ConsultationService {
         : `Examens d'imagerie`;
       const montantEstime = examsList.reduce((sum, exam) => sum + getExamAmount(exam), 0);
 
-      const { FacturationService } = await import('./facturationService');
       try {
         await FacturationService.creerTicketFacturation(
           patientId,
