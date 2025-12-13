@@ -18,8 +18,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'build',
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV === 'development', // Sourcemaps seulement en dev
     chunkSizeWarningLimit: 2000, // Augmente la limite d'avertissement à 2MB
+    minify: 'esbuild', // Utilise esbuild pour un minification plus rapide
     rollupOptions: {
       output: {
         manualChunks: (id) => {

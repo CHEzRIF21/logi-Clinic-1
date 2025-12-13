@@ -39,7 +39,7 @@ npx prisma generate
 ### Tester la connexion à la base de données
 ```powershell
 cd server
-npx prisma db execute --stdin <<< "SELECT COUNT(*) FROM \"User\";"
+"SELECT COUNT(*) FROM `"User`";" | npx prisma db execute --stdin
 ```
 
 ### Utiliser le script de vérification
