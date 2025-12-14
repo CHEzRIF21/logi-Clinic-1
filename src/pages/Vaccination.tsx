@@ -81,14 +81,14 @@ const Vaccination: React.FC = () => {
     return s.map(x => x.dose_ordre).filter(n => !done.has(n));
   }, [selectedVaccineId, schedules, patientCard]);
 
-  const handleRecord = async () => {
+  const handleRecord = async (): Promise<boolean> => {
     setError(null);
     setInfo(null);
     try {
-      if (!patientId) { setError('Sélectionnez un patient'); return; }
-      if (!selectedVaccineId) { setError('Sélectionnez un vaccin'); return; }
-      if (!form.dose_ordre) { setError('Sélectionnez la dose'); return; }
-      if (!form.date_administration) { setError("Date d'administration requise"); return; }
+      if (!patientId) { setError('Sélectionnez un patient'); return false; }
+      if (!selectedVaccineId) { setError('Sélectionnez un vaccin'); return false; }
+      if (!form.dose_ordre) { setError('Sélectionnez la dose'); return false; }
+      if (!form.date_administration) { setError("Date d'administration requise"); return false; }
       const schedule = schedules.find(s => s.vaccine_id === selectedVaccineId && s.dose_ordre === form.dose_ordre);
       const dose = await VaccinationService.recordDose({
         patient_id: patientId,
@@ -125,8 +125,10 @@ const Vaccination: React.FC = () => {
         const rem = await VaccinationService.listUpcomingReminders(patientId);
         setReminders(rem);
       }
+      return true;
     } catch (e: any) {
       setError('Erreur enregistrement');
+      return false;
     }
   };
 
@@ -407,8 +409,8 @@ const Vaccination: React.FC = () => {
           <Button 
             variant="contained" 
             onClick={async () => {
-              await handleRecord();
-              if (!error) {
+              const success = await handleRecord();
+              if (success) {
                 setOpenAddDialog(false);
                 setForm({});
               }
