@@ -425,4 +425,3 @@ const Vaccination: React.FC = () => {
 
 export default Vaccination;
 
-
