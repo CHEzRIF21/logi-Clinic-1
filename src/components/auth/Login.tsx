@@ -501,20 +501,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         try {
           const API_BASE_URL = import.meta.env.VITE_API_URL || 
             (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-            'http://localhost:3000';
-          const clinicResponse = await fetch(
-            `${API_BASE_URL}/api/clinics?code=${user.clinicCode}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-          
-          if (clinicResponse.ok) {
-            const clinicData = await clinicResponse.json();
-            if (clinicData.data && clinicData.data.length > 0) {
-              userWithoutPassword.clinicId = clinicData.data[0].id;
+            '';
+          if (API_BASE_URL) {
+            const clinicResponse = await fetch(
+              `${API_BASE_URL}/api/clinics?code=${user.clinicCode}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+            
+            if (clinicResponse.ok) {
+              const clinicData = await clinicResponse.json();
+              if (clinicData.data && clinicData.data.length > 0) {
+                userWithoutPassword.clinicId = clinicData.data[0].id;
+              }
             }
           }
         } catch (err) {
@@ -588,7 +590,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 
         (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-        'http://localhost:3000/api';
+        '';
+      if (!API_BASE_URL) {
+        setError('Configuration API manquante. Veuillez configurer VITE_API_URL.');
+        setSignupLoading(false);
+        return;
+      }
       const response = await fetch(`${API_BASE_URL}/auth/register-request`, {
         method: 'POST',
         headers: {
@@ -653,8 +660,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {
         const API_BASE_URL = import.meta.env.VITE_API_URL || 
           (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-          'http://localhost:3000/api';
-        setError(`Impossible de se connecter au serveur. Vérifiez que le backend est démarré sur ${API_BASE_URL} et que votre connexion Internet fonctionne.`);
+          '';
+        if (API_BASE_URL) {
+          setError(`Impossible de se connecter au serveur. Vérifiez que le backend est démarré sur ${API_BASE_URL} et que votre connexion Internet fonctionne.`);
+        } else {
+          setError('Configuration API manquante. Veuillez configurer VITE_API_URL dans les variables d\'environnement.');
+        }
       } else if (error?.message) {
         setError(error.message);
       } else {

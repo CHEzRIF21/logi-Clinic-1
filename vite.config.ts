@@ -74,6 +74,12 @@ export default defineConfig({
             return 'pages';
           }
         },
+        // Éviter les problèmes de dépendances circulaires
+        hoistTransitiveImports: false,
+      },
+      // Éviter les problèmes de minification avec les dépendances circulaires
+      treeshake: {
+        moduleSideEffects: false,
       },
     },
   },

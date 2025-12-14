@@ -138,11 +138,26 @@ Dans **Settings > Environment Variables**, ajoutez toutes les variables listées
 - [ ] Vérifier que les variables d'environnement sont correctes
 - [ ] Vérifier les règles RLS dans Supabase
 
-### ❌ Erreur : "Manifest fetch failed"
+### ❌ Erreur : "Manifest fetch failed" ou 401
 
 **Solution :**
 - [ ] Vérifier que `public/manifest.json` existe
 - [ ] Vérifier que le fichier est bien dans le repository
+- [ ] Les headers CORS ont été configurés dans `vercel.json` pour permettre l'accès aux fichiers statiques
+
+### ❌ Erreur : "Cannot access 'he' before initialization"
+
+**Solution :**
+- [ ] Cette erreur a été corrigée en améliorant la configuration Vite
+- [ ] Le build utilise maintenant `hoistTransitiveImports: false` pour éviter les problèmes de dépendances circulaires
+- [ ] Redéployer après les corrections
+
+### ❌ Erreur : "Mixed Content" ou références à localhost
+
+**Solution :**
+- [ ] Toutes les références hardcodées à `localhost:3000` ont été supprimées
+- [ ] Les URLs d'API utilisent maintenant uniquement les variables d'environnement
+- [ ] Si `VITE_API_URL` n'est pas défini, l'application affichera un message d'erreur clair au lieu d'essayer de se connecter à localhost
 
 ## 📊 Optimisations Appliquées
 
@@ -184,5 +199,36 @@ Toutes les configurations sont en place. Suivez les étapes ci-dessus et votre a
 - ✅ Tous les fichiers nécessaires présents
 - ✅ Configuration Vercel correcte
 - ✅ Documentation complète
+- ✅ **Corrections appliquées :**
+  - ✅ Toutes les références hardcodées à `localhost:3000` supprimées
+  - ✅ Configuration Vite améliorée pour éviter les erreurs de build
+  - ✅ Headers CORS ajoutés pour les fichiers statiques (manifest.json, favicon.ico)
+  - ✅ Vérifications ajoutées pour éviter les appels API avec URL vide
 
 **Bonne chance avec votre déploiement ! 🚀**
+
+## 📝 Notes sur les Corrections Appliquées
+
+### Corrections des Erreurs de Production
+
+1. **Références localhost supprimées** : Tous les fallbacks `localhost:3000` ont été remplacés par des chaînes vides avec vérifications appropriées
+2. **Configuration Vite améliorée** : Ajout de `hoistTransitiveImports: false` et `treeshake.moduleSideEffects: false` pour éviter les problèmes de dépendances circulaires
+3. **Headers CORS pour fichiers statiques** : Configuration ajoutée dans `vercel.json` pour permettre l'accès aux fichiers statiques (manifest.json, favicon.ico, etc.)
+4. **Gestion d'erreurs améliorée** : Messages d'erreur clairs lorsque `VITE_API_URL` n'est pas configuré
+
+### Fichiers Modifiés
+
+- `src/services/diagnosticService.ts`
+- `src/services/anamneseTemplateService.ts`
+- `src/services/deparasitageService.ts`
+- `src/services/pricingClientService.ts`
+- `src/services/apiClient.ts`
+- `src/services/consultationService.ts`
+- `src/components/pricing/DefaultPricingConfig.tsx`
+- `src/components/pricing/PricingHistoryView.tsx`
+- `src/components/pricing/ClinicPricingManager.tsx`
+- `src/components/auth/Login.tsx`
+- `src/hooks/useSpeechRecognitionAPI.ts`
+- `src/hooks/useDashboardData.ts`
+- `vite.config.ts`
+- `vercel.json`

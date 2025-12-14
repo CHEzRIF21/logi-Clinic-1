@@ -48,7 +48,7 @@ interface DefaultPricing {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  'http://localhost:3000';
+  '';
 
 const DefaultPricingConfig: React.FC = () => {
   const [pricing, setPricing] = useState<DefaultPricing[]>([]);
@@ -66,6 +66,12 @@ const DefaultPricingConfig: React.FC = () => {
   }, []);
 
   const loadDefaultPricing = async () => {
+    if (!API_BASE_URL) {
+      setError('Configuration API manquante. Veuillez configurer VITE_API_URL.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 

@@ -1,7 +1,7 @@
 // Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
 const API_URL = import.meta.env.VITE_API_URL || 
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  'http://localhost:3000';
+  '';
 
 export interface AnamneseTemplate {
   id: string;

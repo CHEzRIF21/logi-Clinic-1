@@ -6,7 +6,7 @@
 // Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  'http://localhost:5000/api';
+  '';
 
 /**
  * Récupère le token JWT depuis le localStorage
@@ -22,6 +22,10 @@ async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+  }
+
   const token = getAuthToken();
   
   const headers: HeadersInit = {

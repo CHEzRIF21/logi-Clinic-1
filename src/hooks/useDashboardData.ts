@@ -183,7 +183,7 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour finances/caisse
         if (user.role === 'admin' || user.role === 'caissier' || user.role === 'comptable') {
           try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+            const API_BASE_URL = import.meta.env.VITE_API_URL || '';
             const token = localStorage.getItem('token');
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) headers.Authorization = `Bearer ${token}`;

@@ -52,7 +52,7 @@ interface PricingHistoryViewProps {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  'http://localhost:3000';
+  '';
 
 const PricingHistoryView: React.FC<PricingHistoryViewProps> = ({
   clinicId: initialClinicId,
