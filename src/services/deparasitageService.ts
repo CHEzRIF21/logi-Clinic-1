@@ -27,6 +27,9 @@ export class DeparasitageService {
     patientId: string,
     limit: number = 50
   ): Promise<Deparasitage[]> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
     const url = new URL(`${API_URL}/api/deparasitage/patient/${patientId}`);
     url.searchParams.append('limit', limit.toString());
@@ -51,6 +54,9 @@ export class DeparasitageService {
    * Enregistrer un nouveau déparasitage
    */
   static async recordDeparasitage(data: DeparasitageFormData): Promise<Deparasitage> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/deparasitage`, {
@@ -78,6 +84,9 @@ export class DeparasitageService {
     id: string,
     data: Partial<DeparasitageFormData>
   ): Promise<Deparasitage> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/deparasitage/${id}`, {
@@ -102,6 +111,9 @@ export class DeparasitageService {
    * Supprimer un déparasitage
    */
   static async deleteDeparasitage(id: string): Promise<void> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/deparasitage/${id}`, {

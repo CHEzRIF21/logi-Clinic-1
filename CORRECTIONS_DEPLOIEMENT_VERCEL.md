@@ -17,13 +17,26 @@
 - Remplacement par des chaînes vides avec vérifications appropriées
 - Ajout de messages d'erreur clairs lorsque `VITE_API_URL` n'est pas configuré
 
+### 2.1. ❌ Erreur : URLs invalides avec `new URL()` et chaînes vides
+**Problème** : Les fichiers de service utilisaient `new URL()` avec `API_URL` vide, créant des URLs invalides qui échouaient silencieusement.
+
+**Solution** :
+- Ajout de validations au début de chaque méthode dans les services utilisant `new URL()` ou `fetch()` avec `API_URL`
+- Pattern de validation uniforme : `if (!API_URL) { throw new Error('VITE_API_URL n\'est pas configuré...'); }`
+- Appliqué à toutes les méthodes dans :
+  - `diagnosticService.ts` (3 méthodes)
+  - `anamneseTemplateService.ts` (5 méthodes)
+  - `deparasitageService.ts` (4 méthodes)
+  - `consultationService.ts` (2 méthodes)
+  - `pricingClientService.ts` (1 fonction avec fallback gracieux)
+
 **Fichiers corrigés** :
-- `src/services/diagnosticService.ts`
-- `src/services/anamneseTemplateService.ts`
-- `src/services/deparasitageService.ts`
-- `src/services/pricingClientService.ts`
-- `src/services/apiClient.ts`
-- `src/services/consultationService.ts`
+- `src/services/diagnosticService.ts` ✅ **Validation ajoutée pour toutes les méthodes**
+- `src/services/anamneseTemplateService.ts` ✅ **Validation ajoutée pour toutes les méthodes**
+- `src/services/deparasitageService.ts` ✅ **Validation ajoutée pour toutes les méthodes**
+- `src/services/pricingClientService.ts` ✅ **Validation ajoutée**
+- `src/services/apiClient.ts` ✅ **Validation déjà présente**
+- `src/services/consultationService.ts` ✅ **Validation ajoutée pour les méthodes utilisant API_URL**
 - `src/components/pricing/DefaultPricingConfig.tsx`
 - `src/components/pricing/PricingHistoryView.tsx`
 - `src/components/pricing/ClinicPricingManager.tsx`

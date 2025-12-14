@@ -37,6 +37,10 @@ export async function getPricingForService(
     throw new Error('ClinicId non disponible. Veuillez vous reconnecter.');
   }
 
+  if (!API_BASE_URL) {
+    throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+  }
+
   try {
     const token = localStorage.getItem('token');
     const response = await fetch(
@@ -56,7 +60,11 @@ export async function getPricingForService(
     return data.data;
   } catch (error: any) {
     console.error('Erreur lors de la récupération du tarif:', error);
-    // En cas d'erreur, retourner un tarif par défaut de 0
+    // Re-lancer l'erreur si c'est une erreur de configuration, sinon retourner une valeur par défaut
+    if (error.message && error.message.includes('VITE_API_URL')) {
+      throw error;
+    }
+    // En cas d'erreur réseau ou autre, retourner un tarif par défaut de 0
     return {
       tarif: 0,
       source: 'default',

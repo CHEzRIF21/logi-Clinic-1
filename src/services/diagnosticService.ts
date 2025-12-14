@@ -19,6 +19,9 @@ export class DiagnosticService {
     categorie?: string,
     limit: number = 50
   ): Promise<DiagnosticCode[]> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
     const url = new URL(`${API_URL}/api/diagnostics/cim10`);
     
@@ -50,6 +53,9 @@ export class DiagnosticService {
    * Récupérer un code CIM-10 par code
    */
   static async getDiagnosticByCode(code: string): Promise<DiagnosticCode> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/diagnostics/cim10/${code}`, {
@@ -72,6 +78,9 @@ export class DiagnosticService {
    * Récupérer toutes les catégories disponibles
    */
   static async getCategories(): Promise<string[]> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/diagnostics/cim10/categories`, {

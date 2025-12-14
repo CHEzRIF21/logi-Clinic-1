@@ -1145,6 +1145,9 @@ export class ConsultationService {
     const API_URL = import.meta.env.VITE_API_URL || 
       (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
       '';
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(
@@ -1177,6 +1180,9 @@ export class ConsultationService {
     const API_URL = import.meta.env.VITE_API_URL || 
       (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
       '';
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(

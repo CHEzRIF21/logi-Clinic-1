@@ -46,6 +46,11 @@ export const useSpeechRecognitionAPI = (
   }, [useBackendAPI]);
 
   const checkBackendStatus = async () => {
+    if (!API_BASE_URL) {
+      console.warn('VITE_API_URL n\'est pas configuré, utilisation de l\'API du navigateur');
+      initializeBrowserAPI();
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/speech-to-text/status`);
       const data = await response.json();
@@ -199,6 +204,10 @@ export const useSpeechRecognitionAPI = (
   };
 
   const transcribeAudio = async (audioBlob: Blob) => {
+    if (!API_BASE_URL) {
+      setError('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+      return;
+    }
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');

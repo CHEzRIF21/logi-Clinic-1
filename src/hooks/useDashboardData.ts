@@ -184,19 +184,23 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         if (user.role === 'admin' || user.role === 'caissier' || user.role === 'comptable') {
           try {
             const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-            const token = localStorage.getItem('token');
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers.Authorization = `Bearer ${token}`;
+            if (!API_BASE_URL) {
+              console.warn('VITE_API_URL n\'est pas configuré, impossible de charger les données financières');
+            } else {
+              const token = localStorage.getItem('token');
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+              if (token) headers.Authorization = `Bearer ${token}`;
 
-            const response = await fetch(`${API_BASE_URL}/statistics/dashboard`, { headers });
-            if (response.ok) {
-              const data = await response.json();
-              if (data.success && data.data) {
-                newStats.finances = {
-                  today: data.data.todayRevenue || 0,
-                  month: data.data.monthRevenue || 0,
-                  pending: data.data.pendingInvoices || 0,
-                };
+              const response = await fetch(`${API_BASE_URL}/statistics/dashboard`, { headers });
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data) {
+                  newStats.finances = {
+                    today: data.data.todayRevenue || 0,
+                    month: data.data.monthRevenue || 0,
+                    pending: data.data.pendingInvoices || 0,
+                  };
+                }
               }
             }
           } catch (err) {

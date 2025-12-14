@@ -19,6 +19,9 @@ export class AnamneseTemplateService {
    * Récupérer tous les templates d'anamnèse
    */
   static async getTemplates(categorie?: string): Promise<AnamneseTemplate[]> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
     const url = new URL(`${API_URL}/api/anamnese-templates`);
     
@@ -46,6 +49,9 @@ export class AnamneseTemplateService {
    * Récupérer un template par ID
    */
   static async getTemplateById(id: string): Promise<AnamneseTemplate> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
@@ -68,6 +74,9 @@ export class AnamneseTemplateService {
    * Créer un nouveau template
    */
   static async createTemplate(template: Partial<AnamneseTemplate>): Promise<AnamneseTemplate> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/anamnese-templates`, {
@@ -95,6 +104,9 @@ export class AnamneseTemplateService {
     id: string,
     template: Partial<AnamneseTemplate>
   ): Promise<AnamneseTemplate> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
@@ -119,6 +131,9 @@ export class AnamneseTemplateService {
    * Supprimer un template (soft delete)
    */
   static async deleteTemplate(id: string): Promise<void> {
+    if (!API_URL) {
+      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+    }
     const token = localStorage.getItem('token');
 
     const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
