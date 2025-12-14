@@ -86,4 +86,7 @@ temp/
 # package-lock.json
 # yarn.lock
 
+# Ancien sous-module Git obsolète
+CHEzRIF-LogiClinic/
+
 
