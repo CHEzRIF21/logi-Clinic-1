@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button, Card, CardContent, Container, Divider, FormControl, Grid, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Paper, Select, SelectChangeEvent, Slider, Tab, Tabs, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Container, Divider, FormControl, Grid, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Paper, Select, SelectChangeEvent, Slider, Snackbar, Tab, Tabs, TextField, Typography } from '@mui/material';
 import { Upload, ZoomIn, ZoomOut, Contrast, BorderColor, NoteAlt, ContentCut, Save, PictureAsPdf, Send, Search } from '@mui/icons-material';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
@@ -28,6 +28,14 @@ const Imagerie: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState<boolean>(false);
   const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
+  
+  // États pour les notifications et le chargement
+  const [loading, setLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
 
   const loadExamens = async () => {
     const list = await ImagerieService.listerExamens({
@@ -253,21 +261,52 @@ const Imagerie: React.FC = () => {
                     variant="contained" 
                     fullWidth 
                     onClick={async () => {
-                      if (!selectedPatient || !filters.type) return;
-                      const ex = await ImagerieService.creerExamen({ 
-                        patient_id: selectedPatient.id, 
-                        identifiant_patient: selectedPatient.identifiant, 
-                        type_examen: filters.type, 
-                        prescripteur: filters.medecin, 
-                        medecin_referent: filters.medecin, 
-                        date_examen: new Date().toISOString() 
-                      } as any);
-                      await loadExamens();
-                      setSelectedExamen(ex);
+                      if (!selectedPatient || !filters.type) {
+                        setSnackbar({
+                          open: true,
+                          message: 'Veuillez sélectionner un patient et un type d\'examen',
+                          severity: 'warning'
+                        });
+                        return;
+                      }
+                      
+                      setLoading(true);
+                      try {
+                        const ex = await ImagerieService.creerExamen({ 
+                          patient_id: selectedPatient.id, 
+                          identifiant_patient: selectedPatient.identifiant, 
+                          type_examen: filters.type, 
+                          prescripteur: filters.medecin || undefined, 
+                          medecin_referent: filters.medecin || undefined, 
+                          date_examen: new Date().toISOString() 
+                        });
+                        
+                        await loadExamens();
+                        setSelectedExamen(ex);
+                        
+                        setSnackbar({
+                          open: true,
+                          message: `Examen ${filters.type} créé avec succès pour ${selectedPatient.prenom} ${selectedPatient.nom}`,
+                          severity: 'success'
+                        });
+                        
+                        // Réinitialiser le formulaire
+                        setFilters({ ...filters, type: undefined, medecin: '' });
+                      } catch (error: any) {
+                        console.error('Erreur création examen:', error);
+                        setSnackbar({
+                          open: true,
+                          message: error.message || 'Erreur lors de la création de l\'examen',
+                          severity: 'error'
+                        });
+                      } finally {
+                        setLoading(false);
+                      }
                     }}
-                    disabled={!selectedPatient || !filters.type}
+                    disabled={!selectedPatient || !filters.type || loading}
+                    startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
                   >
-                    Créer
+                    {loading ? 'Création...' : 'Créer'}
                   </Button>
                   
                   <PatientSelector
@@ -394,6 +433,22 @@ const Imagerie: React.FC = () => {
           </Paper>
         )}
       </Box>
+      
+      {/* Snackbar pour les notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

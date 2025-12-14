@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Typography, Grid, Card, CardContent, Button, TextField, MenuItem, Paper, Divider } from '@mui/material';
-import { Vaccines } from '@mui/icons-material';
+import { Box, Typography, Grid, Card, CardContent, Button, TextField, MenuItem, Paper, Divider, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Vaccines, Add } from '@mui/icons-material';
 import { VaccinationService, Vaccine, VaccineSchedule, PatientVaccination, VaccinationReminder } from '../services/vaccinationService';
 import { PatientService } from '../services/patientService';
 import { Patient } from '../services/supabase';
@@ -25,6 +25,7 @@ const Vaccination: React.FC = () => {
   const [stats, setStats] = useState<{ byVaccine: Record<string, number>; honorés: number; manqués: number; totalDoses: number } | null>(null);
   const [advanced, setAdvanced] = useState<{ byVaccine: Record<string, number>; ageBuckets: Record<string, number>; expiryAlerts: any[] } | null>(null);
   const [period, setPeriod] = useState<{ from?: string; to?: string }>({});
+  const [openAddDialog, setOpenAddDialog] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -142,6 +143,21 @@ const Vaccination: React.FC = () => {
             </Typography>
           </Box>
         </Box>
+        <Button
+          variant="contained"
+          startIcon={<Add />}
+          onClick={() => {
+            if (!patientId) {
+              setOpenPatientSelector(true);
+              setInfo('Veuillez d\'abord sélectionner un patient');
+            } else {
+              setOpenAddDialog(true);
+            }
+          }}
+          size="medium"
+        >
+          Ajouter une vaccination
+        </Button>
       </ToolbarBits>
 
       <Grid container spacing={3}>
@@ -295,6 +311,114 @@ const Vaccination: React.FC = () => {
           </GlassCard>
         </Grid>
       </Grid>
+
+      {/* Dialog pour ajouter une vaccination */}
+      <Dialog 
+        open={openAddDialog} 
+        onClose={() => setOpenAddDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Ajouter une vaccination</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              select
+              label="Vaccin"
+              fullWidth
+              value={selectedVaccineId}
+              onChange={(e) => setSelectedVaccineId(e.target.value)}
+              sx={{ mb: 2 }}
+            >
+              {vaccines.map(v => <MenuItem key={v.id} value={v.id}>{v.libelle}</MenuItem>)}
+            </TextField>
+            <TextField
+              select
+              label="Dose"
+              fullWidth
+              value={form.dose_ordre || ''}
+              onChange={(e) => setForm({ ...form, dose_ordre: parseInt(e.target.value, 10) })}
+              sx={{ mb: 2 }}
+              disabled={!selectedVaccineId}
+            >
+              {nextDoseOptions.map(n => <MenuItem key={n} value={n}>{`Dose ${n}`}</MenuItem>)}
+            </TextField>
+            <TextField
+              type="date"
+              label="Date d'administration"
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+              value={form.date_administration || ''}
+              onChange={(e) => setForm({ ...form, date_administration: e.target.value })}
+              sx={{ mb: 2 }}
+            />
+            <TextField 
+              label="Lieu" 
+              fullWidth 
+              sx={{ mb: 2 }} 
+              value={form.lieu || ''} 
+              onChange={(e) => setForm({ ...form, lieu: e.target.value })} 
+            />
+            <TextField 
+              label="N° Lot" 
+              fullWidth 
+              sx={{ mb: 2 }} 
+              value={form.numero_lot || ''} 
+              onChange={(e) => setForm({ ...form, numero_lot: e.target.value })} 
+            />
+            <TextField 
+              type="date" 
+              label="Péremption" 
+              InputLabelProps={{ shrink: true }} 
+              fullWidth 
+              sx={{ mb: 2 }} 
+              value={form.date_peremption || ''} 
+              onChange={(e) => setForm({ ...form, date_peremption: e.target.value })} 
+            />
+            <TextField 
+              label="Vaccinateur" 
+              fullWidth 
+              sx={{ mb: 2 }} 
+              value={form.vaccinateur || ''} 
+              onChange={(e) => setForm({ ...form, vaccinateur: e.target.value })} 
+            />
+            <TextField 
+              label="Effets secondaires" 
+              fullWidth 
+              multiline 
+              minRows={2} 
+              sx={{ mb: 2 }} 
+              value={form.effets_secondaires || ''} 
+              onChange={(e) => setForm({ ...form, effets_secondaires: e.target.value })} 
+            />
+            {error && <Typography variant="body2" color="error" sx={{ mt: 1 }}>{error}</Typography>}
+            {info && <Typography variant="body2" color="success.main" sx={{ mt: 1 }}>{info}</Typography>}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setOpenAddDialog(false);
+            setForm({});
+            setError(null);
+            setInfo(null);
+          }}>
+            Annuler
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={async () => {
+              await handleRecord();
+              if (!error) {
+                setOpenAddDialog(false);
+                setForm({});
+              }
+            }} 
+            disabled={!patientId || !selectedVaccineId || !form.dose_ordre || !form.date_administration}
+          >
+            Enregistrer
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

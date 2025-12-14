@@ -10,7 +10,9 @@ export interface ImagerieExamen {
   prescripteur?: string;
   medecin_referent?: string;
   date_examen: string;
-  statut: 'en_attente' | 'en_cours' | 'termine';
+  statut: 'en_attente' | 'en_cours' | 'termine' | 'annule';
+  notes?: string;
+  consultation_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -51,14 +53,46 @@ export interface ImagerieRapport {
 export class ImagerieService {
   // Examens
   static async creerExamen(payload: Omit<ImagerieExamen, 'id' | 'created_at' | 'updated_at' | 'statut'> & { statut?: ImagerieExamen['statut'] }): Promise<ImagerieExamen> {
-    const toInsert = {
-      ...payload,
-      statut: payload.statut || 'en_attente',
-      date_examen: payload.date_examen || new Date().toISOString(),
-    } as any;
-    const { data, error } = await supabase.from('imagerie_examens').insert([toInsert]).select('*').single();
-    if (error) throw error;
-    return data as ImagerieExamen;
+    try {
+      // Validation des données requises
+      if (!payload.patient_id) {
+        throw new Error('Le patient_id est requis pour créer un examen');
+      }
+      if (!payload.type_examen) {
+        throw new Error('Le type d\'examen est requis');
+      }
+
+      const toInsert = {
+        patient_id: payload.patient_id,
+        identifiant_patient: payload.identifiant_patient || null,
+        type_examen: payload.type_examen,
+        prescripteur: payload.prescripteur || null,
+        medecin_referent: payload.medecin_referent || null,
+        date_examen: payload.date_examen || new Date().toISOString(),
+        statut: payload.statut || 'en_attente',
+        notes: (payload as any).notes || null,
+        consultation_id: (payload as any).consultation_id || null,
+      };
+
+      console.log('📸 Création examen imagerie:', toInsert);
+
+      const { data, error } = await supabase
+        .from('imagerie_examens')
+        .insert([toInsert])
+        .select('*')
+        .single();
+
+      if (error) {
+        console.error('❌ Erreur création examen imagerie:', error);
+        throw new Error(`Erreur lors de la création de l'examen: ${error.message}`);
+      }
+
+      console.log('✅ Examen imagerie créé:', data);
+      return data as ImagerieExamen;
+    } catch (err: any) {
+      console.error('❌ Exception lors de la création d\'examen:', err);
+      throw err;
+    }
   }
 
   static async listerExamens(filters?: { patient_id?: string; type_examen?: ImagerieType; from?: string; to?: string; medecin?: string }): Promise<ImagerieExamen[]> {

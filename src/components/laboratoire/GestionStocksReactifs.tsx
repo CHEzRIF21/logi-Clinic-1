@@ -22,7 +22,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
 import {
   Warning,
@@ -40,9 +42,12 @@ const GestionStocksReactifs: React.FC = () => {
   const [stocks, setStocks] = useState<LabStockReactif[]>([]);
   const [stocksAlerte, setStocksAlerte] = useState<LabStockReactif[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedStock, setSelectedStock] = useState<LabStockReactif | null>(null);
   const [formData, setFormData] = useState<Partial<LabStockReactif>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadStocks();
@@ -89,13 +94,61 @@ const GestionStocksReactifs: React.FC = () => {
   };
 
   const handleSave = async () => {
+    // Validation des champs obligatoires
+    if (!formData.code_reactif || !formData.libelle || !formData.unite) {
+      setError('Veuillez remplir tous les champs obligatoires (Code, Libellé, Unité)');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    
     try {
-      // Ici, il faudrait créer une méthode dans le service pour créer/mettre à jour un stock
-      // Pour l'instant, on simule
+      if (selectedStock) {
+        // Mise à jour d'un réactif existant
+        await LaboratoireService.updateStockReactif(selectedStock.id, formData);
+        setSuccess('Réactif mis à jour avec succès');
+      } else {
+        // Création d'un nouveau réactif
+        await LaboratoireService.createStockReactif({
+          code_reactif: formData.code_reactif!,
+          libelle: formData.libelle!,
+          unite: formData.unite!,
+          quantite_disponible: formData.quantite_disponible || 0,
+          seuil_alerte: formData.seuil_alerte || 0,
+          date_peremption: formData.date_peremption,
+          fournisseur: formData.fournisseur,
+          numero_lot: formData.numero_lot,
+          actif: true
+        });
+        setSuccess('Réactif ajouté avec succès');
+      }
       await loadStocks();
       handleCloseDialog();
-    } catch (error) {
-      console.error('Erreur sauvegarde:', error);
+    } catch (err: any) {
+      console.error('Erreur sauvegarde:', err);
+      if (err?.code === '23505') {
+        setError('Un réactif avec ce code existe déjà');
+      } else {
+        setError(err?.message || 'Erreur lors de la sauvegarde du réactif');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (stock: LabStockReactif) => {
+    if (!window.confirm(`Êtes-vous sûr de vouloir supprimer le réactif "${stock.libelle}" ?`)) {
+      return;
+    }
+    
+    try {
+      await LaboratoireService.deleteStockReactif(stock.id);
+      setSuccess('Réactif supprimé avec succès');
+      await loadStocks();
+    } catch (err: any) {
+      console.error('Erreur suppression:', err);
+      setError(err?.message || 'Erreur lors de la suppression du réactif');
     }
   };
 
@@ -255,8 +308,11 @@ const GestionStocksReactifs: React.FC = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <IconButton size="small" onClick={() => handleOpenDialog(stock)}>
+                    <IconButton size="small" onClick={() => handleOpenDialog(stock)} title="Modifier">
                       <Edit />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => handleDelete(stock)} color="error" title="Supprimer">
+                      <Delete />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -265,6 +321,29 @@ const GestionStocksReactifs: React.FC = () => {
           </Table>
         </TableContainer>
       </GlassCard>
+
+      {/* Notifications */}
+      <Snackbar
+        open={!!success}
+        autoHideDuration={4000}
+        onClose={() => setSuccess(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="success" onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity="error" onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      </Snackbar>
 
       {/* Dialog d'édition */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -349,9 +428,14 @@ const GestionStocksReactifs: React.FC = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Annuler</Button>
-          <Button onClick={handleSave} variant="contained">
-            Enregistrer
+          <Button onClick={handleCloseDialog} disabled={saving}>Annuler</Button>
+          <Button 
+            onClick={handleSave} 
+            variant="contained" 
+            disabled={saving}
+            startIcon={saving ? <CircularProgress size={20} color="inherit" /> : null}
+          >
+            {saving ? 'Enregistrement...' : 'Enregistrer'}
           </Button>
         </DialogActions>
       </Dialog>

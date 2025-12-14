@@ -1,18 +1,18 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "build",
+  "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/((?!.*\\.(json|ico|png|jpg|jpeg|gif|svg|js|css|woff|woff2|ttf|eot|map)).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/((?!.*\\.(json|ico|png|jpg|jpeg|gif|svg|js|css|woff|woff2|ttf|eot|map)).*)",
+      "source": "/(.*)",
       "headers": [
         {
           "key": "X-Content-Type-Options",
@@ -33,7 +33,7 @@
       ]
     },
     {
-      "source": "/(manifest\\.json|favicon\\.ico|logo192\\.png|.*\\.(json|ico|png|jpg|jpeg|gif|svg|js|css|woff|woff2|ttf|eot|map))",
+      "source": "/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -43,4 +43,3 @@
     }
   ]
 }
-

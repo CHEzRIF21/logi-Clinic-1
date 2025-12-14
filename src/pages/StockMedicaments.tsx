@@ -36,6 +36,8 @@ import SynchronisationStocks from '../components/stock/SynchronisationStocks';
 import TestFluxComplet from '../components/stock/TestFluxComplet';
 import MedicamentManagement from '../components/stock/MedicamentManagement';
 import { StockService } from '../services/stockService';
+import { MedicamentService } from '../services/medicamentService';
+import { MedicamentFormData } from '../services/stockSupabase';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -448,8 +450,72 @@ const StockMedicaments: React.FC = () => {
     try {
       // Enregistrer chaque ligne de réception
       for (const line of receptionLines) {
+        // Trouver le médicament local pour récupérer ses informations
+        const medicamentLocal = medicaments.find(m => m.id === line.medicamentId);
+        
+        if (!medicamentLocal) {
+          console.error('Médicament local non trouvé:', line.medicamentId);
+          continue;
+        }
+
+        let supabaseMedicamentId: string;
+
+        try {
+          // Vérifier si le médicament existe déjà dans Supabase par son code
+          const existingMedicament = await MedicamentService.getMedicamentByCode(medicamentLocal.code);
+          
+          if (existingMedicament) {
+            // Le médicament existe, utiliser son ID
+            supabaseMedicamentId = existingMedicament.id;
+          } else {
+            // Le médicament n'existe pas, le créer dans Supabase
+            const medicamentData: MedicamentFormData = {
+              code: medicamentLocal.code,
+              nom: medicamentLocal.nom,
+              forme: medicamentLocal.forme,
+              dosage: medicamentLocal.dosage,
+              unite: medicamentLocal.unite,
+              fournisseur: medicamentLocal.fournisseur,
+              prix_unitaire: medicamentLocal.prixUnitaire,
+              seuil_alerte: medicamentLocal.seuilMinimum,
+              seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+              emplacement: medicamentLocal.emplacement,
+              categorie: 'Général',
+              prescription_requise: false
+            };
+
+            const newMedicament = await MedicamentService.createMedicament(medicamentData);
+            supabaseMedicamentId = newMedicament.id;
+            console.log('Médicament créé dans Supabase:', newMedicament);
+          }
+        } catch (medicamentError: any) {
+          // Si l'erreur est "PGRST116" (not found), créer le médicament
+          if (medicamentError?.code === 'PGRST116') {
+            const medicamentData: MedicamentFormData = {
+              code: medicamentLocal.code,
+              nom: medicamentLocal.nom,
+              forme: medicamentLocal.forme,
+              dosage: medicamentLocal.dosage,
+              unite: medicamentLocal.unite,
+              fournisseur: medicamentLocal.fournisseur,
+              prix_unitaire: medicamentLocal.prixUnitaire,
+              seuil_alerte: medicamentLocal.seuilMinimum,
+              seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+              emplacement: medicamentLocal.emplacement,
+              categorie: 'Général',
+              prescription_requise: false
+            };
+
+            const newMedicament = await MedicamentService.createMedicament(medicamentData);
+            supabaseMedicamentId = newMedicament.id;
+          } else {
+            throw medicamentError;
+          }
+        }
+
+        // Maintenant enregistrer la réception avec l'ID Supabase valide
         await StockService.receptionMedicament({
-          medicament_id: line.medicamentId,
+          medicament_id: supabaseMedicamentId,
           numero_lot: line.numeroLot,
           quantite_initiale: line.quantite,
           date_reception: receptionForm.dateReception,
@@ -473,7 +539,7 @@ const StockMedicaments: React.FC = () => {
             dateReception: new Date(receptionForm.dateReception),
             dateExpiration: new Date(line.dateExpiration),
             fournisseur: receptionForm.fournisseur,
-            emplacement: medicaments.find(m => m.id === line.medicamentId)?.emplacement || '',
+            emplacement: medicamentLocal.emplacement || '',
             statut: 'actif'
           }
         ]));

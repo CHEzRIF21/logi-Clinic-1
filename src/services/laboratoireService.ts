@@ -927,6 +927,67 @@ export class LaboratoireService {
     return data || [];
   }
 
+  static async getStockReactifById(id: string): Promise<LabStockReactif | null> {
+    const { data, error } = await supabase
+      .from('lab_stocks_reactifs')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data as LabStockReactif | null;
+  }
+
+  static async createStockReactif(form: Omit<LabStockReactif, 'id'>): Promise<LabStockReactif> {
+    const { data, error } = await supabase
+      .from('lab_stocks_reactifs')
+      .insert([{
+        code_reactif: form.code_reactif,
+        libelle: form.libelle,
+        unite: form.unite,
+        quantite_disponible: form.quantite_disponible || 0,
+        seuil_alerte: form.seuil_alerte || 0,
+        date_peremption: form.date_peremption || null,
+        fournisseur: form.fournisseur || null,
+        numero_lot: form.numero_lot || null,
+        medicament_id: form.medicament_id || null,
+        actif: form.actif !== undefined ? form.actif : true
+      }])
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as LabStockReactif;
+  }
+
+  static async updateStockReactif(id: string, updates: Partial<LabStockReactif>): Promise<LabStockReactif> {
+    const { data, error } = await supabase
+      .from('lab_stocks_reactifs')
+      .update({
+        ...(updates.code_reactif !== undefined && { code_reactif: updates.code_reactif }),
+        ...(updates.libelle !== undefined && { libelle: updates.libelle }),
+        ...(updates.unite !== undefined && { unite: updates.unite }),
+        ...(updates.quantite_disponible !== undefined && { quantite_disponible: updates.quantite_disponible }),
+        ...(updates.seuil_alerte !== undefined && { seuil_alerte: updates.seuil_alerte }),
+        ...(updates.date_peremption !== undefined && { date_peremption: updates.date_peremption }),
+        ...(updates.fournisseur !== undefined && { fournisseur: updates.fournisseur }),
+        ...(updates.numero_lot !== undefined && { numero_lot: updates.numero_lot }),
+        ...(updates.actif !== undefined && { actif: updates.actif })
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as LabStockReactif;
+  }
+
+  static async deleteStockReactif(id: string): Promise<void> {
+    // Soft delete - on désactive le réactif au lieu de le supprimer
+    const { error } = await supabase
+      .from('lab_stocks_reactifs')
+      .update({ actif: false })
+      .eq('id', id);
+    if (error) throw error;
+  }
+
   // File d'attente des prélèvements
   static async getFileAttentePrelevements(): Promise<LabPrelevement[]> {
     const { data: prescriptions, error: rxErr } = await supabase
