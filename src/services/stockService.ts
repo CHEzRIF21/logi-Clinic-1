@@ -111,7 +111,7 @@ export class StockService {
 
       // Créer la ligne de transfert
       const { error: ligneError } = await supabase
-        .from('transferts_lignes')
+        .from('transfert_lignes')
         .insert({
           transfert_id: transfert.id,
           medicament_id: data.medicament_id,
@@ -136,7 +136,7 @@ export class StockService {
         .from('transferts')
         .select(`
           *,
-          transferts_lignes (
+          transfert_lignes (
             *,
             lots (
               *
@@ -152,7 +152,7 @@ export class StockService {
       }
 
       // Traiter chaque ligne de transfert
-      for (const ligne of transfert.transferts_lignes) {
+      for (const ligne of transfert.transfert_lignes) {
         const lotGros = ligne.lots;
         
         // Vérifier la disponibilité
@@ -726,7 +726,7 @@ export class StockService {
         .from('transferts')
         .select(`
           *,
-          transferts_lignes (
+          transfert_lignes (
             *,
             medicaments (
               *

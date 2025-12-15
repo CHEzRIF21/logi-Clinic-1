@@ -28,11 +28,7 @@ import {
   Tabs,
   Tab,
   Tooltip,
-  Stepper,
-  Step,
-  StepLabel,
   Paper,
-  Divider,
 } from '@mui/material';
 import {
   Add,
@@ -53,27 +49,29 @@ import {
   Person,
   MedicalServices,
   Assignment,
-  Undo,
-  ReportProblem,
   CheckCircle,
+  ErrorOutline,
 } from '@mui/icons-material';
+import Snackbar from '@mui/material/Snackbar';
+import CircularProgress from '@mui/material/CircularProgress';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
 import SynchronisationStocks from '../components/stock/SynchronisationStocks';
+import GestionInventaire from '../components/stock/GestionInventaire';
 import NouvelleDispensationWizard from '../components/pharmacy/NouvelleDispensationWizard';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
-import { StatBadge } from '../components/ui/StatBadge';
+import { supabase } from '../services/supabase';
 
 // Types pour les données
 interface MedicamentDetail {
   id: string;
   code: string;
-    nom: string;
+  nom: string;
   dci: string;
   forme: string;
-    dosage: string;
+  dosage: string;
   unite: string;
   quantiteRecue: number;
   quantiteDispensée: number;
@@ -91,34 +89,13 @@ interface Dispensation {
   patientNom?: string;
   serviceId?: string;
   serviceNom?: string;
-    quantite: number;
+  quantite: number;
   dateDispensation: Date;
   motif: string;
   prescripteur?: string;
   consultationId?: string;
   utilisateur: string;
   statut: 'dispensé' | 'annulé' | 'retourné';
-}
-
-interface Retour {
-  id: string;
-  medicamentId: string;
-  quantite: number;
-  dateRetour: Date;
-  motif: string;
-  utilisateur: string;
-  statut: 'en_attente' | 'validé' | 'refusé';
-}
-
-interface Perte {
-  id: string;
-  medicamentId: string;
-  quantite: number;
-  datePerte: Date;
-  motif: string;
-  justification: string;
-  utilisateur: string;
-  statut: 'déclaré' | 'validé' | 'refusé';
 }
 
 interface AlerteDetail {
@@ -131,7 +108,7 @@ interface AlerteDetail {
   statut: 'active' | 'resolue' | 'ignoree';
 }
 
-  // Données de démonstration
+// Données de démonstration
 const medicamentsDetailDemo: MedicamentDetail[] = [
   {
     id: '1',
@@ -224,31 +201,6 @@ const dispensationsDemo: Dispensation[] = [
   }
 ];
 
-const retoursDemo: Retour[] = [
-  {
-    id: '1',
-    medicamentId: '1',
-    quantite: 5,
-    dateRetour: new Date('2024-07-18'),
-    motif: 'Produit proche de péremption',
-    utilisateur: 'Pharmacien',
-    statut: 'en_attente'
-  }
-];
-
-const pertesDemo: Perte[] = [
-  {
-    id: '1',
-    medicamentId: '3',
-    quantite: 2,
-    datePerte: new Date('2024-07-19'),
-    motif: 'Casse',
-    justification: 'Flacon cassé lors du transport',
-    utilisateur: 'Infirmier Pharmacie',
-    statut: 'déclaré'
-  }
-];
-
 const alertesDetailDemo: AlerteDetail[] = [
   {
     id: '1',
@@ -258,15 +210,6 @@ const alertesDetailDemo: AlerteDetail[] = [
     medicamentId: '3',
     dateCreation: new Date('2024-07-15'),
     statut: 'active'
-  },
-  {
-    id: '2',
-    type: 'perte_anormale',
-    niveau: 'avertissement',
-    message: 'Perte anormale détectée pour Ibuprofène 400mg',
-    medicamentId: '3',
-    dateCreation: new Date('2024-07-19'),
-    statut: 'active'
   }
 ];
 
@@ -274,21 +217,27 @@ const Pharmacie: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [medicaments, setMedicaments] = useState<MedicamentDetail[]>(medicamentsDetailDemo);
   const [dispensations, setDispensations] = useState<Dispensation[]>(dispensationsDemo);
-  const [retours, setRetours] = useState<Retour[]>(retoursDemo);
-  const [pertes, setPertes] = useState<Perte[]>(pertesDemo);
   const [alertes, setAlertes] = useState<AlerteDetail[]>(alertesDetailDemo);
+  const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
+    open: false, message: '', type: 'info'
+  });
+
+  // Fonction utilitaire pour les notifications
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setNotification({ open: true, message, type });
+  };
   
   // États pour les dialogs
   const [openDispensation, setOpenDispensation] = useState(false);
-  const [openRetour, setOpenRetour] = useState(false);
-  const [openPerte, setOpenPerte] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<MedicamentDetail | null>(null);
   
   // États pour les formulaires
   const [dispensationForm, setDispensationForm] = useState({
     medicamentId: '',
-    typeDestinataire: 'patient', // 'patient' ou 'service'
+    typeDestinataire: 'patient',
     patientId: '',
     patientNom: '',
     serviceId: '',
@@ -300,20 +249,159 @@ const Pharmacie: React.FC = () => {
     consultationId: ''
   });
 
-  const [retourForm, setRetourForm] = useState({
-    medicamentId: '',
-    quantite: 0,
-    dateRetour: new Date().toISOString().split('T')[0],
-    motif: ''
-  });
+  // Chargement des données réelles depuis Supabase
+  const loadRealData = async () => {
+    try {
+      setLoading(true);
+      
+      // Charger les lots du magasin détail depuis Supabase
+      const { data: lotsDetail, error: lotsError } = await supabase
+        .from('lots')
+        .select(`
+          *,
+          medicaments (*)
+        `)
+        .eq('magasin', 'detail')
+        .eq('statut', 'actif');
+      
+      if (lotsError) throw lotsError;
+      
+      if (lotsDetail && lotsDetail.length > 0) {
+        // Agréger par médicament
+        const medicamentsMap = new Map<string, MedicamentDetail>();
+        
+        lotsDetail.forEach(lot => {
+          const med = lot.medicaments as any;
+          if (!med) return;
+          
+          const existingMed = medicamentsMap.get(lot.medicament_id);
+          if (existingMed) {
+            existingMed.quantiteRestante += lot.quantite_disponible;
+          } else {
+            medicamentsMap.set(lot.medicament_id, {
+              id: lot.medicament_id,
+              code: med.code || `MED-${lot.medicament_id.substring(0, 6)}`,
+              nom: med.nom || 'Inconnu',
+              dci: med.dci || '',
+              forme: med.forme || '',
+              dosage: med.dosage || '',
+              unite: med.unite || 'Unité',
+              quantiteRecue: lot.quantite_initiale,
+              quantiteDispensée: lot.quantite_initiale - lot.quantite_disponible,
+              quantiteRestante: lot.quantite_disponible,
+              seuilMinimum: med.seuil_alerte || 20,
+              prixUnitaire: med.prix_unitaire || 0,
+              emplacement: med.emplacement || '',
+              observations: med.observations || ''
+            });
+          }
+        });
+        
+        // Fusionner avec les données de démonstration
+        const medsFromSupabase = Array.from(medicamentsMap.values());
+        if (medsFromSupabase.length > 0) {
+          setMedicaments(prev => {
+            const combined = [...medsFromSupabase];
+            prev.forEach(demo => {
+              if (!combined.some(m => m.code === demo.code)) {
+                combined.push(demo);
+              }
+            });
+            return combined;
+          });
+        }
+        setDataLoaded(true);
+      }
+      
+      // Charger les dispensations récentes
+      const { data: dispensationsData, error: dispensationsError } = await supabase
+        .from('dispensations')
+        .select(`
+          *,
+          dispensations_lignes (
+            *,
+            medicaments (*)
+          )
+        `)
+        .order('date_dispensation', { ascending: false })
+        .limit(50);
+      
+      if (!dispensationsError && dispensationsData && dispensationsData.length > 0) {
+        const dispensationsConverties: Dispensation[] = dispensationsData.flatMap(disp => {
+          const lignes = disp.dispensations_lignes || [];
+          return lignes.map((ligne: any) => ({
+            id: `${disp.id}-${ligne.id}`,
+            medicamentId: ligne.medicament_id,
+            patientId: disp.patient_id,
+            patientNom: disp.patient_nom || 'Patient',
+            serviceId: disp.service_id,
+            serviceNom: disp.service_nom,
+            quantite: ligne.quantite,
+            dateDispensation: new Date(disp.date_dispensation),
+            motif: disp.observations || 'Dispensation',
+            prescripteur: disp.prescripteur || 'Médecin',
+            consultationId: disp.prescription_id,
+            utilisateur: disp.utilisateur_id,
+            statut: disp.statut === 'terminee' ? 'dispensé' : disp.statut as 'dispensé' | 'annulé' | 'retourné'
+          }));
+        });
+        
+        if (dispensationsConverties.length > 0) {
+          setDispensations(prev => {
+            const combined = [...dispensationsConverties];
+            prev.forEach(demo => {
+              if (!combined.some(d => d.id === demo.id)) {
+                combined.push(demo);
+              }
+            });
+            return combined;
+          });
+        }
+      }
+      
+      // Charger les alertes actives
+      const { data: alertesData, error: alertesError } = await supabase
+        .from('alertes_stock')
+        .select(`
+          *,
+          medicaments (*)
+        `)
+        .eq('statut', 'active');
+      
+      if (!alertesError && alertesData && alertesData.length > 0) {
+        const alertesConverties: AlerteDetail[] = alertesData.map(alerte => ({
+          id: alerte.id,
+          type: alerte.type as 'stock_bas' | 'perte_anormale' | 'retour_requis',
+          niveau: alerte.niveau as 'critique' | 'avertissement' | 'information',
+          message: alerte.message,
+          medicamentId: alerte.medicament_id,
+          dateCreation: new Date(alerte.date_creation),
+          statut: alerte.statut as 'active' | 'resolue' | 'ignoree'
+        }));
+        
+        setAlertes(prev => {
+          const combined = [...alertesConverties];
+          prev.forEach(demo => {
+            if (!combined.some(a => a.id === demo.id)) {
+              combined.push(demo);
+            }
+          });
+          return combined;
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données Supabase:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const [perteForm, setPerteForm] = useState({
-    medicamentId: '',
-    quantite: 0,
-    datePerte: new Date().toISOString().split('T')[0],
-    motif: '',
-    justification: ''
-  });
+  // Charger les données au montage du composant
+  React.useEffect(() => {
+    if (!dataLoaded) {
+      loadRealData();
+    }
+  }, [dataLoaded]);
 
   // Calcul des statistiques
   const stats = {
@@ -326,8 +414,6 @@ const Pharmacie: React.FC = () => {
       const dispDate = new Date(disp.dateDispensation);
       return dispDate.toDateString() === today.toDateString();
     }).length,
-    retoursEnAttente: retours.filter(retour => retour.statut === 'en_attente').length,
-    pertesDeclarees: pertes.filter(perte => perte.statut === 'déclaré').length,
     alertesActives: alertes.filter(alert => alert.statut === 'active').length
   };
 
@@ -336,50 +422,13 @@ const Pharmacie: React.FC = () => {
   };
 
   const handleDispensationSuccess = () => {
-    // Rafraîchir les données après une dispensation réussie
-    // Vous pouvez ajouter ici la logique pour recharger les dispensations
-    console.log('Dispensation enregistrée avec succès');
-    // Optionnel: recharger les données
-    // loadDispensations();
-  };
-
-  const handleRetour = () => {
-    // Logique de retour
-    console.log('Retour enregistré:', retourForm);
-    setOpenRetour(false);
-    // Réinitialiser le formulaire
-    setRetourForm({
-      medicamentId: '',
-      quantite: 0,
-      dateRetour: new Date().toISOString().split('T')[0],
-      motif: ''
-    });
-  };
-
-  const handlePerte = () => {
-    // Logique de déclaration de perte
-    console.log('Perte déclarée:', perteForm);
-    setOpenPerte(false);
-    // Réinitialiser le formulaire
-    setPerteForm({
-      medicamentId: '',
-      quantite: 0,
-      datePerte: new Date().toISOString().split('T')[0],
-      motif: '',
-      justification: ''
-    });
+    showNotification('Dispensation enregistrée avec succès !', 'success');
+    // Recharger les données après la dispensation
+    loadRealData();
   };
 
   const getDispensationsByMedicament = (medicamentId: string) => {
     return dispensations.filter(disp => disp.medicamentId === medicamentId);
-  };
-
-  const getRetoursByMedicament = (medicamentId: string) => {
-    return retours.filter(retour => retour.medicamentId === medicamentId);
-  };
-
-  const getPertesByMedicament = (medicamentId: string) => {
-    return pertes.filter(perte => perte.medicamentId === medicamentId);
   };
 
   return (
@@ -406,17 +455,16 @@ const Pharmacie: React.FC = () => {
         {/* Navigation par onglets */}
         <GlassCard sx={{ mb: 3 }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={activeTab} onChange={handleTabChange}>
-            <Tab icon={<Dashboard />} label="Tableau de Bord" />
-            <Tab icon={<Store />} label="Stock Détail" />
-            <Tab icon={<MedicalServices />} label="Dispensations" />
-            <Tab icon={<LocalShipping />} label="Transferts" />
-            <Tab icon={<Undo />} label="Retours" />
-            <Tab icon={<ReportProblem />} label="Pertes" />
-            <Tab icon={<Assessment />} label="Rapports" />
-            <Tab icon={<Notifications />} label="Alertes" />
-            <Tab icon={<Sync />} label="Synchronisation" />
-          </Tabs>
+            <Tabs value={activeTab} onChange={handleTabChange}>
+              <Tab icon={<Dashboard />} label="Tableau de Bord" />
+              <Tab icon={<Store />} label="Stock Détail" />
+              <Tab icon={<MedicalServices />} label="Dispensations" />
+              <Tab icon={<LocalShipping />} label="Ajustement" />
+              <Tab icon={<Assignment />} label="Inventaire" />
+              <Tab icon={<Assessment />} label="Rapports" />
+              <Tab icon={<Notifications />} label="Alertes" />
+              <Tab icon={<Sync />} label="Synchronisation" />
+            </Tabs>
           </Box>
         </GlassCard>
 
@@ -426,77 +474,77 @@ const Pharmacie: React.FC = () => {
             {/* Statistiques principales */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
               <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Inventory sx={{ fontSize: 40, color: 'primary.main', mr: 2 }} />
-                <Box>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Inventory sx={{ fontSize: 40, color: 'primary.main', mr: 2 }} />
+                      <Box>
                         <Typography color="text.secondary" gutterBottom>
                           Médicaments
-                  </Typography>
+                        </Typography>
                         <Typography variant="h4">{stats.totalMedicaments}</Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <TrendingUp sx={{ fontSize: 40, color: 'success.main', mr: 2 }} />
-                <Box>
+                      <Box>
                         <Typography color="text.secondary" gutterBottom>
                           Stock Détail
-                  </Typography>
+                        </Typography>
                         <Typography variant="h4">{stats.totalStock.toLocaleString()}</Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <AttachMoney sx={{ fontSize: 40, color: 'info.main', mr: 2 }} />
-                <Box>
+                      <Box>
                         <Typography color="text.secondary" gutterBottom>
                           Valeur Stock
                         </Typography>
                         <Typography variant="h4">
                           {stats.valeurStock.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
-                  </Typography>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
 
               <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Warning sx={{ fontSize: 40, color: 'warning.main', mr: 2 }} />
-                  <Box>
+                      <Box>
                         <Typography color="text.secondary" gutterBottom>
                           Alertes Actives
                         </Typography>
                         <Typography variant="h4" color="warning.main">
                           {stats.alertesActives}
-                    </Typography>
-                  </Box>
-                </Box>
+                        </Typography>
+                      </Box>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
-        </Grid>
+            </Grid>
 
             {/* Statistiques secondaires */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <Card>
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -511,68 +559,46 @@ const Pharmacie: React.FC = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Undo sx={{ fontSize: 40, color: 'info.main', mr: 2 }} />
-                      <Box>
-                        <Typography color="text.secondary" gutterBottom>
-                          Retours en Attente
-                        </Typography>
-                        <Typography variant="h4">{stats.retoursEnAttente}</Typography>
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              
-              <Grid item xs={12} sm={6} md={3}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <ReportProblem sx={{ fontSize: 40, color: 'error.main', mr: 2 }} />
-                      <Box>
-                        <Typography color="text.secondary" gutterBottom>
-                          Pertes Déclarées
-                        </Typography>
-                        <Typography variant="h4">{stats.pertesDeclarees}</Typography>
-                      </Box>
-                    </Box>
-              </CardContent>
-            </Card>
-          </Grid>
 
-              <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Warning sx={{ fontSize: 40, color: 'warning.main', mr: 2 }} />
-                  <Box>
+                      <Box>
                         <Typography color="text.secondary" gutterBottom>
                           Stock Faible
                         </Typography>
                         <Typography variant="h4" color="warning.main">
                           {stats.stockFaible}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={4}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Assignment sx={{ fontSize: 40, color: 'info.main', mr: 2 }} />
+                      <Box>
+                        <Typography color="text.secondary" gutterBottom>
+                          Dispensations Total
+                        </Typography>
+                        <Typography variant="h4">{dispensations.length}</Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
 
             {/* Alertes critiques */}
             {stats.stockFaible > 0 && (
               <Alert severity="warning" sx={{ mb: 3 }}>
                 {stats.stockFaible} médicament(s) en stock faible (seuil minimum atteint)
-              </Alert>
-            )}
-
-            {stats.pertesDeclarees > 0 && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {stats.pertesDeclarees} perte(s) déclarée(s) nécessitant validation
               </Alert>
             )}
 
@@ -590,22 +616,14 @@ const Pharmacie: React.FC = () => {
                     size="medium"
                   >
                     Nouvelle Dispensation
-                </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Undo />}
-                    onClick={() => setOpenRetour(true)}
-                    size="medium"
-                  >
-                    Déclarer Retour
                   </Button>
                   <Button
                     variant="outlined"
-                    startIcon={<ReportProblem />}
-                    onClick={() => setOpenPerte(true)}
+                    startIcon={<Assignment />}
+                    onClick={() => setActiveTab(4)}
                     size="medium"
                   >
-                    Déclarer Perte
+                    Inventaire
                   </Button>
                   <Button
                     variant="outlined"
@@ -614,8 +632,8 @@ const Pharmacie: React.FC = () => {
                     size="medium"
                   >
                     Générer Rapport
-                </Button>
-              </Box>
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
           </Box>
@@ -641,32 +659,31 @@ const Pharmacie: React.FC = () => {
                     <Button
                       variant="outlined"
                       startIcon={<Refresh />}
+                      onClick={loadRealData}
+                      disabled={loading}
                     >
-                      Actualiser
+                      {loading ? 'Chargement...' : 'Actualiser'}
                     </Button>
                   </Box>
                 </Box>
                 
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
                         <TableCell>Médicament</TableCell>
                         <TableCell>Stock Actuel</TableCell>
                         <TableCell>Entrées (depuis Gros)</TableCell>
                         <TableCell>Sorties (Patients)</TableCell>
-                        <TableCell>Retours (vers Gros)</TableCell>
                         <TableCell>Seuil Min</TableCell>
-                      <TableCell>Statut</TableCell>
-                      <TableCell>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
+                        <TableCell>Statut</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {medicaments.map((medicament) => {
                         const medicamentDispensations = getDispensationsByMedicament(medicament.id);
-                        const medicamentRetours = getRetoursByMedicament(medicament.id);
                         const sorties = medicamentDispensations.reduce((sum, disp) => sum + disp.quantite, 0);
-                        const retours = medicamentRetours.reduce((sum, retour) => sum + retour.quantite, 0);
                         const isStockFaible = medicament.quantiteRestante <= medicament.seuilMinimum;
 
                         return (
@@ -706,30 +723,25 @@ const Pharmacie: React.FC = () => {
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2">
-                                {retours} {medicament.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
                                 {medicament.seuilMinimum} {medicament.unite}
                               </Typography>
                             </TableCell>
-                        <TableCell>
-                          <Chip
+                            <TableCell>
+                              <Chip
                                 label={isStockFaible ? 'Stock faible' : 'Normal'}
                                 color={isStockFaible ? 'warning' : 'success'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell>
                               <Box sx={{ display: 'flex', gap: 1 }}>
                                 <Tooltip title="Voir détails">
-                          <IconButton
-                            size="small"
+                                  <IconButton
+                                    size="small"
                                     onClick={() => setSelectedMedicament(medicament)}
-                          >
-                            <Visibility />
-                          </IconButton>
+                                  >
+                                    <Visibility />
+                                  </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Dispenser">
                                   <IconButton
@@ -742,30 +754,19 @@ const Pharmacie: React.FC = () => {
                                     <MedicalServices />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title="Déclarer retour">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      setRetourForm(prev => ({ ...prev, medicamentId: medicament.id }));
-                                      setOpenRetour(true);
-                                    }}
-                                  >
-                                    <Undo />
+                                <Tooltip title="Modifier">
+                                  <IconButton size="small">
+                                    <Edit />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title="Modifier">
-                          <IconButton size="small">
-                            <Edit />
-                          </IconButton>
-                                </Tooltip>
                               </Box>
-                        </TableCell>
-                      </TableRow>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
               </CardContent>
             </Card>
           </Box>
@@ -779,7 +780,7 @@ const Pharmacie: React.FC = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">
                     Gestion des Dispensations
-              </Typography>
+                  </Typography>
                   <Button
                     variant="contained"
                     startIcon={<Add />}
@@ -815,10 +816,10 @@ const Pharmacie: React.FC = () => {
                               <Box>
                                 <Typography variant="body2" fontWeight="bold">
                                   {medicament?.nom}
-              </Typography>
+                                </Typography>
                                 <Typography variant="caption" color="text.secondary">
                                   {medicament?.code}
-              </Typography>
+                                </Typography>
                               </Box>
                             </TableCell>
                             <TableCell>
@@ -878,235 +879,24 @@ const Pharmacie: React.FC = () => {
           </Box>
         )}
 
-        {/* Onglet Transferts */}
+        {/* Onglet Ajustement */}
         {activeTab === 3 && (
           <GestionTransferts />
         )}
 
-        {/* Onglet Retours */}
+        {/* Onglet Inventaire */}
         {activeTab === 4 && (
-            <Box>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    Gestion des Retours vers Magasin Gros
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() => setOpenRetour(true)}
-                  >
-                    Nouveau Retour
-                  </Button>
-                </Box>
-                
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Médicament</TableCell>
-                        <TableCell>Quantité</TableCell>
-                        <TableCell>Motif</TableCell>
-                        <TableCell>Utilisateur</TableCell>
-                        <TableCell>Statut</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {retours.map((retour) => {
-                        const medicament = medicaments.find(med => med.id === retour.medicamentId);
-                        return (
-                          <TableRow key={retour.id}>
-                            <TableCell>
-                              {new Date(retour.dateRetour).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {medicament?.nom}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {medicament?.code}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {retour.quantite} {medicament?.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {retour.motif}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {retour.utilisateur}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                  <Chip
-                                label={retour.statut}
-                                color={
-                                  retour.statut === 'validé' ? 'success' : 
-                                  retour.statut === 'refusé' ? 'error' : 'warning'
-                                }
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Tooltip title="Voir détails">
-                                  <IconButton size="small">
-                                    <Visibility />
-                                  </IconButton>
-                                </Tooltip>
-                                {retour.statut === 'en_attente' && (
-                                  <>
-                                    <Tooltip title="Valider">
-                                      <IconButton size="small" color="success">
-                                        <CheckCircle />
-                                      </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Refuser">
-                                      <IconButton size="small" color="error">
-                                        <ReportProblem />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </>
-                                )}
-                              </Box>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </CardContent>
-            </Card>
-          </Box>
-        )}
-
-        {/* Onglet Pertes */}
-        {activeTab === 5 && (
-          <Box>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    Gestion des Pertes et Corrections
-              </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() => setOpenPerte(true)}
-                  >
-                    Déclarer Perte
-                  </Button>
-                </Box>
-                
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                        <TableCell>Date</TableCell>
-                      <TableCell>Médicament</TableCell>
-                      <TableCell>Quantité</TableCell>
-                        <TableCell>Motif</TableCell>
-                        <TableCell>Justification</TableCell>
-                        <TableCell>Utilisateur</TableCell>
-                        <TableCell>Statut</TableCell>
-                        <TableCell>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                      {pertes.map((perte) => {
-                        const medicament = medicaments.find(med => med.id === perte.medicamentId);
-                        return (
-                          <TableRow key={perte.id}>
-                            <TableCell>
-                              {new Date(perte.datePerte).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {medicament?.nom}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {medicament?.code}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {perte.quantite} {medicament?.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {perte.motif}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {perte.justification}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-          <Typography variant="body2">
-                                {perte.utilisateur}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={perte.statut}
-                                color={
-                                  perte.statut === 'validé' ? 'success' : 
-                                  perte.statut === 'refusé' ? 'error' : 'warning'
-                                }
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Tooltip title="Voir détails">
-                                  <IconButton size="small">
-                                    <Visibility />
-                                  </IconButton>
-                                </Tooltip>
-                                {perte.statut === 'déclaré' && (
-                                  <>
-                                    <Tooltip title="Valider">
-                                      <IconButton size="small" color="success">
-                                        <CheckCircle />
-                                      </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Refuser">
-                                      <IconButton size="small" color="error">
-                                        <ReportProblem />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </>
-                                )}
-                              </Box>
-                            </TableCell>
-                      </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              </CardContent>
-            </Card>
-          </Box>
+          <GestionInventaire
+            magasinType="pharmacie"
+            magasinId="pharmacie-detail"
+            magasinNom="Pharmacie - Magasin Détail"
+            utilisateurId="current-user-id"
+            utilisateurNom="Pharmacien/Infirmier"
+          />
         )}
 
         {/* Onglet Rapports */}
-        {activeTab === 6 && (
+        {activeTab === 5 && (
           <Box>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -1114,7 +904,7 @@ const Pharmacie: React.FC = () => {
                   <CardContent>
                     <Typography variant="h6" gutterBottom>
                       Rapports de Consommation
-                </Typography>
+                    </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Button
                         variant="outlined"
@@ -1137,10 +927,10 @@ const Pharmacie: React.FC = () => {
                       >
                         Tendances de Consommation
                       </Button>
-              </Box>
-              </CardContent>
-            </Card>
-          </Grid>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
               
               <Grid item xs={12} md={6}>
                 <Card>
@@ -1151,13 +941,6 @@ const Pharmacie: React.FC = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Button
                         variant="outlined"
-                        startIcon={<ReportProblem />}
-                        onClick={() => setOpenRapport(true)}
-                      >
-                        Pertes et Corrections
-                      </Button>
-                      <Button
-                        variant="outlined"
                         startIcon={<Inventory />}
                         onClick={() => setOpenRapport(true)}
                       >
@@ -1165,15 +948,22 @@ const Pharmacie: React.FC = () => {
                       </Button>
                       <Button
                         variant="outlined"
-                        startIcon={<Undo />}
+                        startIcon={<Assessment />}
                         onClick={() => setOpenRapport(true)}
                       >
-                        Retours vers Gros
+                        Rapport d'Inventaire
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<Print />}
+                        onClick={() => setOpenRapport(true)}
+                      >
+                        Export Complet
                       </Button>
                     </Box>
                   </CardContent>
                 </Card>
-        </Grid>
+              </Grid>
 
               <Grid item xs={12}>
                 <Card>
@@ -1182,7 +972,7 @@ const Pharmacie: React.FC = () => {
                       Rapport de Synthèse - Magasin Détail
                     </Typography>
                     <Grid container spacing={2}>
-                      <Grid item xs={12} md={3}>
+                      <Grid item xs={12} md={4}>
                         <Paper sx={{ p: 2, textAlign: 'center' }}>
                           <Typography variant="h4" color="primary">
                             {stats.totalMedicaments}
@@ -1192,7 +982,7 @@ const Pharmacie: React.FC = () => {
                           </Typography>
                         </Paper>
                       </Grid>
-                      <Grid item xs={12} md={3}>
+                      <Grid item xs={12} md={4}>
                         <Paper sx={{ p: 2, textAlign: 'center' }}>
                           <Typography variant="h4" color="success.main">
                             {dispensations.length}
@@ -1202,23 +992,13 @@ const Pharmacie: React.FC = () => {
                           </Typography>
                         </Paper>
                       </Grid>
-                      <Grid item xs={12} md={3}>
+                      <Grid item xs={12} md={4}>
                         <Paper sx={{ p: 2, textAlign: 'center' }}>
                           <Typography variant="h4" color="info.main">
-                            {retours.length}
+                            {stats.valeurStock.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            Retours Total
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={12} md={3}>
-                        <Paper sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="h4" color="error.main">
-                            {pertes.length}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Pertes Total
+                            Valeur du Stock
                           </Typography>
                         </Paper>
                       </Grid>
@@ -1227,16 +1007,16 @@ const Pharmacie: React.FC = () => {
                 </Card>
               </Grid>
             </Grid>
-            </Box>
-          )}
+          </Box>
+        )}
 
         {/* Onglet Alertes */}
-        {activeTab === 7 && (
+        {activeTab === 6 && (
           <SystemeAlertes />
         )}
 
         {/* Onglet Synchronisation */}
-        {activeTab === 8 && (
+        {activeTab === 7 && (
           <SynchronisationStocks />
         )}
 
@@ -1246,138 +1026,9 @@ const Pharmacie: React.FC = () => {
           open={openDispensation}
           onClose={() => setOpenDispensation(false)}
           onSuccess={handleDispensationSuccess}
-          utilisateurId="current-user-id" // TODO: Récupérer depuis le contexte d'authentification
+          utilisateurId="current-user-id"
           utilisateurNom="Pharmacien/Infirmier"
         />
-
-        {/* Dialog Déclarer Retour */}
-        <Dialog open={openRetour} onClose={() => setOpenRetour(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Déclarer Retour vers Magasin Gros</DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Médicament</InputLabel>
-                  <Select
-                    value={retourForm.medicamentId}
-                    onChange={(e) => setRetourForm(prev => ({ ...prev, medicamentId: e.target.value }))}
-                    label="Médicament"
-                  >
-                    {medicaments.map(med => (
-                      <MenuItem key={med.id} value={med.id}>
-                        {med.nom} - Stock: {med.quantiteRestante} {med.unite}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Quantité à retourner"
-                  type="number"
-                  value={retourForm.quantite}
-                  onChange={(e) => setRetourForm(prev => ({ ...prev, quantite: parseInt(e.target.value) || 0 }))}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Date de retour"
-                  type="date"
-                  value={retourForm.dateRetour}
-                  onChange={(e) => setRetourForm(prev => ({ ...prev, dateRetour: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Motif du retour"
-                  multiline
-                  rows={3}
-                  value={retourForm.motif}
-                  onChange={(e) => setRetourForm(prev => ({ ...prev, motif: e.target.value }))}
-                />
-              </Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenRetour(false)}>Annuler</Button>
-            <Button onClick={handleRetour} variant="contained">
-              Déclarer Retour
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        {/* Dialog Déclarer Perte */}
-        <Dialog open={openPerte} onClose={() => setOpenPerte(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Déclarer Perte - Magasin Détail</DialogTitle>
-          <DialogContent>
-            <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>Médicament</InputLabel>
-                  <Select
-                    value={perteForm.medicamentId}
-                    onChange={(e) => setPerteForm(prev => ({ ...prev, medicamentId: e.target.value }))}
-                    label="Médicament"
-                  >
-                    {medicaments.map(med => (
-                      <MenuItem key={med.id} value={med.id}>
-                        {med.nom} - Stock: {med.quantiteRestante} {med.unite}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Quantité perdue"
-                  type="number"
-                  value={perteForm.quantite}
-                  onChange={(e) => setPerteForm(prev => ({ ...prev, quantite: parseInt(e.target.value) || 0 }))}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="Date de perte"
-                  type="date"
-                  value={perteForm.datePerte}
-                  onChange={(e) => setPerteForm(prev => ({ ...prev, datePerte: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Motif de la perte"
-                  value={perteForm.motif}
-                  onChange={(e) => setPerteForm(prev => ({ ...prev, motif: e.target.value }))}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Justification (obligatoire)"
-                  multiline
-                  rows={3}
-                  value={perteForm.justification}
-                  onChange={(e) => setPerteForm(prev => ({ ...prev, justification: e.target.value }))}
-                  required
-                />
-              </Grid>
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenPerte(false)}>Annuler</Button>
-            <Button onClick={handlePerte} variant="contained">
-              Déclarer Perte
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         {/* Dialog Rapport */}
         <Dialog open={openRapport} onClose={() => setOpenRapport(false)} maxWidth="sm" fullWidth>
@@ -1388,18 +1039,35 @@ const Pharmacie: React.FC = () => {
               Cette fonction permettra de créer des rapports détaillés sur :
               <ul>
                 <li>Consommation des médicaments par patient ou service</li>
-                <li>Pertes et corrections effectuées</li>
-                <li>Suivi des stocks restants disponibles</li>
+                <li>État du stock disponible</li>
+                <li>Résultats des inventaires</li>
               </ul>
-          </Typography>
+            </Typography>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenRapport(false)}>Fermer</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+          </DialogActions>
+        </Dialog>
+
+        {/* Snackbar pour les notifications */}
+        <Snackbar
+          open={notification.open}
+          autoHideDuration={4000}
+          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+            severity={notification.type}
+            sx={{ width: '100%' }}
+            icon={notification.type === 'success' ? <CheckCircle /> : notification.type === 'error' ? <ErrorOutline /> : undefined}
+          >
+            {notification.message}
+          </Alert>
+        </Snackbar>
+      </Box>
     </Container>
   );
 };
 
-export default Pharmacie; 
+export default Pharmacie;

@@ -33,6 +33,7 @@ import TraceabiliteLots from '../components/stock/TraceabiliteLots';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
 import SynchronisationStocks from '../components/stock/SynchronisationStocks';
+import GestionInventaire from '../components/stock/GestionInventaire';
 import TestFluxComplet from '../components/stock/TestFluxComplet';
 import MedicamentManagement from '../components/stock/MedicamentManagement';
 import { StockService } from '../services/stockService';
@@ -59,10 +60,12 @@ import {
   Assessment,
   Notifications,
   Timeline,
-  Settings,
-  Undo,
   Delete,
+  CheckCircle,
+  ErrorOutline,
 } from '@mui/icons-material';
+import Snackbar from '@mui/material/Snackbar';
+import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
 
 // Types pour les données
@@ -283,14 +286,116 @@ const StockMedicaments: React.FC = () => {
   const [lots, setLots] = useState<Lot[]>(lotsDemo);
   const [mouvements, setMouvements] = useState<Mouvement[]>(mouvementsDemo);
   const [alertes, setAlertes] = useState<Alerte[]>(alertesDemo);
+  const [loading, setLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
+    open: false, message: '', type: 'info'
+  });
+
+  // Fonction utilitaire pour les notifications
+  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setNotification({ open: true, message, type });
+  };
   
   // États pour les dialogs
   const [openReception, setOpenReception] = useState(false);
   const [openNouveauMedicament, setOpenNouveauMedicament] = useState(false);
   const [openTransfert, setOpenTransfert] = useState(false);
-  const [openInventaire, setOpenInventaire] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<Medicament | null>(null);
+
+  // Chargement des données réelles depuis Supabase
+  const loadRealData = async () => {
+    try {
+      setLoading(true);
+      
+      // Charger les lots depuis Supabase
+      const lotsGros = await StockService.getLotsByMagasin('gros');
+      
+      if (lotsGros && lotsGros.length > 0) {
+        // Convertir les lots Supabase en format local
+        const lotsConvertis: Lot[] = lotsGros.map(lot => ({
+          id: lot.id,
+          medicamentId: lot.medicament_id,
+          numeroLot: lot.numero_lot,
+          quantiteInitiale: lot.quantite_initiale,
+          quantiteDisponible: lot.quantite_disponible,
+          dateReception: new Date(lot.date_reception),
+          dateExpiration: new Date(lot.date_expiration),
+          fournisseur: lot.fournisseur || '',
+          emplacement: (lot as any).medicaments?.emplacement || '',
+          statut: lot.statut as 'actif' | 'expire' | 'epuise'
+        }));
+        
+        setLots(prev => [...prev, ...lotsConvertis.filter(l => 
+          !prev.some(p => p.id === l.id)
+        )]);
+        
+        // Extraire les médicaments uniques des lots
+        const medicamentsFromLots = lotsGros
+          .filter(lot => lot.medicaments)
+          .map(lot => {
+            const med = lot.medicaments as any;
+            return {
+              id: lot.medicament_id,
+              code: med.code || `MED-${lot.medicament_id.substring(0, 6)}`,
+              nom: med.nom || 'Inconnu',
+              dci: med.dci || '',
+              forme: med.forme || '',
+              dosage: med.dosage || '',
+              unite: med.unite || 'Unité',
+              fournisseur: lot.fournisseur || '',
+              quantiteStock: lot.quantite_disponible,
+              seuilMinimum: med.seuil_alerte || 50,
+              seuilMaximum: med.seuil_maximum || 500,
+              prixUnitaire: med.prix_unitaire || 0,
+              emplacement: med.emplacement || '',
+              observations: med.observations || ''
+            };
+          });
+        
+        // Fusionner avec les médicaments existants
+        const uniqueMeds = new Map<string, Medicament>();
+        [...medicaments, ...medicamentsFromLots].forEach(med => {
+          if (!uniqueMeds.has(med.id) || medicamentsFromLots.some(m => m.id === med.id)) {
+            uniqueMeds.set(med.id, med);
+          }
+        });
+        
+        setMedicaments(Array.from(uniqueMeds.values()));
+        setDataLoaded(true);
+      }
+      
+      // Charger les alertes actives
+      const alertesActives = await StockService.getAlertesActives();
+      if (alertesActives && alertesActives.length > 0) {
+        const alertesConverties: Alerte[] = alertesActives.map(alerte => ({
+          id: alerte.id,
+          type: alerte.type as 'stock_bas' | 'peremption' | 'perte_anormale',
+          niveau: alerte.niveau as 'critique' | 'avertissement' | 'information',
+          message: alerte.message,
+          medicamentId: alerte.medicament_id,
+          dateCreation: new Date(alerte.date_creation),
+          statut: alerte.statut as 'active' | 'resolue' | 'ignoree'
+        }));
+        
+        setAlertes(prev => [...alertesConverties, ...prev.filter(a => 
+          !alertesConverties.some(ac => ac.id === a.id)
+        )]);
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données Supabase:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Charger les données au montage du composant
+  React.useEffect(() => {
+    if (!dataLoaded) {
+      loadRealData();
+    }
+  }, [dataLoaded]);
   
   // Interface pour une ligne de réception
   interface ReceptionLine {
@@ -438,12 +543,12 @@ const StockMedicaments: React.FC = () => {
     );
 
     if (invalidLines.length > 0) {
-      alert('Veuillez remplir tous les champs obligatoires pour chaque ligne de médicament.');
+      showNotification('Veuillez remplir tous les champs obligatoires pour chaque ligne de médicament.', 'error');
       return;
     }
 
     if (!receptionForm.fournisseur) {
-      alert('Veuillez renseigner le fournisseur.');
+      showNotification('Veuillez renseigner le fournisseur.', 'error');
       return;
     }
 
@@ -568,10 +673,10 @@ const StockMedicaments: React.FC = () => {
         prixTotal: 0,
       }]);
       
-      alert(`${receptionLines.length} ligne(s) de réception enregistrée(s) avec succès.`);
+      showNotification(`${receptionLines.length} ligne(s) de réception enregistrée(s) avec succès.`, 'success');
     } catch (error) {
       console.error('Erreur lors de la réception:', error);
-      alert('Erreur lors de la réception. Vérifiez les informations et réessayez.');
+      showNotification('Erreur lors de la réception. Vérifiez les informations et réessayez.', 'error');
     }
   };
 
@@ -606,19 +711,130 @@ const StockMedicaments: React.FC = () => {
     }));
   };
 
-  const handleTransfert = () => {
-    // Logique de transfert
-    console.log('Transfert créé:', transfertForm);
-    setOpenTransfert(false);
-    // Réinitialiser le formulaire
-    setTransfertForm({
-      medicamentId: '',
-      lotId: '',
-      quantite: 0,
-      dateTransfert: new Date().toISOString().split('T')[0],
-      motif: '',
-      reference: ''
-    });
+  const handleTransfert = async () => {
+    // Validation des champs
+    if (!transfertForm.medicamentId || transfertForm.quantite <= 0) {
+      showNotification('Veuillez sélectionner un médicament et entrer une quantité valide.', 'error');
+      return;
+    }
+
+    try {
+      // Trouver le médicament local
+      const medicamentLocal = medicaments.find(m => m.id === transfertForm.medicamentId);
+      if (!medicamentLocal) {
+        showNotification('Médicament non trouvé.', 'error');
+        return;
+      }
+
+      // Vérifier le stock disponible
+      const medicamentLots = getLotsByMedicament(transfertForm.medicamentId);
+      if (medicamentLots.length === 0) {
+        showNotification('Aucun lot disponible pour ce médicament.', 'error');
+        return;
+      }
+
+      // Trouver le lot sélectionné ou le premier lot disponible
+      const lotSelectionne = transfertForm.lotId 
+        ? medicamentLots.find(l => l.id === transfertForm.lotId)
+        : medicamentLots[0];
+
+      if (!lotSelectionne || lotSelectionne.quantiteDisponible < transfertForm.quantite) {
+        showNotification('Stock insuffisant dans le lot sélectionné.', 'error');
+        return;
+      }
+
+      // Récupérer ou créer le médicament dans Supabase
+      let supabaseMedicamentId: string;
+      try {
+        const existingMedicament = await MedicamentService.getMedicamentByCode(medicamentLocal.code);
+        if (existingMedicament) {
+          supabaseMedicamentId = existingMedicament.id;
+        } else {
+          const newMedicament = await MedicamentService.createMedicament({
+            code: medicamentLocal.code,
+            nom: medicamentLocal.nom,
+            forme: medicamentLocal.forme,
+            dosage: medicamentLocal.dosage,
+            unite: medicamentLocal.unite,
+            fournisseur: medicamentLocal.fournisseur,
+            prix_unitaire: medicamentLocal.prixUnitaire,
+            seuil_alerte: medicamentLocal.seuilMinimum,
+            seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+            emplacement: medicamentLocal.emplacement,
+            categorie: 'Général',
+            prescription_requise: false
+          });
+          supabaseMedicamentId = newMedicament.id;
+        }
+      } catch (error: any) {
+        if (error?.code === 'PGRST116') {
+          const newMedicament = await MedicamentService.createMedicament({
+            code: medicamentLocal.code,
+            nom: medicamentLocal.nom,
+            forme: medicamentLocal.forme,
+            dosage: medicamentLocal.dosage,
+            unite: medicamentLocal.unite,
+            fournisseur: medicamentLocal.fournisseur,
+            prix_unitaire: medicamentLocal.prixUnitaire,
+            seuil_alerte: medicamentLocal.seuilMinimum,
+            seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+            emplacement: medicamentLocal.emplacement,
+            categorie: 'Général',
+            prescription_requise: false
+          });
+          supabaseMedicamentId = newMedicament.id;
+        } else {
+          throw error;
+        }
+      }
+
+      // Récupérer les lots Supabase pour trouver le bon lot
+      const lotsSupabase = await StockService.getLotsByMagasin('gros');
+      const lotSupabase = lotsSupabase?.find(l => 
+        l.medicament_id === supabaseMedicamentId && l.quantite_disponible >= transfertForm.quantite
+      );
+
+      if (lotSupabase) {
+        // Créer la demande de transfert dans Supabase
+        await StockService.creerDemandeTransfert({
+          medicament_id: supabaseMedicamentId,
+          lot_id: lotSupabase.id,
+          quantite_demandee: transfertForm.quantite,
+          utilisateur_demandeur_id: 'current-user-id',
+          motif: transfertForm.motif || 'Transfert Gros → Détail',
+          observations: transfertForm.reference
+        });
+      }
+
+      // MAJ locale (optimiste) du stock
+      setLots(prev => prev.map(lot => 
+        lot.id === lotSelectionne.id 
+          ? { ...lot, quantiteDisponible: lot.quantiteDisponible - transfertForm.quantite }
+          : lot
+      ));
+
+      setMedicaments(prev => prev.map(m => 
+        m.id === transfertForm.medicamentId 
+          ? { ...m, quantiteStock: m.quantiteStock - transfertForm.quantite }
+          : m
+      ));
+
+      // Fermer et réinitialiser
+      setOpenTransfert(false);
+      setTransfertForm({
+        medicamentId: '',
+        lotId: '',
+        quantite: 0,
+        dateTransfert: new Date().toISOString().split('T')[0],
+        motif: '',
+        reference: ''
+      });
+      
+      showNotification('Demande de transfert créée avec succès !', 'success');
+    } catch (error) {
+      console.error('Erreur lors de la création du transfert:', error);
+      showNotification('Erreur lors de la création du transfert. Vérifiez les informations et réessayez.', 'error');
+    }
   };
 
   const getLotsByMedicament = (medicamentId: string) => {
@@ -657,7 +873,7 @@ const StockMedicaments: React.FC = () => {
               <Tab icon={<Dashboard />} label="Tableau de Bord" />
               <Tab icon={<Store />} label="Magasin Gros" />
               <Tab icon={<Inventory />} label="Inventaire" />
-              <Tab icon={<LocalShipping />} label="Transferts" />
+              <Tab icon={<LocalShipping />} label="Ajustement" />
               <Tab icon={<Assessment />} label="Rapports" />
               <Tab icon={<Notifications />} label="Alertes" />
               <Tab icon={<Timeline />} label="Traçabilité" />
@@ -724,7 +940,7 @@ const StockMedicaments: React.FC = () => {
                   <Button
                     variant="outlined"
                     startIcon={<Assessment />}
-                    onClick={() => setOpenInventaire(true)}
+                    onClick={() => setActiveTab(2)}
                     size="large"
                   >
                     Inventaire
@@ -761,8 +977,10 @@ const StockMedicaments: React.FC = () => {
                     <Button
                       variant="outlined"
                       startIcon={<Refresh />}
+                      onClick={loadRealData}
+                      disabled={loading}
                     >
-                      Actualiser
+                      {loading ? 'Chargement...' : 'Actualiser'}
                     </Button>
                   </Box>
         </Box>
@@ -896,25 +1114,13 @@ const StockMedicaments: React.FC = () => {
 
         {/* Onglet Inventaire */}
         {activeTab === 2 && (
-          <Box>
-            <GlassCard sx={{ p: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Inventaire - Magasin Gros
-                </Typography>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  Fonctionnalité d'inventaire en cours de développement.
-                  Cette fonction permettra de comparer le stock théorique au stock réel.
-                </Alert>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button variant="contained" startIcon={<Add />}>
-                    Nouvel Inventaire
-                  </Button>
-                  <Button variant="outlined" startIcon={<Visibility />}>
-                    Voir Inventaires Précédents
-                  </Button>
-                </Box>
-            </GlassCard>
-          </Box>
+          <GestionInventaire
+            magasinType="stock_central"
+            magasinId="magasin-gros"
+            magasinNom="Magasin Gros - Stock Central"
+            utilisateurId="current-user-id"
+            utilisateurNom="Responsable Centre"
+          />
         )}
 
         {/* Onglet Transferts */}
@@ -956,9 +1162,6 @@ const StockMedicaments: React.FC = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Button variant="outlined" startIcon={<LocalShipping />}>
                         Transferts vers Détail
-                      </Button>
-                      <Button variant="outlined" startIcon={<Undo />}>
-                        Retours du Détail
                       </Button>
                       <Button variant="outlined" startIcon={<TrendingUp />}>
                         Tendances de Consommation
@@ -1251,20 +1454,6 @@ const StockMedicaments: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-        {/* Dialog Inventaire */}
-        <Dialog open={openInventaire} onClose={() => setOpenInventaire(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Inventaire - Magasin Gros</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-              Fonctionnalité d'inventaire en cours de développement.
-              Cette fonction permettra de comparer le stock théorique au stock réel.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-            <Button onClick={() => setOpenInventaire(false)}>Fermer</Button>
-        </DialogActions>
-      </Dialog>
-
         {/* Dialog Rapport */}
         <Dialog open={openRapport} onClose={() => setOpenRapport(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Générer Rapport - Magasin Gros</DialogTitle>
@@ -1278,6 +1467,23 @@ const StockMedicaments: React.FC = () => {
             <Button onClick={() => setOpenRapport(false)}>Fermer</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar pour les notifications */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4000}
+        onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          severity={notification.type}
+          sx={{ width: '100%' }}
+          icon={notification.type === 'success' ? <CheckCircle /> : notification.type === 'error' ? <ErrorOutline /> : undefined}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
 
       {/* Dialog Nouveau Médicament */}
       <Dialog open={openNouveauMedicament} onClose={() => setOpenNouveauMedicament(false)} maxWidth="md" fullWidth>

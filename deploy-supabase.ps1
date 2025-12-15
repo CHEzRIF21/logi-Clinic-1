@@ -22,7 +22,7 @@ Write-Host "1. Allez sur: https://supabase.com/dashboard/account/tokens" -Foregr
 Write-Host "2. Créez un nouveau token (ou utilisez un token existant)" -ForegroundColor White
 Write-Host "3. Exécutez cette commande avec votre token:" -ForegroundColor White
 Write-Host ""
-Write-Host "   `$env:SUPABASE_ACCESS_TOKEN='votre-token-ici'" -ForegroundColor Cyan
+Write-Host "   `$env:SUPABASE_ACCESS_TOKEN=sbp_5da8e97668cd218ba3095c6f1321603303f5aee3" -ForegroundColor Cyan
 Write-Host "   npx supabase link --project-ref bnfgemmlokvetmohiqch" -ForegroundColor Cyan
 Write-Host "   npx supabase functions deploy api" -ForegroundColor Cyan
 Write-Host ""
