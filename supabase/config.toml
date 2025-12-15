@@ -1,0 +1,28 @@
+# Supabase Configuration
+project_id = "bnfgemmlokvetmohiqch"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "https://logi-clinic-1-git-lint-fix-chezrifs-projects.vercel.app"
+additional_redirect_urls = ["https://logi-clinic-1-git-lint-fix-chezrifs-projects.vercel.app"]
+jwt_expiry = 3600
+enable_signup = true
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[functions]
+# verify_jwt est géré par chaque fonction individuellement

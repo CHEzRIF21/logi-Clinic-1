@@ -77,9 +77,9 @@ export default defineConfig({
         // Éviter les problèmes de dépendances circulaires
         hoistTransitiveImports: false,
       },
-      // Éviter les problèmes de minification avec les dépendances circulaires
+      // Garder les effets de bord des modules pour éviter les erreurs d'initialisation
       treeshake: {
-        moduleSideEffects: false,
+        moduleSideEffects: true,
       },
     },
   },

@@ -1,0 +1,84 @@
+===========================================
+🚀 COMMANDES DE DÉPLOIEMENT - LOGI CLINIC
+===========================================
+
+📋 ÉTAPE 1 : Obtenir votre token Supabase
+------------------------------------------
+1. Ouvrez votre navigateur et allez sur :
+   https://supabase.com/dashboard/account/tokens
+
+2. Cliquez sur "Generate new token"
+3. Donnez un nom : "Logi Clinic Deployment"
+4. COPIEZ le token (vous ne pourrez plus le voir après !)
+
+📋 ÉTAPE 2 : Exécuter ces commandes dans PowerShell
+----------------------------------------------------
+
+# Remplacez YOUR_TOKEN par le token que vous avez copié
+$env:SUPABASE_ACCESS_TOKEN='YOUR_TOKEN'
+
+# Aller dans le dossier du projet
+cd "c:\Users\Mustafa\Desktop\logi Clinic 1"
+
+# Lier le projet Supabase
+npx supabase link --project-ref bnfgemmlokvetmohiqch
+
+# Déployer les fonctions
+npx supabase functions deploy api
+
+===========================================
+✅ Si tout s'est bien passé, vous verrez :
+===========================================
+✅ Function api deployed successfully
+✅ URL: https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api
+
+===========================================
+🔑 ÉTAPE 3 : Configurer les secrets Supabase
+===========================================
+1. Allez sur : https://supabase.com/dashboard/project/bnfgemmlokvetmohiqch/settings/functions
+2. Section "Secrets"
+3. Cliquez sur "Add secret" et ajoutez :
+
+   Secret 1:
+   Nom: SUPABASE_URL
+   Valeur: https://bnfgemmlokvetmohiqch.supabase.co
+
+   Secret 2:
+   Nom: SUPABASE_ANON_KEY
+   Valeur: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
+
+===========================================
+🌐 ÉTAPE 4 : Configurer Vercel (Frontend)
+===========================================
+1. Allez sur : https://vercel.com/dashboard
+2. Sélectionnez votre projet "logi-clinic-1"
+3. Settings → Environment Variables
+4. Ajoutez ces 3 variables :
+
+   Variable 1:
+   Key: VITE_API_URL
+   Value: https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api
+   Environment: Production, Preview, Development
+
+   Variable 2:
+   Key: VITE_SUPABASE_URL
+   Value: https://bnfgemmlokvetmohiqch.supabase.co
+   Environment: Production, Preview, Development
+
+   Variable 3:
+   Key: VITE_SUPABASE_ANON_KEY
+   Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
+   Environment: Production, Preview, Development
+
+5. Redéployez votre projet (ou faites un nouveau commit)
+
+===========================================
+✅ TESTER VOTRE API
+===========================================
+# Test health check
+curl https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api/health
+
+# Ou dans PowerShell :
+Invoke-WebRequest -Uri "https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api/health" -Method GET
+
+===========================================

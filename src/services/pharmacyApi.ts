@@ -1,6 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  'http://localhost:3001/api/pharmacy';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Vérification que l'URL API est configurée en production
+if (!API_BASE_URL && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+  console.error('⚠️ VITE_API_URL non configurée. Configurez cette variable dans Vercel.');
+}
 
 interface ApiResponse<T> {
   success: boolean;
