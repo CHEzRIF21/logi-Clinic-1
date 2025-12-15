@@ -4,29 +4,35 @@
 
 Ce projet nécessite un fichier `.env` à la racine avec les variables d'environnement suivantes.
 
-## 📋 Variables Requises
+## 📋 Variables Requises pour Vercel (Production)
 
 ### 1. VITE_API_URL (OBLIGATOIRE)
-URL de l'API backend. Par défaut, le serveur backend tourne sur le port 3000.
+URL de votre API backend (Supabase Edge Functions).
 
+**Pour Vercel (Production) :**
+```env
+VITE_API_URL=https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api
+```
+
+**Pour développement local :**
 ```env
 VITE_API_URL=http://localhost:3000/api
 ```
 
-**Note:** Si votre serveur backend tourne sur un autre port, ajustez l'URL en conséquence.
-
 ### 2. VITE_SUPABASE_URL (OBLIGATOIRE)
 URL de votre projet Supabase.
 
+**Valeur :**
 ```env
-VITE_SUPABASE_URL=https://votre-projet.supabase.co
+VITE_SUPABASE_URL=https://bnfgemmlokvetmohiqch.supabase.co
 ```
 
 ### 3. VITE_SUPABASE_ANON_KEY (OBLIGATOIRE)
 Clé anonyme (publishable) de votre projet Supabase.
 
+**Valeur :**
 ```env
-VITE_SUPABASE_ANON_KEY=votre-anon-key-ici
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
 ```
 
 ### 4. Variables Optionnelles pour le Stock

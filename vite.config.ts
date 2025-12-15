@@ -23,63 +23,23 @@ export default defineConfig({
     minify: 'esbuild', // Utilise esbuild pour un minification plus rapide
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // Vendor chunks
-          if (id.includes('node_modules')) {
-            // React et React DOM
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
-              return 'vendor-react';
-            }
-            // Material-UI
-            if (id.includes('@mui')) {
-              return 'vendor-mui';
-            }
-            // Supabase
-            if (id.includes('@supabase')) {
-              return 'vendor-supabase';
-            }
-            // PDF et impression
-            if (id.includes('jspdf') || id.includes('html2canvas')) {
-              return 'vendor-pdf';
-            }
-            // Graphiques
-            if (id.includes('recharts') || id.includes('d3')) {
-              return 'vendor-charts';
-            }
-            // Formulaires et validation
-            if (id.includes('react-hook-form') || id.includes('yup') || id.includes('zod')) {
-              return 'vendor-forms';
-            }
-            // Dates
-            if (id.includes('date-fns') || id.includes('moment') || id.includes('dayjs')) {
-              return 'vendor-dates';
-            }
-            // Radix UI
-            if (id.includes('@radix-ui')) {
-              return 'vendor-radix';
-            }
-            // Autres dépendances importantes mais plus petites
-            if (id.includes('axios') || id.includes('jwt-decode')) {
-              return 'vendor-utils';
-            }
-            // Toutes les autres dépendances node_modules
-            return 'vendor-other';
-          }
-          // Chunks pour les services
-          if (id.includes('/src/services/')) {
-            return 'services';
-          }
-          // Chunks pour les pages
-          if (id.includes('/src/pages/')) {
-            return 'pages';
-          }
+        // Stratégie de chunking simplifiée pour éviter les problèmes de dépendances circulaires
+        manualChunks: {
+          // React core - doit être chargé en premier
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // Material-UI
+          'vendor-mui': ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-date-pickers', '@emotion/react', '@emotion/styled'],
+          // Supabase
+          'vendor-supabase': ['@supabase/supabase-js'],
+          // PDF
+          'vendor-pdf': ['jspdf', 'jspdf-autotable'],
+          // Charts
+          'vendor-charts': ['recharts'],
+          // Dates
+          'vendor-dates': ['date-fns'],
+          // Utils
+          'vendor-utils': ['axios', 'jwt-decode', 'clsx', 'class-variance-authority', 'tailwind-merge'],
         },
-        // Éviter les problèmes de dépendances circulaires
-        hoistTransitiveImports: false,
-      },
-      // Garder les effets de bord des modules pour éviter les erreurs d'initialisation
-      treeshake: {
-        moduleSideEffects: true,
       },
     },
   },

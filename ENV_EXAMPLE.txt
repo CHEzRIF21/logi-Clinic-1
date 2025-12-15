@@ -1,0 +1,45 @@
+# ============================================
+# Variables d'environnement - Logi Clinic
+# ============================================
+# 
+# IMPORTANT: 
+# - Copiez ce fichier vers .env pour le développement local
+# - Pour Vercel, configurez ces variables dans le Dashboard Vercel
+# - Ne commitez JAMAIS le fichier .env (il est dans .gitignore)
+#
+# ============================================
+
+# ============================================
+# API BACKEND (OBLIGATOIRE)
+# ============================================
+# URL de votre API backend
+# En production (Vercel) : URL de vos Supabase Edge Functions
+# En développement local : URL de votre serveur backend local
+VITE_API_URL=https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api
+
+# ============================================
+# SUPABASE - PROJET PRINCIPAL (OBLIGATOIRE)
+# ============================================
+# URL de votre projet Supabase
+VITE_SUPABASE_URL=https://bnfgemmlokvetmohiqch.supabase.co
+
+# Clé anonyme (publishable) de votre projet Supabase
+# ⚠️ Cette clé est publique et peut être exposée dans le code client
+# ⚠️ Ne jamais utiliser la clé service_role dans le frontend !
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
+
+# ============================================
+# SUPABASE - MODULE STOCK (OPTIONNEL)
+# ============================================
+# Si vous utilisez un projet Supabase séparé pour le module Stock
+# Laissez vide si vous utilisez le même projet que le principal
+# VITE_STOCK_SUPABASE_URL=https://votre-projet-stock.supabase.co
+# VITE_STOCK_SUPABASE_ANON_KEY=votre-anon-key-stock-ici
+
+# ============================================
+# CONFIGURATION POUR DÉVELOPPEMENT LOCAL
+# ============================================
+# Si vous développez en local, décommentez et ajustez ces valeurs :
+# VITE_API_URL=http://localhost:3000/api
+# VITE_SUPABASE_URL=https://bnfgemmlokvetmohiqch.supabase.co
+# VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
