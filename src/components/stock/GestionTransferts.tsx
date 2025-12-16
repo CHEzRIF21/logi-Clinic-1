@@ -55,10 +55,12 @@ import {
   Refresh,
   Print,
   Download,
+  Delete,
 } from '@mui/icons-material';
 import { StockService } from '../../services/stockService';
 import { TransfertSupabase, TransfertLigneSupabase, LotSupabase, MedicamentSupabase } from '../../services/stockSupabase';
 import { supabase } from '../../services/supabase';
+import { useMedicaments } from '../../hooks/useMedicaments';
 
 // Types pour les transferts
 interface Transfert {
@@ -108,7 +110,9 @@ const GestionTransferts: React.FC = () => {
   // Données réelles
   const [transferts, setTransferts] = useState<TransfertSupabase[]>([]);
   const [lots, setLots] = useState<LotSupabase[]>([]);
-  const [medicaments, setMedicaments] = useState<MedicamentSupabase[]>([]);
+  
+  // Utiliser le hook centralisé pour les médicaments
+  const { medicaments } = useMedicaments({ autoRefresh: true });
 
   // États pour les formulaires
   const [demandeForm, setDemandeForm] = useState({
@@ -119,6 +123,21 @@ const GestionTransferts: React.FC = () => {
     observations: '',
     priorite: 'normale'
   });
+
+  // État pour transfert multiple
+  interface LigneTransfert {
+    id: string; // ID temporaire pour la liste
+    medicament_id: string;
+    medicament_nom?: string;
+    lot_id: string;
+    lot_numero?: string;
+    quantite_demandee: number;
+    stock_disponible?: number;
+  }
+
+  const [lignesTransfert, setLignesTransfert] = useState<LigneTransfert[]>([]);
+  const [motifTransfert, setMotifTransfert] = useState('');
+  const [observationsTransfert, setObservationsTransfert] = useState('');
 
   const [validationForm, setValidationForm] = useState({
     observations: '',
@@ -137,15 +156,14 @@ const GestionTransferts: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [transfertsData, lotsData, medicamentsData] = await Promise.all([
+      const [transfertsData, lotsData] = await Promise.all([
         StockService.getTransfertsEnCours(),
-        StockService.getLotsByMagasin('gros'),
-        supabase.from('medicaments').select('*')
+        StockService.getLotsByMagasin('gros')
       ]);
       
       setTransferts(transfertsData || []);
       setLots(lotsData || []);
-      setMedicaments(medicamentsData.data || []);
+      // Les médicaments sont chargés automatiquement par le hook useMedicaments
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
     } finally {
@@ -230,27 +248,88 @@ const GestionTransferts: React.FC = () => {
   const handleCreateDemande = async () => {
     try {
       setLoading(true);
-      await StockService.creerDemandeTransfert({
-        ...demandeForm,
-        utilisateur_demandeur_id: 'current-user-id' // À remplacer par l'ID utilisateur réel
+      
+      // Validation des lignes
+      if (lignesTransfert.length === 0) {
+        alert('Veuillez ajouter au moins un médicament au transfert');
+        return;
+      }
+
+      // Vérifier que toutes les lignes sont complètes
+      const lignesIncompletes = lignesTransfert.filter(l => 
+        !l.medicament_id || !l.lot_id || l.quantite_demandee <= 0
+      );
+      
+      if (lignesIncompletes.length > 0) {
+        alert('Veuillez compléter toutes les lignes (médicament, lot et quantité)');
+        return;
+      }
+
+      // Vérifier les stocks disponibles
+      for (const ligne of lignesTransfert) {
+        if (ligne.stock_disponible !== undefined && ligne.quantite_demandee > ligne.stock_disponible) {
+          const medicament = medicaments.find(m => m.id === ligne.medicament_id);
+          alert(`Stock insuffisant pour ${medicament?.nom || 'ce médicament'}. Disponible: ${ligne.stock_disponible}, Demandé: ${ligne.quantite_demandee}`);
+          return;
+        }
+      }
+      
+      // Créer le transfert multiple
+      await StockService.creerDemandeTransfertMultiple({
+        lignes: lignesTransfert.map(l => ({
+          medicament_id: l.medicament_id,
+          lot_id: l.lot_id,
+          quantite_demandee: l.quantite_demandee
+        })),
+        utilisateur_demandeur_id: 'current-user-id', // À remplacer par l'ID utilisateur réel
+        motif: motifTransfert || 'Transfert Gros → Détail',
+        observations: observationsTransfert
       });
       
+      // Réinitialiser le formulaire
+      setLignesTransfert([]);
+      setMotifTransfert('');
+      setObservationsTransfert('');
       setOpenDemande(false);
-      setDemandeForm({
-        medicament_id: '',
-        lot_id: '',
-        quantite_demandee: 0,
-        motif: '',
-        observations: '',
-        priorite: 'normale'
-      });
       
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de la création de la demande:', error);
+      alert(error.message || 'Erreur lors de la création du transfert');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fonctions pour gérer les lignes de transfert multiple
+  const ajouterLigneTransfert = () => {
+    const nouvelleLigne: LigneTransfert = {
+      id: `temp-${Date.now()}-${Math.random()}`,
+      medicament_id: '',
+      lot_id: '',
+      quantite_demandee: 0
+    };
+    setLignesTransfert([...lignesTransfert, nouvelleLigne]);
+  };
+
+  const supprimerLigneTransfert = (id: string) => {
+    setLignesTransfert(lignesTransfert.filter(l => l.id !== id));
+  };
+
+  const mettreAJourLigneTransfert = (id: string, updates: Partial<LigneTransfert>) => {
+    setLignesTransfert(lignesTransfert.map(l => 
+      l.id === id ? { ...l, ...updates } : l
+    ));
+  };
+
+  // Charger les lots disponibles pour un médicament
+  const getLotsDisponibles = (medicamentId: string) => {
+    return lots.filter(l => 
+      l.medicament_id === medicamentId && 
+      l.magasin === 'gros' && 
+      l.statut === 'actif' &&
+      l.quantite_disponible > 0
+    );
   };
 
   const handleValidateTransfert = async () => {
@@ -382,9 +461,15 @@ const GestionTransferts: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<Add />}
-                  onClick={() => setOpenDemande(true)}
+              onClick={() => {
+                // Initialiser avec une ligne vide pour faciliter l'ajout
+                if (lignesTransfert.length === 0) {
+                  ajouterLigneTransfert();
+                }
+                setOpenDemande(true);
+              }}
             >
-                  Nouvelle Commande
+              Nouvelle Commande
             </Button>
           </Box>
 
@@ -817,7 +902,7 @@ const GestionTransferts: React.FC = () => {
       )}
 
       {/* Dialogs */}
-      {/* Dialog Nouvelle Demande - Ne se ferme qu'avec les boutons Annuler/Valider */}
+      {/* Dialog Nouvelle Demande - Transfert Multiple */}
       <Dialog 
         open={openDemande} 
         onClose={(event, reason) => {
@@ -827,94 +912,223 @@ const GestionTransferts: React.FC = () => {
           }
         }} 
         disableEscapeKeyDown
-        maxWidth="sm" 
+        maxWidth="lg" 
         fullWidth
       >
-        <DialogTitle>Nouvelle Commande de Ravitaillement</DialogTitle>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">Nouvelle Commande de Ravitaillement</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Add />}
+              onClick={ajouterLigneTransfert}
+            >
+              Ajouter Médicament
+            </Button>
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
+            {/* Tableau des lignes de transfert */}
+            {lignesTransfert.length > 0 ? (
+              <Grid item xs={12}>
+                <TableContainer component={Paper} sx={{ maxHeight: 400, overflow: 'auto' }}>
+                  <Table stickyHeader size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Médicament</TableCell>
+                        <TableCell>Lot</TableCell>
+                        <TableCell align="right">Stock Disponible</TableCell>
+                        <TableCell align="right">Quantité</TableCell>
+                        <TableCell width={50}>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {lignesTransfert.map((ligne) => {
+                        const medicament = medicaments.find(m => m.id === ligne.medicament_id);
+                        const lotsDispo = getLotsDisponibles(ligne.medicament_id);
+                        const lotSelectionne = lotsDispo.find(l => l.id === ligne.lot_id);
+                        const hasError = ligne.stock_disponible !== undefined && ligne.quantite_demandee > ligne.stock_disponible;
+                        const isIncomplete = !ligne.medicament_id || !ligne.lot_id || ligne.quantite_demandee <= 0;
+                        
+                        return (
+                          <TableRow 
+                            key={ligne.id}
+                            sx={{
+                              backgroundColor: hasError ? 'error.light' : isIncomplete ? 'warning.light' : 'inherit',
+                              '&:hover': {
+                                backgroundColor: hasError ? 'error.light' : isIncomplete ? 'warning.light' : 'action.hover'
+                              }
+                            }}
+                          >
+                            <TableCell>
+                              <Autocomplete
+                                size="small"
+                                options={medicaments}
+                                getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
+                                value={medicament || null}
+                                onChange={(_, newValue) => {
+                                  if (newValue) {
+                                    mettreAJourLigneTransfert(ligne.id, {
+                                      medicament_id: newValue.id,
+                                      medicament_nom: `${newValue.nom} ${newValue.dosage || ''}`,
+                                      lot_id: '', // Réinitialiser le lot
+                                      lot_numero: undefined,
+                                      stock_disponible: undefined
+                                    });
+                                  }
+                                }}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    placeholder="Sélectionner un médicament"
+                                    required
+                                  />
+                                )}
+                                sx={{ minWidth: 250 }}
+                                ListboxProps={{ style: { maxHeight: 200 } }}
+                                noOptionsText="Aucun médicament"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {ligne.medicament_id ? (
+                                <FormControl size="small" sx={{ minWidth: 180 }}>
+                                  <Select
+                                    value={ligne.lot_id}
+                                    onChange={(e) => {
+                                      const lotId = e.target.value;
+                                      const lot = lotsDispo.find(l => l.id === lotId);
+                                      mettreAJourLigneTransfert(ligne.id, {
+                                        lot_id: lotId,
+                                        lot_numero: lot?.numero_lot,
+                                        stock_disponible: lot?.quantite_disponible
+                                      });
+                                    }}
+                                    displayEmpty
+                                  >
+                                    <MenuItem value="">
+                                      <em>Sélectionner un lot</em>
+                                    </MenuItem>
+                                    {lotsDispo.map((lot) => (
+                                      <MenuItem key={lot.id} value={lot.id}>
+                                        {lot.numero_lot} (Exp: {new Date(lot.date_expiration).toLocaleDateString('fr-FR')})
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                  Sélectionner d'abord un médicament
+                                </Typography>
+                              )}
+                            </TableCell>
+                            <TableCell align="right">
+                              {ligne.stock_disponible !== undefined ? (
+                                <Typography variant="body2" fontWeight="bold">
+                                  {ligne.stock_disponible}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">-</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={ligne.quantite_demandee || ''}
+                                onChange={(e) => {
+                                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                                  mettreAJourLigneTransfert(ligne.id, { quantite_demandee: value });
+                                }}
+                                inputProps={{ min: 0, step: 1, max: ligne.stock_disponible }}
+                                sx={{ width: 100 }}
+                                error={ligne.stock_disponible !== undefined && ligne.quantite_demandee > (ligne.stock_disponible || 0)}
+                                helperText={
+                                  ligne.stock_disponible !== undefined && ligne.quantite_demandee > (ligne.stock_disponible || 0)
+                                    ? 'Quantité > Stock disponible'
+                                    : ''
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => supprimerLigneTransfert(ligne.id)}
+                              >
+                                <Delete />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+            ) : (
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  Cliquez sur "Ajouter Médicament" pour commencer à créer un transfert.
+                </Alert>
+              </Grid>
+            )}
+
+            {/* Motif et observations */}
             <Grid item xs={12}>
-              <Autocomplete
-                options={medicaments}
-                getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
-                value={medicaments.find(m => m.id === demandeForm.medicament_id) || null}
-                onChange={(_, newValue) => {
-                  if (newValue) {
-                    setDemandeForm(prev => ({ ...prev, medicament_id: newValue.id }));
-                  } else {
-                    setDemandeForm(prev => ({ ...prev, medicament_id: '' }));
-                  }
-                }}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props} key={option.id}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {option.nom} {option.dosage || ''}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {option.code} • {option.forme || ''}
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Médicament"
-                    placeholder="Sélectionner un médicament"
-                    required
-                  />
-                )}
-                ListboxProps={{
-                  style: { maxHeight: 300 }
-                }}
-                noOptionsText="Aucun médicament trouvé"
-                openOnFocus
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
+              <Divider sx={{ my: 2 }} />
               <TextField
                 fullWidth
-                label="Quantité demandée"
-                type="number"
-                value={demandeForm.quantite_demandee}
-                onChange={(e) => {
-                  const value = Math.max(0, parseInt(e.target.value) || 0);
-                  setDemandeForm(prev => ({ ...prev, quantite_demandee: value }));
-                }}
-                inputProps={{ min: 0, step: 1 }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Priorité</InputLabel>
-                <Select
-                  value={demandeForm.priorite}
-                  onChange={(e) => setDemandeForm(prev => ({ ...prev, priorite: e.target.value }))}
-                  label="Priorité"
-                >
-                  <MenuItem value="normale">Normale</MenuItem>
-                  <MenuItem value="urgente">Urgente</MenuItem>
-                  <MenuItem value="critique">Critique</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Motif de la demande"
+                label="Motif du transfert"
                 multiline
-                rows={3}
-                value={demandeForm.motif}
-                onChange={(e) => setDemandeForm(prev => ({ ...prev, motif: e.target.value }))}
+                rows={2}
+                value={motifTransfert}
+                onChange={(e) => setMotifTransfert(e.target.value)}
+                placeholder="Ex: Réapprovisionnement magasin détail, Stock faible..."
               />
             </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Observations (optionnel)"
+                multiline
+                rows={2}
+                value={observationsTransfert}
+                onChange={(e) => setObservationsTransfert(e.target.value)}
+              />
+            </Grid>
+
+            {/* Résumé */}
+            {lignesTransfert.length > 0 && (
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  <Typography variant="body2">
+                    <strong>{lignesTransfert.length}</strong> médicament(s) à transférer
+                    {lignesTransfert.reduce((sum, l) => sum + (l.quantite_demandee || 0), 0) > 0 && (
+                      <> • Total: <strong>{lignesTransfert.reduce((sum, l) => sum + (l.quantite_demandee || 0), 0)}</strong> unités</>
+                    )}
+                  </Typography>
+                </Alert>
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDemande(false)}>Annuler</Button>
-          <Button onClick={handleCreateDemande} variant="contained">
-            Créer Demande
+          <Button onClick={() => {
+            setOpenDemande(false);
+            setLignesTransfert([]);
+            setMotifTransfert('');
+            setObservationsTransfert('');
+          }}>
+            Annuler
+          </Button>
+          <Button 
+            onClick={handleCreateDemande} 
+            variant="contained"
+            disabled={lignesTransfert.length === 0 || lignesTransfert.some(l => !l.medicament_id || !l.lot_id || l.quantite_demandee <= 0)}
+          >
+            Créer Transfert ({lignesTransfert.length})
           </Button>
         </DialogActions>
       </Dialog>

@@ -28,6 +28,11 @@ export interface DispensationFormData {
   patient_nom: string;
   patient_prenoms?: string;
   statut_prise_charge?: string;
+  assurance_id?: string;
+  assurance_nom?: string;
+  taux_couverture?: number; // pourcentage (0..100)
+  plafond_assurance?: number; // XOF/FCFA (optionnel)
+  reference_prise_en_charge?: string;
   prescripteur_id?: string;
   prescripteur_nom: string;
   service_prescripteur?: string;
@@ -57,10 +62,20 @@ export interface Dispensation {
   prescription_id?: string;
   utilisateur_id: string;
   observations?: string;
+  assurance_id?: string;
+  taux_couverture?: number;
+  montant_total?: number;
+  montant_assurance?: number;
+  montant_patient?: number;
+  reference_prise_en_charge?: string;
   lignes?: DispensationLigne[];
   created_at: string;
   updated_at: string;
 }
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+// Arrondi XOF/FCFA (sans centimes)
+const roundXof = (value: number) => Math.round(value);
 
 export interface LotDisponible {
   id: string;
@@ -339,6 +354,9 @@ export class DispensationService {
           consultation_id: data.consultation_id,
           prescription_id: data.prescription_id,
           statut_prise_charge: data.statut_prise_charge,
+          assurance_id: data.assurance_id || null,
+          taux_couverture: data.assurance_id ? clamp(Number(data.taux_couverture || 0), 0, 100) : null,
+          reference_prise_en_charge: data.reference_prise_en_charge || null,
           observations: data.observations,
         })
         .select()
@@ -446,28 +464,82 @@ export class DispensationService {
         details: { type: 'creation', lignes: data.lignes.length },
       });
 
-      // Création automatique du ticket de facturation vers le module Caisse
-      // Uniquement pour les dispensations patient (pas les services internes)
+      // ======================================================
+      // Tiers-payant (Phase 3): création de 2 tickets
+      // - Ticket patient (reste à charge)
+      // - Ticket assurance (créance assureur)
+      // ======================================================
       if (data.type_dispensation === 'patient' && data.patient_id) {
-        const montantTotal = data.lignes.reduce((sum, ligne) => sum + ligne.prix_total, 0);
-        
-        if (montantTotal > 0) {
-          try {
-            // Construire la description des médicaments
-            const descriptionMedicaments = data.lignes
-              .map(l => `${l.medicament_nom} (x${l.quantite_delivree})`)
-              .join(', ');
+        const montantTotalRaw = data.lignes.reduce((sum, ligne) => sum + (ligne.prix_total || 0), 0);
+        const montantTotal = roundXof(Math.max(0, montantTotalRaw));
 
+        const taux = data.assurance_id ? clamp(Number(data.taux_couverture || 0), 0, 100) : 0;
+        const plafond = data.assurance_id ? Number(data.plafond_assurance || 0) : 0;
+
+        let montantAssurance = 0;
+        if (data.assurance_id && taux > 0) {
+          montantAssurance = montantTotal * (taux / 100);
+          if (plafond && plafond > 0) montantAssurance = Math.min(montantAssurance, plafond);
+          montantAssurance = roundXof(Math.max(0, montantAssurance));
+        }
+        const montantPatient = roundXof(Math.max(0, montantTotal - montantAssurance));
+
+        // Persist montants sur la dispensation (best-effort)
+        try {
+          await supabase
+            .from('dispensations')
+            .update({
+              montant_total: montantTotal,
+              montant_assurance: montantAssurance,
+              montant_patient: montantPatient,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', dispensation.id);
+        } catch (e) {
+          console.warn('Mise à jour montants dispensation (non bloquant):', e);
+        }
+
+        const descriptionMedicaments = data.lignes
+          .map((l) => `${l.medicament_nom} (x${l.quantite_delivree})`)
+          .join(', ');
+
+        // Ticket patient
+        if (montantPatient > 0) {
+          try {
             await FacturationService.creerTicketFacturation(
               data.patient_id,
-              'pharmacie', // serviceOrigine
-              dispensation.id, // referenceOrigine
-              `Dispensation: ${descriptionMedicaments}`, // typeActe
-              montantTotal // montant
+              'pharmacie',
+              dispensation.id,
+              `Dispensation (Patient): ${descriptionMedicaments}`,
+              montantPatient,
+              {
+                payeur_type: 'patient',
+                payeur_id: data.patient_id,
+                payeur_nom: `${data.patient_nom || ''} ${data.patient_prenoms || ''}`.trim() || null,
+              }
             );
           } catch (ticketError) {
-            // Log mais ne pas bloquer la dispensation si le ticket échoue
-            console.error('Erreur création ticket facturation dispensation:', ticketError);
+            console.error('Erreur création ticket patient (dispensation):', ticketError);
+          }
+        }
+
+        // Ticket assurance
+        if (data.assurance_id && montantAssurance > 0) {
+          try {
+            await FacturationService.creerTicketFacturation(
+              data.patient_id,
+              'pharmacie',
+              dispensation.id,
+              `Dispensation (Assurance): ${descriptionMedicaments}`,
+              montantAssurance,
+              {
+                payeur_type: 'assurance',
+                payeur_id: data.assurance_id,
+                payeur_nom: data.assurance_nom || null,
+              }
+            );
+          } catch (ticketError) {
+            console.error('Erreur création ticket assurance (dispensation):', ticketError);
           }
         }
       }

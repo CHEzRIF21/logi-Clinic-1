@@ -103,6 +103,21 @@ const GestionTickets: React.FC = () => {
       return;
     }
 
+    const selected = tickets.filter(t => ticketsSelectionnes.includes(t.id));
+    const patientIds = Array.from(new Set(selected.map(t => t.patient_id)));
+    if (patientIds.length !== 1) {
+      setError('Veuillez sélectionner des tickets d’un seul patient');
+      return;
+    }
+
+    const payeurKeys = Array.from(new Set(
+      selected.map(t => `${t.payeur_type || 'patient'}::${t.payeur_id || t.patient_id}`)
+    ));
+    if (payeurKeys.length !== 1) {
+      setError('Veuillez sélectionner des tickets d’un seul payeur (Patient ou Assurance)');
+      return;
+    }
+
     setOpenCreationFacture(true);
   };
 
@@ -172,7 +187,7 @@ const GestionTickets: React.FC = () => {
           {ticketsSelectionnes.length > 0 && (
             <Alert severity="info" sx={{ mb: 2 }}>
               {ticketsSelectionnes.length} ticket(s) sélectionné(s) - 
-              Total: <strong>{totalTicketsSelectionnes.toLocaleString()} FCFA</strong>
+              Total: <strong>{totalTicketsSelectionnes.toLocaleString()} XOF</strong>
             </Alert>
           )}
 
@@ -193,6 +208,7 @@ const GestionTickets: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>Patient</TableCell>
+                    <TableCell>Payeur</TableCell>
                     <TableCell>Service</TableCell>
                     <TableCell>Type d'Acte</TableCell>
                     <TableCell align="right">Montant</TableCell>
@@ -203,6 +219,7 @@ const GestionTickets: React.FC = () => {
                 <TableBody>
                   {tickets.map((ticket) => {
                     const patient = patients.find(p => p.id === ticket.patient_id);
+                    const payeurType = ticket.payeur_type || 'patient';
                     return (
                       <TableRow key={ticket.id} hover>
                         <TableCell padding="checkbox">
@@ -227,6 +244,18 @@ const GestionTickets: React.FC = () => {
                           ) : (
                             <Typography variant="body2">Patient inconnu</Typography>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            color={payeurType === 'assurance' ? 'info' : 'default'}
+                            label={
+                              payeurType === 'assurance'
+                                ? (ticket.payeur_nom || 'Assurance')
+                                : 'Patient'
+                            }
+                            variant="outlined"
+                          />
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -273,10 +302,17 @@ const GestionTickets: React.FC = () => {
           {ticketsSelectionnes.length > 0 && (
             <Box>
               <Alert severity="info" sx={{ mb: 2 }}>
-                {ticketsSelectionnes.length} ticket(s) seront facturés pour un total de {totalTicketsSelectionnes.toLocaleString()} FCFA
+                {ticketsSelectionnes.length} ticket(s) seront facturés pour un total de {totalTicketsSelectionnes.toLocaleString()} XOF
               </Alert>
               <CreationFacture
                 patientId={tickets.find(t => ticketsSelectionnes.includes(t.id))?.patient_id}
+                ticketIds={ticketsSelectionnes}
+                ticketsPrefill={tickets.filter(t => ticketsSelectionnes.includes(t.id))}
+                payeur={{
+                  type: (tickets.find(t => ticketsSelectionnes.includes(t.id))?.payeur_type || 'patient') as any,
+                  id: tickets.find(t => ticketsSelectionnes.includes(t.id))?.payeur_id,
+                  nom: tickets.find(t => ticketsSelectionnes.includes(t.id))?.payeur_nom,
+                }}
                 onFactureCree={() => {
                   setOpenCreationFacture(false);
                   setTicketsSelectionnes([]);

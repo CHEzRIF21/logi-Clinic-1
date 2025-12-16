@@ -33,7 +33,7 @@ import {
   Receipt,
   Person,
 } from '@mui/icons-material';
-import { FacturationService, ServiceFacturable, LigneFacture } from '../../services/facturationService';
+import { FacturationService, ServiceFacturable, LigneFacture, TicketFacturation } from '../../services/facturationService';
 import { supabase, Patient } from '../../services/supabase';
 import { useFacturationPermissions } from '../../hooks/useFacturationPermissions';
 import ExamCatalogService, { ExamCatalogEntry } from '../../services/examCatalogService';
@@ -41,10 +41,13 @@ import { LaboratoireTarificationService, AnalyseTarif } from '../../services/lab
 
 interface CreationFactureProps {
   patientId?: string;
+  ticketIds?: string[];
+  ticketsPrefill?: TicketFacturation[];
+  payeur?: { type: 'patient' | 'assurance'; id?: string; nom?: string };
   onFactureCree?: () => void;
 }
 
-const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureCree }) => {
+const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, ticketIds, ticketsPrefill, payeur, onFactureCree }) => {
   const permissions = useFacturationPermissions();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -64,6 +67,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
   const [openLigneDialog, setOpenLigneDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefilledFromTickets, setPrefilledFromTickets] = useState(false);
 
   useEffect(() => {
     if (permissions.canCreate) {
@@ -76,6 +80,25 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
       }
     }
   }, [patientId, permissions.canCreate]);
+
+  useEffect(() => {
+    if (!ticketsPrefill || ticketsPrefill.length === 0) {
+      setPrefilledFromTickets(false);
+      return;
+    }
+
+    const lignesFromTickets: LigneFacture[] = ticketsPrefill.map((t, idx) => ({
+      libelle: t.type_acte,
+      quantite: 1,
+      prix_unitaire: t.montant,
+      remise_ligne: 0,
+      montant_ligne: t.montant,
+      ordre: idx + 1,
+    }));
+
+    setLignes(lignesFromTickets);
+    setPrefilledFromTickets(true);
+  }, [ticketsPrefill]);
 
   // Vérifier les permissions après les hooks
   if (!permissions.canCreate) {
@@ -260,15 +283,33 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
         }
       }
 
-      await FacturationService.createFacture({
+      const typeFacture = payeur?.type === 'assurance' ? 'credit' : 'normale';
+
+      const facture = await FacturationService.createFacture({
         patient_id: patient.id,
         lignes: lignes,
-        type_facture: 'normale'
+        type_facture: typeFacture,
+        credit_partenaire: payeur?.type === 'assurance'
+          ? {
+              partenaire_id: payeur.id,
+              type_partenaire: 'assurance',
+              nom_partenaire: payeur.nom,
+            }
+          : undefined,
       }, caissierId);
+
+      if (ticketIds && ticketIds.length > 0) {
+        try {
+          await FacturationService.facturerTickets(ticketIds, facture.id);
+        } catch (e: any) {
+          console.warn('Tickets facturés partiellement (non bloquant):', e?.message || e);
+        }
+      }
 
       // Réinitialiser le formulaire
       setLignes([]);
       setPatient(null);
+      setPrefilledFromTickets(false);
       
       if (onFactureCree) {
         onFactureCree();
@@ -382,7 +423,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
                   variant="outlined"
                   startIcon={<Add />}
                   onClick={() => setOpenLigneDialog(true)}
-                  disabled={!patient}
+                  disabled={!patient || prefilledFromTickets}
                 >
                   Ajouter une Ligne
                 </Button>
@@ -410,10 +451,10 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
                         <TableRow key={index}>
                           <TableCell>{ligne.libelle}</TableCell>
                           <TableCell align="right">{ligne.quantite}</TableCell>
-                          <TableCell align="right">{ligne.prix_unitaire.toLocaleString()} FCFA</TableCell>
-                          <TableCell align="right">{ligne.remise_ligne.toLocaleString()} FCFA</TableCell>
+                          <TableCell align="right">{ligne.prix_unitaire.toLocaleString()} XOF</TableCell>
+                          <TableCell align="right">{ligne.remise_ligne.toLocaleString()} XOF</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                            {ligne.montant_ligne.toLocaleString()} FCFA
+                            {ligne.montant_ligne.toLocaleString()} XOF
                           </TableCell>
                           <TableCell align="center">
                             <IconButton
@@ -431,7 +472,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
                           TOTAL
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                          {calculerTotal().toLocaleString()} FCFA
+                          {calculerTotal().toLocaleString()} XOF
                         </TableCell>
                         <TableCell />
                       </TableRow>
@@ -507,7 +548,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
                 groupBy={(option) => option.module_cible || 'Catalogue'}
                 getOptionLabel={(option) =>
                   `${option.nom} (${option.code})${
-                    option.tarif_base ? ` - ${option.tarif_base.toLocaleString()} FCFA` : ''
+                    option.tarif_base ? ` - ${option.tarif_base.toLocaleString()} XOF` : ''
                   }`
                 }
                 onChange={(_, value) => selectionnerExamenCatalogue(value)}
@@ -524,7 +565,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
             <Grid item xs={12}>
               <Autocomplete
                 options={services}
-                getOptionLabel={(option) => `${option.nom} - ${option.tarif_base.toLocaleString()} FCFA`}
+                getOptionLabel={(option) => `${option.nom} - ${option.tarif_base.toLocaleString()} XOF`}
                 onChange={(_, value) => selectionnerService(value)}
                 renderInput={(params) => (
                   <TextField {...params} label="Service Facturable" />
@@ -560,7 +601,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
             <Grid item xs={6}>
               <TextField
                 fullWidth
-                label="Prix Unitaire (FCFA)"
+                label="Prix Unitaire (XOF)"
                 type="number"
                 value={ligneEnCours.prix_unitaire}
                 onChange={(e) => {
@@ -577,7 +618,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Remise (FCFA)"
+                label="Remise (XOF)"
                 type="number"
                 value={ligneEnCours.remise_ligne}
                 onChange={(e) => {
@@ -592,7 +633,7 @@ const CreationFacture: React.FC<CreationFactureProps> = ({ patientId, onFactureC
             </Grid>
             <Grid item xs={12}>
               <Alert severity="info">
-                Montant de la ligne: <strong>{calculerMontantLigne(ligneEnCours).toLocaleString()} FCFA</strong>
+                Montant de la ligne: <strong>{calculerMontantLigne(ligneEnCours).toLocaleString()} XOF</strong>
               </Alert>
             </Grid>
           </Grid>

@@ -105,6 +105,9 @@ export interface TicketFacturation {
   reference_origine?: string;
   type_acte: string;
   montant: number;
+  payeur_type?: 'patient' | 'assurance';
+  payeur_id?: string;
+  payeur_nom?: string;
   statut: 'en_attente' | 'facture' | 'annule';
   facture_id?: string;
   date_creation: string;
@@ -206,6 +209,13 @@ export interface FactureFormData {
   service_origine?: string;
   reference_externe?: string;
   consultation_id?: string;
+  credit_partenaire?: {
+    partenaire_id?: string;
+    type_partenaire?: string; // ex: 'assurance'
+    nom_partenaire?: string;
+    date_echeance?: string;
+    notes?: string;
+  };
 }
 
 // ============================================
@@ -334,8 +344,13 @@ export class FacturationService {
       await this.createCredit({
         facture_id: facture.id,
         patient_id: formData.patient_id,
+        partenaire_id: formData.credit_partenaire?.partenaire_id,
+        type_partenaire: formData.credit_partenaire?.type_partenaire || 'assurance',
+        nom_partenaire: formData.credit_partenaire?.nom_partenaire,
         montant_credit: montantTotal,
-        statut: 'en_attente'
+        date_echeance: formData.credit_partenaire?.date_echeance || formData.date_echeance,
+        notes: formData.credit_partenaire?.notes,
+        statut: 'en_attente',
       });
     }
     
@@ -556,7 +571,12 @@ export class FacturationService {
     serviceOrigine: string,
     referenceOrigine: string | null,
     typeActe: string,
-    montant: number
+    montant: number,
+    options?: {
+      payeur_type?: 'patient' | 'assurance';
+      payeur_id?: string | null;
+      payeur_nom?: string | null;
+    }
   ): Promise<TicketFacturation> {
     const { data, error } = await supabase
       .from('tickets_facturation')
@@ -566,7 +586,10 @@ export class FacturationService {
         reference_origine: referenceOrigine,
         type_acte: typeActe,
         montant: montant,
-        statut: 'en_attente'
+        statut: 'en_attente',
+        payeur_type: options?.payeur_type || 'patient',
+        payeur_id: options?.payeur_id || patientId,
+        payeur_nom: options?.payeur_nom || null,
       }])
       .select()
       .single();

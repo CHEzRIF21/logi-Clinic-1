@@ -79,6 +79,9 @@ const MedicamentManagement: React.FC = () => {
       setMedicaments(prev => [...prev, newMedicament]);
       setOpenForm(false);
       await loadMedicaments(); // Recharger pour avoir les codes à jour
+      
+      // Déclencher le rafraîchissement global pour tous les composants
+      window.dispatchEvent(new CustomEvent('medicaments:refresh'));
     } catch (err) {
       setError('Erreur lors de la création du médicament');
       console.error('Erreur:', err);
@@ -101,6 +104,9 @@ const MedicamentManagement: React.FC = () => {
       );
       setEditingMedicament(null);
       setOpenForm(false);
+      
+      // Déclencher le rafraîchissement global pour tous les composants
+      window.dispatchEvent(new CustomEvent('medicaments:refresh'));
     } catch (err) {
       setError('Erreur lors de la modification du médicament');
       console.error('Erreur:', err);

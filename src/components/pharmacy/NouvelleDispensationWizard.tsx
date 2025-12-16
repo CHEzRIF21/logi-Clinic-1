@@ -51,7 +51,9 @@ import {
   LotDisponible,
 } from '../../services/dispensationService';
 import { MedicamentService } from '../../services/medicamentService';
+import { AssuranceService, Assurance } from '../../services/assuranceService';
 import { supabase } from '../../services/supabase';
+import { useMedicaments } from '../../hooks/useMedicaments';
 
 interface NouvelleDispensationWizardProps {
   open: boolean;
@@ -77,6 +79,12 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
+  const [assurances, setAssurances] = useState<Assurance[]>([]);
+  const [selectedAssurance, setSelectedAssurance] = useState<Assurance | null>(null);
+
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const roundXof = (value: number) => Math.round(value);
+
   // État du formulaire
   const [formData, setFormData] = useState<Partial<DispensationFormData>>({
     type_dispensation: 'patient',
@@ -95,101 +103,78 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   // États pour les lots
   const [lotsDisponibles, setLotsDisponibles] = useState<Record<string, LotDisponible[]>>({});
 
-  // États pour la recherche de médicaments
+  // États pour la recherche de médicaments (avec quantite_stock enrichie)
   const [medicamentsRecherches, setMedicamentsRecherches] = useState<any[]>([]);
-  const [allMedicaments, setAllMedicaments] = useState<any[]>([]);
   const [rechercheMedicament, setRechercheMedicament] = useState<string>('');
+
+  // Utiliser le hook centralisé pour les médicaments
+  const { medicaments: allMedicaments } = useMedicaments({ autoRefresh: true });
 
   // Charger tous les médicaments disponibles au démarrage
   useEffect(() => {
     if (open) {
       chargerTousMedicaments();
+      chargerAssurances();
     }
-  }, [open]);
+  }, [open, allMedicaments]);
+
+  const chargerAssurances = async () => {
+    try {
+      const list = await AssuranceService.getAssurancesActives();
+      setAssurances(list);
+    } catch (e) {
+      console.warn('Erreur chargement assurances (non bloquant):', e);
+      setAssurances([]);
+    }
+  };
 
   const chargerTousMedicaments = async () => {
     try {
-      // D'abord, essayer de charger les médicaments avec des lots disponibles dans le magasin détail
+      // Utiliser les médicaments du hook (déjà chargés et à jour)
+      if (!allMedicaments || allMedicaments.length === 0) {
+        console.log('Aucun médicament disponible');
+        setMedicamentsRecherches([]);
+        return;
+      }
+
+      // Charger les lots disponibles dans le magasin détail pour enrichir avec les quantités
       const { data: lotsDetail, error: lotsError } = await supabase
         .from('lots')
         .select(`
           medicament_id,
-          quantite_disponible,
-          medicaments!inner(
-            id,
-            code,
-            nom,
-            dci,
-            forme,
-            dosage,
-            unite,
-            prix_unitaire,
-            prix_unitaire_detail,
-            seuil_alerte
-          )
+          quantite_disponible
         `)
         .eq('magasin', 'detail')
         .eq('statut', 'actif')
         .gt('quantite_disponible', 0);
 
-      if (!lotsError && lotsDetail && lotsDetail.length > 0) {
-        // Agréger par médicament pour avoir la quantité totale disponible
-        const medicamentsMap = new Map<string, any>();
-        
+      // Créer un map des quantités par médicament
+      const quantitesMap = new Map<string, number>();
+      if (!lotsError && lotsDetail) {
         lotsDetail.forEach((lot: any) => {
-          const med = lot.medicaments;
-          if (!med) return;
-          
-          const existingMed = medicamentsMap.get(lot.medicament_id);
-          if (existingMed) {
-            existingMed.quantite_stock = (existingMed.quantite_stock || 0) + lot.quantite_disponible;
-          } else {
-            medicamentsMap.set(lot.medicament_id, {
-              id: med.id,
-              code: med.code || '',
-              nom: med.nom || 'Inconnu',
-              dci: med.dci || '',
-              forme: med.forme || '',
-              dosage: med.dosage || '',
-              unite: med.unite || 'Unité',
-              prix_unitaire: med.prix_unitaire_detail || med.prix_unitaire || 0,
-              prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
-              seuil_alerte: med.seuil_alerte || 10,
-              quantite_stock: lot.quantite_disponible,
-            });
-          }
+          const existing = quantitesMap.get(lot.medicament_id) || 0;
+          quantitesMap.set(lot.medicament_id, existing + lot.quantite_disponible);
         });
-        
-        const medsFromLots = Array.from(medicamentsMap.values());
-        if (medsFromLots.length > 0) {
-          setAllMedicaments(medsFromLots);
-          setMedicamentsRecherches(medsFromLots);
-          console.log('Médicaments chargés depuis les lots détail:', medsFromLots.length);
-          return;
-        }
       }
 
-      // Si aucun lot dans le magasin détail, charger tous les médicaments
-      const medicaments = await MedicamentService.getAllMedicaments();
-      // Enrichir avec prix_unitaire_detail si disponible
-      const medsEnrichis = medicaments.map((med: any) => ({
+      // Enrichir les médicaments avec les quantités disponibles
+      const medsEnrichis = allMedicaments.map((med: any) => ({
         ...med,
         prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
-        quantite_stock: 0, // Pas de stock dans le détail
+        quantite_stock: quantitesMap.get(med.id) || 0,
       }));
-      setAllMedicaments(medsEnrichis);
+
       setMedicamentsRecherches(medsEnrichis);
-      console.log('Médicaments chargés depuis la table médicaments:', medsEnrichis.length);
+      console.log('Médicaments chargés:', medsEnrichis.length, 'avec stock:', Array.from(quantitesMap.keys()).length);
     } catch (err: any) {
       console.error('Erreur lors du chargement des médicaments:', err);
-      // En cas d'erreur, essayer de charger juste les médicaments de base
-      try {
-        const medicaments = await MedicamentService.getAllMedicaments();
-        setAllMedicaments(medicaments);
-        setMedicamentsRecherches(medicaments);
-      } catch (fallbackErr) {
-        console.error('Erreur fallback:', fallbackErr);
-      }
+      // En cas d'erreur, utiliser directement les médicaments du hook
+      const medsFallback = allMedicaments.map((med: any) => ({
+        ...med,
+        prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
+        quantite_stock: 0,
+      }));
+      setMedicamentsRecherches(medsFallback);
     }
   };
 
@@ -206,6 +191,27 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
       chargerPrescriptionsActives(selectedPatient.id);
     }
   }, [selectedPatient?.id, open]);
+
+  // Si les assurances se chargent après le patient, tenter l'auto-mapping couverture_sante
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedPatient) return;
+    if (formData.assurance_id) return; // l'utilisateur a déjà choisi
+    const couverture = (selectedPatient.couverture_sante || 'Aucun') as string;
+    const couvertureNorm = couverture.toLowerCase();
+    if (couvertureNorm === 'aucun') return;
+    const match = assurances.find(a => a.nom.toLowerCase() === couvertureNorm) || null;
+    if (match) {
+      setSelectedAssurance(match);
+      setFormData(prev => ({
+        ...prev,
+        assurance_id: match.id,
+        assurance_nom: match.nom,
+        taux_couverture: Number(match.taux_couverture_defaut || 0),
+        plafond_assurance: match.plafond ?? undefined,
+      }));
+    }
+  }, [assurances, open, selectedPatient, formData.assurance_id]);
 
   const chargerPatient = async (patientId: string) => {
     try {
@@ -225,6 +231,33 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
           patient_prenoms: data.prenom,
           statut_prise_charge: data.couverture_sante || 'Aucun',
         }));
+
+        // Pré-sélection assurance (compatibilité avec patients.couverture_sante)
+        const couverture = (data.couverture_sante || 'Aucun') as string;
+        const couvertureNorm = couverture.toLowerCase();
+        if (couvertureNorm !== 'aucun') {
+          const match = assurances.find(a => a.nom.toLowerCase() === couvertureNorm) || null;
+          setSelectedAssurance(match);
+          if (match) {
+            setFormData(prev => ({
+              ...prev,
+              assurance_id: match.id,
+              assurance_nom: match.nom,
+              taux_couverture: Number(match.taux_couverture_defaut || 0),
+              plafond_assurance: match.plafond ?? undefined,
+            }));
+          }
+        } else {
+          setSelectedAssurance(null);
+          setFormData(prev => ({
+            ...prev,
+            assurance_id: undefined,
+            assurance_nom: undefined,
+            taux_couverture: undefined,
+            plafond_assurance: undefined,
+            reference_prise_en_charge: undefined,
+          }));
+        }
       }
     } catch (err: any) {
       setError(`Erreur lors du chargement du patient: ${err.message}`);
@@ -515,6 +548,11 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
         patient_nom: formData.patient_nom || '',
         patient_prenoms: formData.patient_prenoms,
         statut_prise_charge: formData.statut_prise_charge,
+        assurance_id: formData.assurance_id,
+        assurance_nom: formData.assurance_nom || selectedAssurance?.nom,
+        taux_couverture: formData.taux_couverture,
+        plafond_assurance: formData.plafond_assurance,
+        reference_prise_en_charge: formData.reference_prise_en_charge,
         prescripteur_id: formData.prescripteur_id,
         prescripteur_nom: formData.prescripteur_nom || '',
         service_prescripteur: formData.service_prescripteur,
@@ -553,10 +591,24 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
     setWarnings([]);
     setPatientSearchTerm('');
     setPatientsFound([]);
+    setSelectedAssurance(null);
     onClose();
   };
 
   const steps = ['Informations Patient', 'Lignes Médicaments', 'Validation'];
+
+  const montantTotal = roundXof(
+    (formData.lignes || []).reduce((sum, l) => sum + (l.prix_total || 0), 0)
+  );
+  const tauxCouverture = selectedAssurance ? clamp(Number(formData.taux_couverture || 0), 0, 100) : 0;
+  const plafondAssurance = selectedAssurance ? Number(formData.plafond_assurance || 0) : 0;
+  let montantAssurance = 0;
+  if (selectedAssurance && tauxCouverture > 0) {
+    montantAssurance = montantTotal * (tauxCouverture / 100);
+    if (plafondAssurance && plafondAssurance > 0) montantAssurance = Math.min(montantAssurance, plafondAssurance);
+    montantAssurance = roundXof(Math.max(0, montantAssurance));
+  }
+  const montantPatient = roundXof(Math.max(0, montantTotal - montantAssurance));
 
   return (
     <Dialog 
@@ -658,6 +710,33 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                             patient_prenoms: newValue.prenom,
                             statut_prise_charge: newValue.couverture_sante || 'Aucun',
                           }));
+
+                          // Auto-mapping assurance (si possible)
+                          const couverture = (newValue.couverture_sante || 'Aucun') as string;
+                          const couvertureNorm = couverture.toLowerCase();
+                          if (couvertureNorm !== 'aucun') {
+                            const match = assurances.find(a => a.nom.toLowerCase() === couvertureNorm) || null;
+                            setSelectedAssurance(match);
+                            if (match) {
+                              setFormData(prev => ({
+                                ...prev,
+                                assurance_id: match.id,
+                                assurance_nom: match.nom,
+                                taux_couverture: Number(match.taux_couverture_defaut || 0),
+                                plafond_assurance: match.plafond ?? undefined,
+                              }));
+                            }
+                          } else {
+                            setSelectedAssurance(null);
+                            setFormData(prev => ({
+                              ...prev,
+                              assurance_id: undefined,
+                              assurance_nom: undefined,
+                              taux_couverture: undefined,
+                              plafond_assurance: undefined,
+                              reference_prise_en_charge: undefined,
+                            }));
+                          }
                         }
                       }}
                       onInputChange={(_, value) => {
@@ -694,6 +773,102 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           <Typography variant="body2">
                             <strong>Statut:</strong> {formData.statut_prise_charge}
                           </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
+
+                  {/* Bloc Tiers-Payant / Assurance */}
+                  {selectedPatient && (
+                    <Grid item xs={12}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="subtitle2" gutterBottom>
+                            Tiers-Payant (Assurance)
+                          </Typography>
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={6}>
+                              <Autocomplete
+                                options={assurances}
+                                getOptionLabel={(option) => option.nom}
+                                value={selectedAssurance}
+                                onChange={(_, newValue) => {
+                                  setSelectedAssurance(newValue);
+                                  if (!newValue) {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      assurance_id: undefined,
+                                      assurance_nom: undefined,
+                                      taux_couverture: undefined,
+                                      plafond_assurance: undefined,
+                                      reference_prise_en_charge: undefined,
+                                    }));
+                                    return;
+                                  }
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    assurance_id: newValue.id,
+                                    assurance_nom: newValue.nom,
+                                    taux_couverture: Number(newValue.taux_couverture_defaut || 0),
+                                    plafond_assurance: newValue.plafond ?? undefined,
+                                  }));
+                                }}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Assurance"
+                                    placeholder="Aucune / CNSS / RAMU / Mutuelle..."
+                                  />
+                                )}
+                                noOptionsText="Aucune assurance"
+                                clearOnBlur={false}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={3}>
+                              <TextField
+                                fullWidth
+                                label="Taux couverture (%)"
+                                type="number"
+                                value={formData.taux_couverture ?? ''}
+                                onChange={(e) => {
+                                  const v = clamp(Number(e.target.value || 0), 0, 100);
+                                  setFormData(prev => ({ ...prev, taux_couverture: v }));
+                                }}
+                                inputProps={{ min: 0, max: 100, step: 1 }}
+                                disabled={!selectedAssurance}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={3}>
+                              <TextField
+                                fullWidth
+                                label="Plafond (XOF)"
+                                type="number"
+                                value={formData.plafond_assurance ?? ''}
+                                onChange={(e) => {
+                                  const v = Math.max(0, Number(e.target.value || 0));
+                                  setFormData(prev => ({ ...prev, plafond_assurance: v || undefined }));
+                                }}
+                                inputProps={{ min: 0, step: 1 }}
+                                disabled={!selectedAssurance}
+                              />
+                            </Grid>
+                            <Grid item xs={12}>
+                              <TextField
+                                fullWidth
+                                label="Référence prise en charge (optionnel)"
+                                value={formData.reference_prise_en_charge ?? ''}
+                                onChange={(e) =>
+                                  setFormData(prev => ({ ...prev, reference_prise_en_charge: e.target.value }))
+                                }
+                                disabled={!selectedAssurance}
+                              />
+                            </Grid>
+                            <Grid item xs={12}>
+                              <Alert severity="info">
+                                Le calcul (part assurance / part patient) sera affiché à l'étape Validation.
+                              </Alert>
+                            </Grid>
+                          </Grid>
                         </CardContent>
                       </Card>
                     </Grid>
@@ -870,7 +1045,7 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                                   />
                                 </Box>
                                 <Typography variant="caption" color="text.secondary">
-                                  {option.code} • {option.forme || ''} • Stock: {option.quantite_stock || 0} {option.unite || ''}
+                                  {option.code} • {option.forme || ''} • Stock: {(option as any).quantite_stock || 0} {option.unite || ''}
                                 </Typography>
                               </Box>
                             </Box>
@@ -1023,6 +1198,25 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                       <strong>Statut:</strong> {formData.statut_prise_charge}
                     </Typography>
                     <Typography variant="body2">
+                      <strong>Assurance:</strong> {selectedAssurance ? selectedAssurance.nom : 'Aucune'}
+                    </Typography>
+                    {selectedAssurance && (
+                      <>
+                        <Typography variant="body2">
+                          <strong>Taux:</strong> {tauxCouverture}%
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Plafond:</strong>{' '}
+                          {plafondAssurance && plafondAssurance > 0 ? `${plafondAssurance.toLocaleString('fr-FR')} XOF` : 'Aucun'}
+                        </Typography>
+                        {formData.reference_prise_en_charge && (
+                          <Typography variant="body2">
+                            <strong>Référence:</strong> {formData.reference_prise_en_charge}
+                          </Typography>
+                        )}
+                      </>
+                    )}
+                    <Typography variant="body2">
                       <strong>Prescripteur:</strong> {formData.prescripteur_nom}
                     </Typography>
                     <Typography variant="body2">
@@ -1049,10 +1243,14 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                     </Typography>
                     <Typography variant="body2">
                       <strong>Total:</strong>{' '}
-                      {formData.lignes
-                        ?.reduce((sum, l) => sum + l.prix_total, 0)
-                        .toLocaleString('fr-FR')}{' '}
-                      FCFA
+                      {montantTotal.toLocaleString('fr-FR')} XOF
+                    </Typography>
+                    <Divider sx={{ my: 1.5 }} />
+                    <Typography variant="body2">
+                      <strong>Part Assurance:</strong> {montantAssurance.toLocaleString('fr-FR')} XOF
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>À payer (Patient):</strong> {montantPatient.toLocaleString('fr-FR')} XOF
                     </Typography>
                   </CardContent>
                 </Card>

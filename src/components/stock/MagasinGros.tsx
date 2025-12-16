@@ -48,6 +48,7 @@ import {
 import { StockService } from '../../services/stockService';
 import { LotSupabase, MedicamentSupabase } from '../../services/stockSupabase';
 import { supabase } from '../../services/supabase';
+import { useMedicaments } from '../../hooks/useMedicaments';
 
 interface MagasinGrosProps {
   onRefresh?: () => void;
@@ -56,7 +57,10 @@ interface MagasinGrosProps {
 const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [lots, setLots] = useState<LotSupabase[]>([]);
-  const [medicaments, setMedicaments] = useState<MedicamentSupabase[]>([]);
+  
+  // Utiliser le hook centralisé pour les médicaments
+  const { medicaments } = useMedicaments({ autoRefresh: true });
+  
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMagasin, setFilterMagasin] = useState<'gros' | 'detail' | 'tous'>('gros');
@@ -116,14 +120,13 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [lotsData, medicamentsData, statsData] = await Promise.all([
+      const [lotsData, statsData] = await Promise.all([
         StockService.getLotsByMagasin('gros'),
-        supabase.from('medicaments').select('*'),
         StockService.getStockStats()
       ]);
       
       setLots(lotsData || []);
-      setMedicaments(medicamentsData.data || []);
+      // Les médicaments sont chargés automatiquement par le hook useMedicaments
       setStats(statsData);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);

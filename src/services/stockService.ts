@@ -68,7 +68,7 @@ export class StockService {
     }
   }
 
-  // 2. DEMANDE INTERNE → RESPONSABLE GROS
+  // 2. DEMANDE INTERNE → RESPONSABLE GROS (un seul médicament)
   static async creerDemandeTransfert(data: {
     medicament_id: string;
     lot_id: string;
@@ -124,6 +124,81 @@ export class StockService {
       return { success: true, transfert };
     } catch (error) {
       console.error('Erreur lors de la création de la demande:', error);
+      throw error;
+    }
+  }
+
+  // 2b. DEMANDE INTERNE MULTIPLE → RESPONSABLE GROS (plusieurs médicaments)
+  static async creerDemandeTransfertMultiple(data: {
+    lignes: Array<{
+      medicament_id: string;
+      lot_id: string;
+      quantite_demandee: number;
+    }>;
+    utilisateur_demandeur_id: string;
+    motif: string;
+    observations?: string;
+  }) {
+    try {
+      if (!data.lignes || data.lignes.length === 0) {
+        throw new Error('Au moins une ligne de transfert est requise');
+      }
+
+      // Vérifier la disponibilité du stock pour toutes les lignes
+      for (const ligne of data.lignes) {
+        const { data: lot, error: lotError } = await supabase
+          .from('lots')
+          .select('*')
+          .eq('id', ligne.lot_id)
+          .eq('magasin', 'gros')
+          .single();
+
+        if (lotError) throw lotError;
+        if (lot.quantite_disponible < ligne.quantite_demandee) {
+          const { data: medicament } = await supabase
+            .from('medicaments')
+            .select('nom')
+            .eq('id', ligne.medicament_id)
+            .single();
+          throw new Error(`Stock insuffisant pour ${medicament?.nom || 'ce médicament'} (Lot: ${lot.numero_lot}, Disponible: ${lot.quantite_disponible}, Demandé: ${ligne.quantite_demandee})`);
+        }
+      }
+
+      // Créer le transfert
+      const numero_transfert = `TRF-${Date.now()}`;
+      const { data: transfert, error: transfertError } = await supabase
+        .from('transferts')
+        .insert({
+          numero_transfert,
+          date_transfert: new Date().toISOString(),
+          magasin_source: 'gros',
+          magasin_destination: 'detail',
+          statut: 'en_cours',
+          utilisateur_source_id: data.utilisateur_demandeur_id,
+          observations: data.observations
+        })
+        .select()
+        .single();
+
+      if (transfertError) throw transfertError;
+
+      // Créer toutes les lignes de transfert
+      const lignesAInserer = data.lignes.map(ligne => ({
+        transfert_id: transfert.id,
+        medicament_id: ligne.medicament_id,
+        lot_id: ligne.lot_id,
+        quantite: ligne.quantite_demandee
+      }));
+
+      const { error: lignesError } = await supabase
+        .from('transfert_lignes')
+        .insert(lignesAInserer);
+
+      if (lignesError) throw lignesError;
+
+      return { success: true, transfert };
+    } catch (error) {
+      console.error('Erreur lors de la création de la demande multiple:', error);
       throw error;
     }
   }
