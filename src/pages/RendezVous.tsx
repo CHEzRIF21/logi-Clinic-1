@@ -317,12 +317,29 @@ const RendezVous: React.FC = () => {
       )}
 
       {/* Onglets principaux */}
-      <GlassCard sx={{ mb: 3 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
-          <Tab label="Agenda" icon={<Event />} />
-          <Tab label="Indicateurs" icon={<Assessment />} />
-          <Tab label="Rapports" icon={<TrendingUp />} />
+      <GlassCard sx={{ mb: 3, width: '100%', overflow: 'hidden' }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(e, newValue) => setActiveTab(newValue)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 56,
+              py: 1.5,
+              px: 2,
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              textTransform: 'none',
+              '&.Mui-selected': { fontWeight: 600 }
+            }
+          }}
+        >
+          <Tab label="Agenda" icon={<Event />} iconPosition="start" />
+          <Tab label="Indicateurs" icon={<Assessment />} iconPosition="start" />
+          <Tab label="Rapports" icon={<TrendingUp />} iconPosition="start" />
         </Tabs>
         </Box>
       </GlassCard>

@@ -164,9 +164,27 @@ const AdminDatabase: React.FC = () => {
         </Box>
       </Box>
 
-      <Paper sx={{ width: '100%' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tabValue} onChange={handleTabChange} aria-label="database tabs">
+      <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+          <Tabs 
+            value={tabValue} 
+            onChange={handleTabChange} 
+            aria-label="database tabs"
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              '& .MuiTab-root': {
+                minHeight: 56,
+                py: 1.5,
+                px: 2,
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textTransform: 'none',
+                '&.Mui-selected': { fontWeight: 600 }
+              }
+            }}
+          >
             <Tab label="Utilisateurs" icon={<AccountCircle />} iconPosition="start" />
             <Tab label="Patients" icon={<Person />} iconPosition="start" />
             <Tab label="Consultations" icon={<MedicalServices />} iconPosition="start" />

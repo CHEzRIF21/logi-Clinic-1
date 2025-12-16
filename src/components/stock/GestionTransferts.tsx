@@ -36,6 +36,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add,
@@ -334,21 +335,37 @@ const GestionTransferts: React.FC = () => {
       {/* En-tête */}
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          Gestion des Transferts
+          Gestion des Ajustements
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Transferts internes entre Magasin Gros et Magasin Détail
+          Ajustements de stock et bons de commande
         </Typography>
       </Box>
 
       {/* Navigation par onglets */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={activeTab} onChange={handleTabChange}>
-          <Tab icon={<Assignment />} label="Demandes" />
-          <Tab icon={<LocalShipping />} label="Transferts" />
-          <Tab icon={<CheckCircle />} label="Validation" />
-          <Tab icon={<Inventory />} label="Réception" />
-          <Tab icon={<Description />} label="Historique" />
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3, width: '100%' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 56,
+              py: 1.5,
+              px: 2,
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              textTransform: 'none',
+              '&.Mui-selected': { fontWeight: 600 }
+            }
+          }}
+        >
+          <Tab icon={<Assignment />} label="Demandes" iconPosition="start" />
+          <Tab icon={<LocalShipping />} label="Ajustements" iconPosition="start" />
+          <Tab icon={<Inventory />} label="Réception" iconPosition="start" />
+          <Tab icon={<Description />} label="Historique" iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -360,21 +377,21 @@ const GestionTransferts: React.FC = () => {
         <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-                  Demande de Transfert - Magasin Détail vers Gros
+                  Commande - Bon de Ravitaillement
             </Typography>
             <Button
               variant="contained"
               startIcon={<Add />}
                   onClick={() => setOpenDemande(true)}
             >
-                  Nouvelle Demande
+                  Nouvelle Commande
             </Button>
           </Box>
 
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  <strong>Processus :</strong> Le pharmacien/infirmier identifie un besoin et émet une demande 
-                  de dotation vers le Magasin Gros. Le responsable valide et génère un bon de transfert.
+                  <strong>Processus :</strong> Le pharmacien/infirmier identifie un besoin et crée un bon de commande 
+                  pour se ravitailler. Le responsable valide et génère le bon de commande.
                 </Typography>
               </Alert>
 
@@ -476,7 +493,7 @@ const GestionTransferts: React.FC = () => {
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Transferts en Cours
+                Ajustements en Cours
               </Typography>
               
               <TableContainer>
@@ -575,91 +592,11 @@ const GestionTransferts: React.FC = () => {
 
       {activeTab === 2 && (
         <Box>
-          {/* Validation des transferts */}
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Validation des Transferts - Magasin Gros
-              </Typography>
-              
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>Responsabilité :</strong> Le responsable du centre valide les demandes 
-                  et génère les bons de transfert. Vérifiez la disponibilité du stock avant validation.
-                </Typography>
-              </Alert>
-
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom>
-                      Demande à Valider
-                            </Typography>
-                    <List>
-                      <ListItem>
-                                  <ListItemIcon>
-                          <Warning />
-                                  </ListItemIcon>
-                                  <ListItemText
-                          primary="Paracétamol 500mg - 50 unités"
-                          secondary="Demandeur: Pharmacien Principal - Urgent"
-                                  />
-                                </ListItem>
-                            </List>
-                    <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        startIcon={<CheckCircle />}
-                        onClick={() => setOpenValidation(true)}
-                      >
-                        Valider
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<Cancel />}
-                      >
-                        Rejeter
-                      </Button>
-                    </Box>
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Paper sx={{ p: 2 }}>
-                    <Typography variant="h6" gutterBottom>
-                      Impact sur le Stock
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Typography variant="body2">
-                        <strong>Stock Gros actuel:</strong> 800 unités
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Quantité à transférer:</strong> 50 unités
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Stock Gros après:</strong> 750 unités
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Stock Détail après:</strong> 200 unités
-                      </Typography>
-                    </Box>
-                  </Paper>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
-      {activeTab === 3 && (
-        <Box>
           {/* Réception des transferts */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Réception des Transferts - Magasin Détail
+                Réception des Ajustements - Magasin Détail
               </Typography>
               
               <Alert severity="info" sx={{ mb: 2 }}>
@@ -754,14 +691,14 @@ const GestionTransferts: React.FC = () => {
         </Box>
       )}
 
-      {activeTab === 4 && (
+      {activeTab === 3 && (
         <Box>
           {/* Historique des transferts */}
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                  Historique des Transferts
+                  Historique des Ajustements
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button variant="outlined" startIcon={<Print />}>
@@ -847,24 +784,60 @@ const GestionTransferts: React.FC = () => {
       )}
 
       {/* Dialogs */}
-      {/* Dialog Nouvelle Demande */}
-      <Dialog open={openDemande} onClose={() => setOpenDemande(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Nouvelle Demande de Transfert</DialogTitle>
+      {/* Dialog Nouvelle Demande - Ne se ferme qu'avec les boutons Annuler/Valider */}
+      <Dialog 
+        open={openDemande} 
+        onClose={(event, reason) => {
+          // Empêcher la fermeture par clic extérieur ou touche Escape
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenDemande(false);
+          }
+        }} 
+        disableEscapeKeyDown
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>Nouvelle Commande de Ravitaillement</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Médicament</InputLabel>
-                <Select
-                  value={demandeForm.medicament_id}
-                  onChange={(e) => setDemandeForm(prev => ({ ...prev, medicament_id: e.target.value }))}
-                  label="Médicament"
-                >
-                  <MenuItem value="1">Paracétamol 500mg (MED-001)</MenuItem>
-                  <MenuItem value="2">Amoxicilline 1g (MED-002)</MenuItem>
-                  <MenuItem value="3">Ibuprofène 400mg (MED-003)</MenuItem>
-                </Select>
-              </FormControl>
+              <Autocomplete
+                options={medicaments}
+                getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
+                value={medicaments.find(m => m.id === demandeForm.medicament_id) || null}
+                onChange={(_, newValue) => {
+                  if (newValue) {
+                    setDemandeForm(prev => ({ ...prev, medicament_id: newValue.id }));
+                  } else {
+                    setDemandeForm(prev => ({ ...prev, medicament_id: '' }));
+                  }
+                }}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props} key={option.id}>
+                    <Box>
+                      <Typography variant="body2" fontWeight="bold">
+                        {option.nom} {option.dosage || ''}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.code} • {option.forme || ''}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Médicament"
+                    placeholder="Sélectionner un médicament"
+                    required
+                  />
+                )}
+                ListboxProps={{
+                  style: { maxHeight: 300 }
+                }}
+                noOptionsText="Aucun médicament trouvé"
+                openOnFocus
+              />
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
@@ -909,8 +882,18 @@ const GestionTransferts: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog Validation */}
-      <Dialog open={openValidation} onClose={() => setOpenValidation(false)} maxWidth="sm" fullWidth>
+      {/* Dialog Validation - Ne se ferme qu'avec les boutons */}
+      <Dialog 
+        open={openValidation} 
+        onClose={(event, reason) => {
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenValidation(false);
+          }
+        }}
+        disableEscapeKeyDown
+        maxWidth="sm" 
+        fullWidth
+      >
         <DialogTitle>Valider le Transfert</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -948,8 +931,18 @@ const GestionTransferts: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog Réception */}
-      <Dialog open={openReception} onClose={() => setOpenReception(false)} maxWidth="sm" fullWidth>
+      {/* Dialog Réception - Ne se ferme qu'avec les boutons */}
+      <Dialog 
+        open={openReception} 
+        onClose={(event, reason) => {
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenReception(false);
+          }
+        }}
+        disableEscapeKeyDown
+        maxWidth="sm" 
+        fullWidth
+      >
         <DialogTitle>Réceptionner le Transfert</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -988,7 +981,17 @@ const GestionTransferts: React.FC = () => {
       </Dialog>
 
       {/* Dialog Détails du Transfert */}
-      <Dialog open={selectedTransfert !== null} onClose={() => setSelectedTransfert(null)} maxWidth="md" fullWidth>
+      <Dialog 
+        open={selectedTransfert !== null} 
+        onClose={(event, reason) => {
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setSelectedTransfert(null);
+          }
+        }}
+        disableEscapeKeyDown
+        maxWidth="md" 
+        fullWidth
+      >
         <DialogTitle>
           Détails du Transfert - {selectedTransfert?.numeroTransfert}
         </DialogTitle>

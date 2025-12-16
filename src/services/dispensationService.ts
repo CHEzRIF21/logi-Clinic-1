@@ -201,7 +201,9 @@ export class DispensationService {
             nom,
             code,
             dosage,
-            forme
+            forme,
+            prix_unitaire,
+            prix_unitaire_detail
           )
         `)
         .eq('medicament_id', medicamentId)
@@ -216,12 +218,15 @@ export class DispensationService {
         const medicament = Array.isArray(lot.medicaments) && lot.medicaments.length > 0 
           ? lot.medicaments[0] 
           : (lot.medicaments as any);
+        // Utiliser le prix_unitaire_detail du médicament pour la dispensation (pharmacie)
+        // Si non défini, utiliser prix_unitaire comme fallback
+        const prixVente = medicament?.prix_unitaire_detail || medicament?.prix_unitaire || 0;
         return {
           id: lot.id,
           numero_lot: lot.numero_lot,
           quantite_disponible: lot.quantite_disponible,
           date_expiration: lot.date_expiration,
-          prix_unitaire: lot.prix_achat || 0,
+          prix_unitaire: prixVente, // Prix de vente au détail (pharmacie)
           medicament_id: lot.medicament_id,
           medicament_nom: medicament?.nom || '',
           medicament_code: medicament?.code || '',

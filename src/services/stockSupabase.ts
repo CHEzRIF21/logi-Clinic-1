@@ -39,12 +39,18 @@ export interface MedicamentSupabase {
   dosage: string;
   unite: string;
   fournisseur: string;
-  prix_unitaire: number;
+  prix_unitaire: number;              // Prix unitaire de vente (détail) - utilisé par la pharmacie
+  prix_unitaire_entree?: number;      // Prix unitaire d'achat/entrée
+  prix_total_entree?: number;         // Prix total d'entrée
+  prix_unitaire_detail?: number;      // Prix unitaire de vente au détail (pharmacie) - peut être différent de prix_unitaire
   seuil_alerte: number;
   seuil_rupture: number;
+  seuil_maximum?: number;             // Seuil maximum de stock
   emplacement: string;
   categorie: string;
   prescription_requise: boolean;
+  dci?: string;                       // Dénomination Commune Internationale
+  observations?: string;              // Observations générales
   date_creation: string;
   date_modification: string;
   created_at: string;
@@ -58,12 +64,18 @@ export interface MedicamentFormData {
   dosage: string;
   unite: string;
   fournisseur: string;
-  prix_unitaire: number;
+  prix_unitaire: number;              // Prix unitaire de vente (détail) - utilisé par la pharmacie
+  prix_unitaire_entree?: number;      // Prix unitaire d'achat/entrée
+  prix_total_entree?: number;         // Prix total d'entrée
+  prix_unitaire_detail?: number;      // Prix unitaire de vente au détail (pharmacie)
   seuil_alerte: number;
   seuil_rupture: number;
+  seuil_maximum?: number;             // Seuil maximum de stock
   emplacement: string;
   categorie: string;
   prescription_requise: boolean;
+  dci?: string;                       // Dénomination Commune Internationale
+  observations?: string;              // Observations générales
 }
 
 // Types pour les lots

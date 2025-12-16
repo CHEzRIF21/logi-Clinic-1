@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -29,6 +30,7 @@ import {
   Tab,
   Tooltip,
 } from '@mui/material';
+import { LocalPharmacy, MedicalServices, Receipt } from '@mui/icons-material';
 import TraceabiliteLots from '../components/stock/TraceabiliteLots';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
@@ -81,7 +83,10 @@ interface Medicament {
   quantiteStock: number;
   seuilMinimum: number;
   seuilMaximum?: number;
-  prixUnitaire: number;
+  prixUnitaireEntree: number;      // Prix unitaire d'achat/entrée
+  prixTotalEntree: number;         // Prix total d'entrée (calculé)
+  prixUnitaireDetail: number;      // Prix unitaire de vente au détail (pharmacie)
+  prixUnitaire: number;            // Gardé pour compatibilité
   emplacement: string;
   observations?: string;
 }
@@ -135,6 +140,9 @@ const medicamentsDemo: Medicament[] = [
     quantiteStock: 800,
     seuilMinimum: 100,
     seuilMaximum: 1000,
+    prixUnitaireEntree: 1800,
+    prixTotalEntree: 1440000,
+    prixUnitaireDetail: 2500,
     prixUnitaire: 2500,
     emplacement: 'Rayon A-1',
     observations: 'Médicament essentiel'
@@ -151,6 +159,9 @@ const medicamentsDemo: Medicament[] = [
     quantiteStock: 150,
     seuilMinimum: 50,
     seuilMaximum: 500,
+    prixUnitaireEntree: 12000,
+    prixTotalEntree: 1800000,
+    prixUnitaireDetail: 15000,
     prixUnitaire: 15000,
     emplacement: 'Frigo B-2',
     observations: 'Conservation réfrigérée'
@@ -167,6 +178,9 @@ const medicamentsDemo: Medicament[] = [
     quantiteStock: 45,
     seuilMinimum: 50,
     seuilMaximum: 200,
+    prixUnitaireEntree: 2400,
+    prixTotalEntree: 108000,
+    prixUnitaireDetail: 3200,
     prixUnitaire: 3200,
     emplacement: 'Rayon A-2',
     observations: 'Stock faible'
@@ -281,6 +295,7 @@ const alertesDemo: Alerte[] = [
 ];
 
 const StockMedicaments: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
   const [medicaments, setMedicaments] = useState<Medicament[]>(medicamentsDemo);
   const [lots, setLots] = useState<Lot[]>(lotsDemo);
@@ -291,6 +306,11 @@ const StockMedicaments: React.FC = () => {
   const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
     open: false, message: '', type: 'info'
   });
+
+  // Navigation vers les modules liés
+  const goToPharmacie = () => navigate('/pharmacie');
+  const goToConsultations = () => navigate('/consultations');
+  const goToCaisse = () => navigate('/caisse');
 
   // Fonction utilitaire pour les notifications
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -336,6 +356,7 @@ const StockMedicaments: React.FC = () => {
           .filter(lot => lot.medicaments)
           .map(lot => {
             const med = lot.medicaments as any;
+            const prixUnitaire = med.prix_unitaire || 0;
             return {
               id: lot.medicament_id,
               code: med.code || `MED-${lot.medicament_id.substring(0, 6)}`,
@@ -348,7 +369,10 @@ const StockMedicaments: React.FC = () => {
               quantiteStock: lot.quantite_disponible,
               seuilMinimum: med.seuil_alerte || 50,
               seuilMaximum: med.seuil_maximum || 500,
-              prixUnitaire: med.prix_unitaire || 0,
+              prixUnitaireEntree: med.prix_unitaire_entree || Math.floor(prixUnitaire * 0.7),
+              prixTotalEntree: med.prix_total_entree || 0,
+              prixUnitaireDetail: med.prix_unitaire_detail || prixUnitaire,
+              prixUnitaire: prixUnitaire,
               emplacement: med.emplacement || '',
               observations: med.observations || ''
             };
@@ -440,7 +464,10 @@ const StockMedicaments: React.FC = () => {
     fournisseur: '',
     seuilMinimum: 0,
     seuilMaximum: 0,
-    prixUnitaire: 0,
+    prixUnitaireEntree: 0,      // Prix unitaire d'achat
+    prixTotalEntree: 0,         // Prix total d'entrée
+    prixUnitaireDetail: 0,      // Prix unitaire de vente au détail
+    prixUnitaire: 0,            // Gardé pour compatibilité
     emplacement: '',
     observations: ''
   });
@@ -503,7 +530,10 @@ const StockMedicaments: React.FC = () => {
       quantiteStock: 0,
       seuilMinimum: nouveauMedicamentForm.seuilMinimum,
       seuilMaximum: nouveauMedicamentForm.seuilMaximum,
-      prixUnitaire: nouveauMedicamentForm.prixUnitaire,
+      prixUnitaireEntree: nouveauMedicamentForm.prixUnitaireEntree,
+      prixTotalEntree: nouveauMedicamentForm.prixTotalEntree,
+      prixUnitaireDetail: nouveauMedicamentForm.prixUnitaireDetail,
+      prixUnitaire: nouveauMedicamentForm.prixUnitaireDetail, // Le prix unitaire = prix détail pour la pharmacie
       emplacement: nouveauMedicamentForm.emplacement,
       observations: nouveauMedicamentForm.observations
     };
@@ -530,6 +560,9 @@ const StockMedicaments: React.FC = () => {
       fournisseur: '',
       seuilMinimum: 0,
       seuilMaximum: 0,
+      prixUnitaireEntree: 0,
+      prixTotalEntree: 0,
+      prixUnitaireDetail: 0,
       prixUnitaire: 0,
       emplacement: '',
       observations: ''
@@ -581,12 +614,18 @@ const StockMedicaments: React.FC = () => {
               dosage: medicamentLocal.dosage,
               unite: medicamentLocal.unite,
               fournisseur: medicamentLocal.fournisseur,
-              prix_unitaire: medicamentLocal.prixUnitaire,
+              prix_unitaire: medicamentLocal.prixUnitaireDetail || medicamentLocal.prixUnitaire,
+              prix_unitaire_entree: medicamentLocal.prixUnitaireEntree,
+              prix_total_entree: medicamentLocal.prixTotalEntree,
+              prix_unitaire_detail: medicamentLocal.prixUnitaireDetail || medicamentLocal.prixUnitaire,
               seuil_alerte: medicamentLocal.seuilMinimum,
               seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+              seuil_maximum: medicamentLocal.seuilMaximum,
               emplacement: medicamentLocal.emplacement,
               categorie: 'Général',
-              prescription_requise: false
+              prescription_requise: false,
+              dci: medicamentLocal.dci,
+              observations: medicamentLocal.observations
             };
 
             const newMedicament = await MedicamentService.createMedicament(medicamentData);
@@ -603,12 +642,18 @@ const StockMedicaments: React.FC = () => {
               dosage: medicamentLocal.dosage,
               unite: medicamentLocal.unite,
               fournisseur: medicamentLocal.fournisseur,
-              prix_unitaire: medicamentLocal.prixUnitaire,
+              prix_unitaire: medicamentLocal.prixUnitaireDetail || medicamentLocal.prixUnitaire,
+              prix_unitaire_entree: medicamentLocal.prixUnitaireEntree,
+              prix_total_entree: medicamentLocal.prixTotalEntree,
+              prix_unitaire_detail: medicamentLocal.prixUnitaireDetail || medicamentLocal.prixUnitaire,
               seuil_alerte: medicamentLocal.seuilMinimum,
               seuil_rupture: Math.floor(medicamentLocal.seuilMinimum / 2),
+              seuil_maximum: medicamentLocal.seuilMaximum,
               emplacement: medicamentLocal.emplacement,
               categorie: 'Général',
-              prescription_requise: false
+              prescription_requise: false,
+              dci: medicamentLocal.dci,
+              observations: medicamentLocal.observations
             };
 
             const newMedicament = await MedicamentService.createMedicament(medicamentData);
@@ -867,18 +912,45 @@ const StockMedicaments: React.FC = () => {
         </ToolbarBits>
 
         {/* Navigation par onglets */}
-        <GlassCard sx={{ mb: 3 }}>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={activeTab} onChange={handleTabChange}>
-              <Tab icon={<Dashboard />} label="Tableau de Bord" />
-              <Tab icon={<Store />} label="Magasin Gros" />
-              <Tab icon={<Inventory />} label="Inventaire" />
-              <Tab icon={<LocalShipping />} label="Ajustement" />
-              <Tab icon={<Assessment />} label="Rapports" />
-              <Tab icon={<Notifications />} label="Alertes" />
-              <Tab icon={<Timeline />} label="Traçabilité" />
-              <Tab icon={<Add />} label="Gestion Médicaments" />
-              <Tab icon={<Refresh />} label="Test Flux" />
+        <GlassCard sx={{ mb: 3, width: '100%', overflow: 'hidden' }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{
+                width: '100%',
+                '& .MuiTabs-scrollButtons': {
+                  '&.Mui-disabled': {
+                    opacity: 0.3
+                  }
+                },
+                '& .MuiTab-root': {
+                  minHeight: 64,
+                  py: 2,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  textTransform: 'none',
+                  whiteSpace: 'nowrap',
+                  '&.Mui-selected': {
+                    fontWeight: 600,
+                    color: 'primary.main',
+                  }
+                }
+              }}
+            >
+              <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
+              <Tab icon={<Store />} label="Magasin Gros" iconPosition="start" />
+              <Tab icon={<Inventory />} label="Inventaire" iconPosition="start" />
+              <Tab icon={<LocalShipping />} label="Ajustement" iconPosition="start" />
+              <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
+              <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
+              <Tab icon={<Timeline />} label="Traçabilité" iconPosition="start" />
+              <Tab icon={<Add />} label="Gestion Médicaments" iconPosition="start" />
+              <Tab icon={<Refresh />} label="Test Flux" iconPosition="start" />
             </Tabs>
           </Box>
         </GlassCard>
@@ -952,6 +1024,42 @@ const StockMedicaments: React.FC = () => {
                     size="large"
                   >
                     Générer Rapport
+                  </Button>
+                </Box>
+            </GlassCard>
+
+            {/* Accès rapide aux modules liés */}
+            <GlassCard sx={{ mb: 4, p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Accès Rapide aux Modules Liés
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<LocalPharmacy />}
+                    onClick={goToPharmacie}
+                    size="large"
+                  >
+                    Module Pharmacie (Détail)
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="info"
+                    startIcon={<MedicalServices />}
+                    onClick={goToConsultations}
+                    size="large"
+                  >
+                    Consultations / Prescriptions
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={<Receipt />}
+                    onClick={goToCaisse}
+                    size="large"
+                  >
+                    Caisse / Facturation
                   </Button>
                 </Box>
             </GlassCard>
@@ -1486,7 +1594,18 @@ const StockMedicaments: React.FC = () => {
       </Snackbar>
 
       {/* Dialog Nouveau Médicament */}
-      <Dialog open={openNouveauMedicament} onClose={() => setOpenNouveauMedicament(false)} maxWidth="md" fullWidth>
+      <Dialog 
+        open={openNouveauMedicament} 
+        onClose={(event, reason) => {
+          // Empêcher la fermeture par clic extérieur ou touche Escape
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenNouveauMedicament(false);
+          }
+        }}
+        disableEscapeKeyDown
+        maxWidth="md" 
+        fullWidth
+      >
         <DialogTitle>Nouveau Médicament</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1611,15 +1730,76 @@ const StockMedicaments: React.FC = () => {
                 onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, seuilMaximum: parseInt(e.target.value) || 0 }))}
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            
+            {/* Section Prix */}
+            <Grid item xs={12}>
+              <Typography variant="subtitle2" color="primary" sx={{ mt: 1, mb: 1 }}>
+                💰 Gestion des Prix
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
-                label="Prix unitaire (FCFA)"
+                label="Prix Unitaire d'Entrée (XOF)"
                 type="number"
-                value={nouveauMedicamentForm.prixUnitaire}
-                onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, prixUnitaire: parseInt(e.target.value) || 0 }))}
+                value={nouveauMedicamentForm.prixUnitaireEntree}
+                onChange={(e) => {
+                  const prixEntree = parseInt(e.target.value) || 0;
+                  setNouveauMedicamentForm(prev => ({ 
+                    ...prev, 
+                    prixUnitaireEntree: prixEntree,
+                    // Calculer le prix total basé sur une quantité par défaut (peut être ajusté)
+                    prixTotalEntree: prev.prixTotalEntree
+                  }));
+                }}
+                helperText="Prix d'achat par unité"
+                inputProps={{ min: 0 }}
               />
             </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Prix Total d'Entrée (XOF)"
+                type="number"
+                value={nouveauMedicamentForm.prixTotalEntree}
+                onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, prixTotalEntree: parseInt(e.target.value) || 0 }))}
+                helperText="Montant total de l'achat"
+                inputProps={{ min: 0 }}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Prix Unitaire Détail (XOF) *"
+                type="number"
+                value={nouveauMedicamentForm.prixUnitaireDetail}
+                onChange={(e) => {
+                  const prixDetail = parseInt(e.target.value) || 0;
+                  setNouveauMedicamentForm(prev => ({ 
+                    ...prev, 
+                    prixUnitaireDetail: prixDetail,
+                    prixUnitaire: prixDetail // Synchroniser avec prixUnitaire
+                  }));
+                }}
+                helperText="Prix de vente pharmacie/détail"
+                inputProps={{ min: 0 }}
+                required
+                sx={{ 
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: 'primary.main', borderWidth: 2 }
+                  }
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mb: 1 }}>
+                <Typography variant="body2">
+                  <strong>Note :</strong> Le <strong>Prix Unitaire Détail</strong> est le prix utilisé pour la dispensation 
+                  en pharmacie/magasin détail. Les prix d'entrée sont modifiables uniquement dans ce module.
+                </Typography>
+              </Alert>
+            </Grid>
+            
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth

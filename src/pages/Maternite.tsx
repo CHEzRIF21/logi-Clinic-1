@@ -508,16 +508,38 @@ const Maternite: React.FC = () => {
         </ToolbarBits>
 
         {/* Onglets */}
-        <GlassCard sx={{ mb: 3 }}>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={activeTab} onChange={handleTabChange} aria-label="Module Maternité" variant="scrollable">
-            <Tab icon={<Dashboard />} label="Tableau de Bord" />
-            <Tab icon={<Assignment />} label="Dossiers Maternité" />
-            <Tab icon={<Schedule />} label="Consultations CPN" />
-            <Tab icon={<LocalHospital />} label="Accouchements" />
-            <Tab icon={<ChildCare />} label="Suivi Post-natal" />
-            <Tab icon={<Notifications />} label="Système Alertes" />
-            <Tab icon={<Assessment />} label="Statistiques" />
+        <GlassCard sx={{ mb: 3, width: '100%', overflow: 'hidden' }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange} 
+            aria-label="Module Maternité" 
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              '& .MuiTabs-scrollButtons': {
+                '&.Mui-disabled': { opacity: 0.3 }
+              },
+              '& .MuiTab-root': {
+                minHeight: 56,
+                py: 1.5,
+                px: 2,
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textTransform: 'none',
+                whiteSpace: 'nowrap',
+                '&.Mui-selected': { fontWeight: 600 }
+              }
+            }}
+          >
+            <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
+            <Tab icon={<Assignment />} label="Dossiers Maternité" iconPosition="start" />
+            <Tab icon={<Schedule />} label="Consultations CPN" iconPosition="start" />
+            <Tab icon={<LocalHospital />} label="Accouchements" iconPosition="start" />
+            <Tab icon={<ChildCare />} label="Suivi Post-natal" iconPosition="start" />
+            <Tab icon={<Notifications />} label="Système Alertes" iconPosition="start" />
+            <Tab icon={<Assessment />} label="Statistiques" iconPosition="start" />
           </Tabs>
           </Box>
         </GlassCard>

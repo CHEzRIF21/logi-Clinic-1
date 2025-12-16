@@ -97,7 +97,25 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
 
   // États pour la recherche de médicaments
   const [medicamentsRecherches, setMedicamentsRecherches] = useState<any[]>([]);
+  const [allMedicaments, setAllMedicaments] = useState<any[]>([]);
   const [rechercheMedicament, setRechercheMedicament] = useState<string>('');
+
+  // Charger tous les médicaments disponibles au démarrage
+  useEffect(() => {
+    if (open) {
+      chargerTousMedicaments();
+    }
+  }, [open]);
+
+  const chargerTousMedicaments = async () => {
+    try {
+      const medicaments = await MedicamentService.getAllMedicaments();
+      setAllMedicaments(medicaments);
+      setMedicamentsRecherches(medicaments);
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des médicaments:', err);
+    }
+  };
 
   // Charger le patient pré-rempli si fourni
   useEffect(() => {
@@ -236,17 +254,20 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   };
 
   const rechercherMedicaments = async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
-      setMedicamentsRecherches([]);
+    if (!searchTerm || searchTerm.length < 1) {
+      // Afficher tous les médicaments si pas de recherche
+      setMedicamentsRecherches(allMedicaments);
       return;
     }
 
-    try {
-      const medicaments = await MedicamentService.searchMedicaments(searchTerm);
-      setMedicamentsRecherches(medicaments);
-    } catch (err: any) {
-      console.error('Erreur lors de la recherche de médicaments:', err);
-    }
+    // Filtrer localement pour une réponse plus rapide
+    const termeLower = searchTerm.toLowerCase();
+    const resultats = allMedicaments.filter(med => 
+      med.nom?.toLowerCase().includes(termeLower) ||
+      med.code?.toLowerCase().includes(termeLower) ||
+      med.dci?.toLowerCase().includes(termeLower)
+    );
+    setMedicamentsRecherches(resultats);
   };
 
   const mettreAJourLigne = (index: number, updates: Partial<DispensationLigne>) => {
@@ -446,7 +467,18 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   const steps = ['Informations Patient', 'Lignes Médicaments', 'Validation'];
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={(event, reason) => {
+        // Empêcher la fermeture par clic extérieur ou touche Escape
+        if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+          handleClose();
+        }
+      }}
+      disableEscapeKeyDown
+      maxWidth="lg" 
+      fullWidth
+    >
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box display="flex" alignItems="center" gap={1}>
@@ -700,9 +732,9 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                     <TableRow key={index}>
                       <TableCell>
                         <Autocomplete
-                          options={medicamentsRecherches}
-                          getOptionLabel={(option) => `${option.nom} (${option.code})`}
-                          value={medicamentsRecherches.find(m => m.id === ligne.medicament_id) || null}
+                          options={medicamentsRecherches.length > 0 ? medicamentsRecherches : allMedicaments}
+                          getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
+                          value={allMedicaments.find(m => m.id === ligne.medicament_id) || null}
                           onChange={(_, newValue) => {
                             if (newValue) {
                               mettreAJourLigne(index, {
@@ -718,14 +750,37 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                             setRechercheMedicament(value);
                             rechercherMedicaments(value);
                           }}
+                          onOpen={() => {
+                            // Afficher tous les médicaments quand on ouvre le menu
+                            if (medicamentsRecherches.length === 0) {
+                              setMedicamentsRecherches(allMedicaments);
+                            }
+                          }}
+                          renderOption={(props, option) => (
+                            <Box component="li" {...props} key={option.id}>
+                              <Box>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {option.nom} {option.dosage || ''}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {option.code} • {option.forme || ''} • Stock: {option.quantite_stock || 0}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          )}
                           renderInput={(params) => (
                             <TextField
                               {...params}
                               size="small"
-                              placeholder="Rechercher un médicament"
-                              sx={{ minWidth: 250 }}
+                              placeholder="Sélectionner un médicament"
+                              sx={{ minWidth: 280 }}
                             />
                           )}
+                          ListboxProps={{
+                            style: { maxHeight: 300 }
+                          }}
+                          noOptionsText="Aucun médicament trouvé"
+                          openOnFocus
                         />
                       </TableCell>
                       <TableCell>

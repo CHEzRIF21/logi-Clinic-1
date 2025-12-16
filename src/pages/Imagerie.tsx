@@ -220,13 +220,30 @@ const Imagerie: React.FC = () => {
           </Box>
         </ToolbarBits>
 
-        <GlassCard sx={{ mb: 3 }}>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-            <Tab label="Examens" />
-            <Tab label="Visionneuse & Annotations" />
-            <Tab label="Compte rendu" />
-            <Tab label="Archivage & Recherche" />
+        <GlassCard sx={{ mb: 3, width: '100%', overflow: 'hidden' }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+          <Tabs 
+            value={tab} 
+            onChange={(_, v) => setTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{
+              '& .MuiTab-root': {
+                minHeight: 56,
+                py: 1.5,
+                px: 2,
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                textTransform: 'none',
+                '&.Mui-selected': { fontWeight: 600 }
+              }
+            }}
+          >
+            <Tab label="Examens" iconPosition="start" />
+            <Tab label="Visionneuse & Annotations" iconPosition="start" />
+            <Tab label="Compte rendu" iconPosition="start" />
+            <Tab label="Archivage & Recherche" iconPosition="start" />
           </Tabs>
           </Box>
         </GlassCard>

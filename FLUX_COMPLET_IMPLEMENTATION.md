@@ -5,13 +5,105 @@
 Le système implémente maintenant le flux complet selon le schéma synthétique demandé :
 
 ```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        FLUX COMPLET DU SYSTÈME MÉDICAL                         │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌───────────────────┐
+                              │    FOURNISSEURS   │
+                              │   (Entrées Stock) │
+                              └─────────┬─────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           MODULE STOCK MÉDICAMENTS                              │
+│                        (Responsable Centre / Magasin Gros)                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  ✓ Réception Médicaments     → Enregistrement + Stockage Magasin Gros          │
+│  ✓ Gestion des Médicaments   → Création, modification (prix, seuils)           │
+│  ✓ Inventaire Magasin Gros   → État des stocks central                          │
+│  ✓ Alertes Stock             → Péremptions, ruptures, seuils                    │
+│  ✓ Traçabilité Lots          → Historique complet                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                      ┌─────────────────┼─────────────────┐
+                      │                 │                 │
+                      ▼                 ▼                 ▼
+              ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+              │  Demande     │  │  Validation  │  │  Transfert   │
+              │  Interne     │  │  Responsable │  │  Automatique │
+              └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+                     │                 │                 │
+                     └─────────────────┴─────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              MODULE PHARMACIE                                   │
+│                          (Pharmacie / Magasin Détail)                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  ✓ Stock Détail              → Médicaments disponibles pour dispensation       │
+│  ✓ Dispensations Patients    → Stock Détail décrémenté                          │
+│  ✓ Ajustement (Commandes)    → Demandes vers Magasin Gros                       │
+│  ✓ Inventaire Détail         → État des stocks pharmacie                        │
+│  ✓ Alertes Stock             → Péremptions, ruptures                            │
+│  ✓ Rapports                  → Statistiques et suivi                            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+                      ┌─────────────────┴─────────────────┐
+                      │                                   │
+                      ▼                                   ▼
+┌─────────────────────────────────────────┐  ┌───────────────────────────────────┐
+│         MODULE CONSULTATIONS            │  │           MODULE CAISSE           │
+├─────────────────────────────────────────┤  ├───────────────────────────────────┤
+│  • Prescriptions médicales              │  │  • Facturation dispensations      │
+│  • Ordonnances                          │  │  • Tickets de paiement            │
+│  • Suivi traitements                    │  │  • Journal de caisse              │
+│  • Historique patients                  │  │  • Rapports financiers            │
+└─────────────────────────────────────────┘  └───────────────────────────────────┘
+                      │                                   │
+                      └─────────────────┬─────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              AUTRES MODULES                                     │
+├──────────────────┬──────────────────┬──────────────────┬────────────────────────┤
+│   MATERNITÉ      │   LABORATOIRE    │    IMAGERIE      │     VACCINATION        │
+├──────────────────┼──────────────────┼──────────────────┼────────────────────────┤
+│ • Dossiers CPN   │ • Prescriptions  │ • Examens radio  │ • Calendrier vaccinal  │
+│ • Accouchements  │ • Analyses       │ • Comptes rendus │ • Administration doses │
+│ • Suivi postnatal│ • Résultats      │ • Archivage      │ • Rappels automatiques │
+└──────────────────┴──────────────────┴──────────────────┴────────────────────────┘
+
+                              ┌───────────────────┐
+                              │     PATIENTS      │
+                              │  (Destinataires)  │
+                              └───────────────────┘
+```
+
+## Architecture des Interconnexions
+
+### Flux Principal Stock
+
+```
 Réception médicaments → Magasin Gros (enregistrement + stockage)
 Demande interne → Responsable Gros
-Validation + transfert → Mise à jour Magasin Gros (-) et Magasin Détail (+), génération bon de transfert
+Validation + transfert → Mise à jour Magasin Gros (-) et Magasin Détail (+)
 Dispensation aux patients → Stock Magasin Détail décrémenté
 Retours / pertes → Mise à jour stocks avec justification
 Rapports & alertes → Suivi conjoint des deux entités
 ```
+
+### Connexions Inter-Modules
+
+| Module Source | Module Destination | Type de Liaison |
+|--------------|-------------------|-----------------|
+| Stock Médicaments | Pharmacie | Transfert de lots |
+| Pharmacie | Stock Médicaments | Demandes de ravitaillement |
+| Consultations | Pharmacie | Prescriptions à dispenser |
+| Pharmacie | Caisse | Facturation des dispensations |
+| Caisse | Pharmacie | Confirmation de paiement |
+| Laboratoire | Pharmacie | Demandes de réactifs |
+| Vaccination | Stock Médicaments | Consommation vaccins |
 
 ## Architecture Technique
 
@@ -27,97 +119,64 @@ Service principal qui implémente toutes les opérations du flux :
 - **`enregistrerPerteRetour()`** : Gestion des retours et pertes avec justification
 - **`verifierAlertes()`** : Vérification automatique des alertes de stock
 
+#### `DispensationService` (`src/services/dispensationService.ts`)
+Service pour la gestion des dispensations :
+
+- **`creerDispensation()`** : Création d'une nouvelle dispensation
+- **`getLotsDisponibles()`** : Récupération des lots disponibles avec prix détail
+- **`validerDispensation()`** : Validation et mise à jour des stocks
+- **`annulerDispensation()`** : Annulation avec remise en stock
+
+#### `MedicamentService` (`src/services/medicamentService.ts`)
+Service pour la gestion du catalogue médicaments :
+
+- **`creerMedicament()`** : Création avec prix (entrée, total, détail)
+- **`modifierMedicament()`** : Modification des informations et prix
+- **`getMedicaments()`** : Liste des médicaments avec filtres
+
 ### Composants Interface
 
-#### `MagasinGros` (`src/components/stock/MagasinGros.tsx`)
-Interface pour la gestion du magasin gros avec :
-- Tableau de bord avec statistiques
-- Inventaire des lots avec filtres
-- Formulaires de réception, transfert et retour
-- Intégration avec le service de données
+#### `StockMedicaments` (`src/pages/StockMedicaments.tsx`)
+Page principale du module Stock avec :
+- Navigation scrollable entre sous-modules
+- Accès rapide vers Pharmacie, Consultations, Caisse
+- Gestion des médicaments avec prix (entrée, total, détail)
+
+#### `Pharmacie` (`src/pages/Pharmacie.tsx`)
+Page principale du module Pharmacie avec :
+- Navigation scrollable entre sous-modules
+- Accès rapide vers Stock, Consultations, Caisse
+- Dispensation avec prix unitaire détail
 
 #### `GestionTransferts` (`src/components/stock/GestionTransferts.tsx`)
-Interface pour la gestion des transferts avec :
+Interface pour la gestion des ajustements avec :
 - Création de demandes de transfert
-- Validation des transferts
 - Réception des transferts
 - Historique des mouvements
 
-#### `TestFluxComplet` (`src/components/stock/TestFluxComplet.tsx`)
-Composant de test qui vérifie le fonctionnement complet du flux :
-- Test automatisé de toutes les étapes
-- Interface visuelle avec stepper
-- Résultats en temps réel
+### Gestion des Prix
 
-## Flux Détaillé
+| Champ | Description | Utilisation |
+|-------|-------------|-------------|
+| `prix_unitaire_entree` | Prix d'achat unitaire | Magasin Gros |
+| `prix_total_entree` | Prix total d'achat | Comptabilité |
+| `prix_unitaire_detail` | Prix de vente au détail | Pharmacie, Facturation |
 
-### 1. Réception Médicaments → Magasin Gros
+**Important** : Seul le `prix_unitaire_detail` est utilisé pour les dispensations et la facturation.
 
-**Processus :**
-1. Saisie des informations du lot (numéro, quantité, dates, fournisseur)
-2. Création du lot dans la table `lots` avec `magasin = 'gros'`
-3. Enregistrement du mouvement de réception dans `mouvements_stock`
-4. Vérification automatique des alertes
+## Navigation et Onglets
 
-**Interface :** Dialog "Nouvelle Réception" dans `MagasinGros`
-
-### 2. Demande Interne → Responsable Gros
-
-**Processus :**
-1. Le pharmacien/infirmier identifie un besoin
-2. Création d'une demande de transfert via `creerDemandeTransfert()`
-3. Vérification de la disponibilité du stock
-4. Création de l'enregistrement dans `transferts` et `transferts_lignes`
-
-**Interface :** Dialog "Créer Transfert" dans `MagasinGros` ou `GestionTransferts`
-
-### 3. Validation + Transfert → Mise à jour Stocks
-
-**Processus :**
-1. Le responsable valide la demande via `validerTransfert()`
-2. Décrémentation du stock dans le magasin gros
-3. Création ou mise à jour du lot dans le magasin détail
-4. Enregistrement du mouvement de transfert
-5. Mise à jour du statut du transfert
-
-**Interface :** Onglet "Validation" dans `GestionTransferts`
-
-### 4. Dispensation Patients → Stock Détail décrémenté
-
-**Processus :**
-1. Saisie de la dispensation via `dispensationPatient()`
-2. Vérification de la disponibilité du stock détail
-3. Décrémentation du stock détail
-4. Création de la dispensation et des lignes
-5. Enregistrement du mouvement de dispensation
-
-**Interface :** Module Pharmacie avec dialog "Nouvelle Dispensation"
-
-### 5. Retours/Pertes → Mise à jour avec justification
-
-**Processus :**
-1. Enregistrement via `enregistrerPerteRetour()`
-2. Justification obligatoire du motif
-3. Mise à jour des stocks selon le type (retour vers gros ou perte)
-4. Enregistrement du mouvement avec justification
-
-**Interface :** Dialogs "Déclarer Retour" et "Déclarer Perte"
-
-### 6. Rapports & Alertes → Suivi conjoint
-
-**Processus :**
-1. Vérification automatique des seuils et péremptions
-2. Création d'alertes dans `alertes_stock`
-3. Génération de rapports consolidés
-4. Suivi conjoint des deux magasins
-
-**Interface :** Composants `SystemeAlertes` et modules de rapports
+Tous les modules utilisent maintenant des onglets scrollables :
+- `variant="scrollable"` : Défilement horizontal automatique
+- `scrollButtons="auto"` : Boutons de navigation affichés si nécessaire
+- `allowScrollButtonsMobile` : Support mobile
+- `iconPosition="start"` : Icônes alignées à gauche
 
 ## Base de Données
 
 ### Tables Principales
 
-- **`medicaments`** : Catalogue des médicaments
+- **`medicaments`** : Catalogue des médicaments avec prix multiples
 - **`lots`** : Lots de médicaments avec magasin (gros/détail)
 - **`mouvements_stock`** : Historique de tous les mouvements
 - **`transferts`** : Transferts entre magasins
@@ -127,13 +186,13 @@ Composant de test qui vérifie le fonctionnement complet du flux :
 - **`alertes_stock`** : Alertes automatiques
 - **`pertes_retours`** : Enregistrement des pertes et retours
 
-### Relations
+### Colonnes Prix (Table medicaments)
 
-- Un médicament peut avoir plusieurs lots
-- Un lot appartient à un magasin (gros ou détail)
-- Chaque mouvement est tracé avec avant/après
-- Les transferts lient les magasins gros et détail
-- Les alertes sont générées automatiquement
+```sql
+prix_unitaire_entree DECIMAL(10,2)  -- Prix d'achat unitaire
+prix_total_entree DECIMAL(10,2)     -- Prix total d'achat
+prix_unitaire_detail DECIMAL(10,2)  -- Prix de vente (pharmacie)
+```
 
 ## Utilisation
 
@@ -148,7 +207,7 @@ Composant de test qui vérifie le fonctionnement complet du flux :
 
 1. **Réception** : Utiliser le dialog "Nouvelle Réception" dans Magasin Gros
 2. **Demande** : Créer une demande de transfert depuis le magasin détail
-3. **Validation** : Valider la demande depuis l'onglet Transferts
+3. **Validation** : Valider la demande depuis l'onglet Ajustement
 4. **Dispensation** : Utiliser le module Pharmacie pour dispenser
 5. **Retours** : Enregistrer les retours et pertes avec justification
 
@@ -159,14 +218,23 @@ Composant de test qui vérifie le fonctionnement complet du flux :
 - Vérification des disponibilités avant chaque opération
 - Alertes automatiques pour les seuils et péremptions
 - Historique complet des transferts et mouvements
+- Dialogs non fermables par clic extérieur (validation explicite requise)
 
-## Prochaines Étapes
+## Modules et Routes
 
-1. **Authentification** : Intégrer l'authentification utilisateur
-2. **Permissions** : Implémenter les rôles et permissions
-3. **Rapports** : Développer les rapports détaillés
-4. **Notifications** : Système de notifications en temps réel
-5. **API** : Exposer les services via API REST
+| Module | Route | Permissions |
+|--------|-------|-------------|
+| Dashboard | `/` | Tous |
+| Consultations | `/consultations` | consultations |
+| Pharmacie | `/pharmacie` | pharmacie |
+| Stock Médicaments | `/stock-medicaments` | stock |
+| Caisse | `/caisse` | caisse |
+| Laboratoire | `/laboratoire` | laboratoire |
+| Imagerie | `/imagerie` | imagerie |
+| Maternité | `/maternite` | maternite |
+| Vaccination | `/vaccination` | vaccination |
+| Rendez-vous | `/rendez-vous` | rendezvous |
+| Patients | `/patients` | patients |
 
 ## Support
 

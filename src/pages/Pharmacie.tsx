@@ -45,7 +45,6 @@ import {
   Store,
   Assessment,
   Notifications,
-  Sync,
   Person,
   MedicalServices,
   Assignment,
@@ -54,15 +53,17 @@ import {
 } from '@mui/icons-material';
 import Snackbar from '@mui/material/Snackbar';
 import CircularProgress from '@mui/material/CircularProgress';
+import { useNavigate } from 'react-router-dom';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
-import SynchronisationStocks from '../components/stock/SynchronisationStocks';
 import GestionInventaire from '../components/stock/GestionInventaire';
 import NouvelleDispensationWizard from '../components/pharmacy/NouvelleDispensationWizard';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { supabase } from '../services/supabase';
+import { StockService } from '../services/stockService';
+import { DispensationService } from '../services/dispensationService';
 
 // Types pour les données
 interface MedicamentDetail {
@@ -214,6 +215,7 @@ const alertesDetailDemo: AlerteDetail[] = [
 ];
 
 const Pharmacie: React.FC = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
   const [medicaments, setMedicaments] = useState<MedicamentDetail[]>(medicamentsDetailDemo);
   const [dispensations, setDispensations] = useState<Dispensation[]>(dispensationsDemo);
@@ -223,6 +225,11 @@ const Pharmacie: React.FC = () => {
   const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
     open: false, message: '', type: 'info'
   });
+
+  // Navigation vers le module Stock Médicaments
+  const goToStockMedicaments = () => navigate('/stock-medicaments');
+  const goToConsultations = () => navigate('/consultations');
+  const goToCaisse = () => navigate('/caisse');
 
   // Fonction utilitaire pour les notifications
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -453,17 +460,41 @@ const Pharmacie: React.FC = () => {
         </ToolbarBits>
 
         {/* Navigation par onglets */}
-        <GlassCard sx={{ mb: 3 }}>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={activeTab} onChange={handleTabChange}>
-              <Tab icon={<Dashboard />} label="Tableau de Bord" />
-              <Tab icon={<Store />} label="Stock Détail" />
-              <Tab icon={<MedicalServices />} label="Dispensations" />
-              <Tab icon={<LocalShipping />} label="Ajustement" />
-              <Tab icon={<Assignment />} label="Inventaire" />
-              <Tab icon={<Assessment />} label="Rapports" />
-              <Tab icon={<Notifications />} label="Alertes" />
-              <Tab icon={<Sync />} label="Synchronisation" />
+        <GlassCard sx={{ mb: 3, width: '100%', overflow: 'hidden' }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', width: '100%' }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{
+                width: '100%',
+                '& .MuiTabs-scrollButtons': {
+                  '&.Mui-disabled': { opacity: 0.3 }
+                },
+                '& .MuiTab-root': {
+                  minHeight: 64,
+                  py: 2,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  textTransform: 'none',
+                  whiteSpace: 'nowrap',
+                  '&.Mui-selected': {
+                    fontWeight: 600,
+                    color: 'primary.main',
+                  }
+                }
+              }}
+            >
+              <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
+              <Tab icon={<Store />} label="Stock Détail" iconPosition="start" />
+              <Tab icon={<MedicalServices />} label="Dispensations" iconPosition="start" />
+              <Tab icon={<LocalShipping />} label="Ajustement" iconPosition="start" />
+              <Tab icon={<Assignment />} label="Inventaire" iconPosition="start" />
+              <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
+              <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
             </Tabs>
           </Box>
         </GlassCard>
@@ -632,6 +663,44 @@ const Pharmacie: React.FC = () => {
                     size="medium"
                   >
                     Générer Rapport
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* Accès rapide aux modules liés */}
+            <Card sx={{ mb: 4 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Accès Rapide aux Modules Liés
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<Inventory />}
+                    onClick={goToStockMedicaments}
+                    size="medium"
+                  >
+                    Module Stock (Magasin Gros)
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="info"
+                    startIcon={<MedicalServices />}
+                    onClick={goToConsultations}
+                    size="medium"
+                  >
+                    Consultations / Prescriptions
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={<AttachMoney />}
+                    onClick={goToCaisse}
+                    size="medium"
+                  >
+                    Caisse / Facturation
                   </Button>
                 </Box>
               </CardContent>
@@ -1013,11 +1082,6 @@ const Pharmacie: React.FC = () => {
         {/* Onglet Alertes */}
         {activeTab === 6 && (
           <SystemeAlertes />
-        )}
-
-        {/* Onglet Synchronisation */}
-        {activeTab === 7 && (
-          <SynchronisationStocks />
         )}
 
         {/* Dialogs */}
