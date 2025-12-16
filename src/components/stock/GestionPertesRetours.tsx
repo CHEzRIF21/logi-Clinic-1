@@ -459,9 +459,12 @@ const GestionPertesRetoursComponent: React.FC<GestionPertesRetoursProps> = ({
                 type="number"
                 label="Quantité"
                 value={formData.quantite}
-                onChange={(e) => setFormData({ ...formData, quantite: parseInt(e.target.value) || 0 })}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setFormData({ ...formData, quantite: value });
+                }}
                 disabled={!formData.lotId}
-                inputProps={{ min: 1 }}
+                inputProps={{ min: 0, step: 1 }}
                 required
               />
             </Grid>

@@ -293,12 +293,15 @@ const MedicamentForm: React.FC<MedicamentFormProps> = ({
                 label="Prix unitaire (FCFA) *"
                 type="number"
                 value={formData.prix_unitaire}
-                onChange={(e) => handleChange('prix_unitaire', parseFloat(e.target.value) || 0)}
+                onChange={(e) => {
+                  const value = Math.max(0, parseFloat(e.target.value) || 0);
+                  handleChange('prix_unitaire', value);
+                }}
+                inputProps={{ min: 0, step: 0.01 }}
                 error={!!errors.prix_unitaire}
                 helperText={errors.prix_unitaire}
                 required
                 disabled={loading}
-                inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
 
@@ -308,11 +311,14 @@ const MedicamentForm: React.FC<MedicamentFormProps> = ({
                 label="Seuil d'alerte"
                 type="number"
                 value={formData.seuil_alerte}
-                onChange={(e) => handleChange('seuil_alerte', parseInt(e.target.value) || 0)}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  handleChange('seuil_alerte', value);
+                }}
+                inputProps={{ min: 0, step: 1 }}
                 error={!!errors.seuil_alerte}
                 helperText={errors.seuil_alerte}
                 disabled={loading}
-                inputProps={{ min: 0 }}
               />
             </Grid>
 
@@ -322,11 +328,14 @@ const MedicamentForm: React.FC<MedicamentFormProps> = ({
                 label="Seuil de rupture"
                 type="number"
                 value={formData.seuil_rupture}
-                onChange={(e) => handleChange('seuil_rupture', parseInt(e.target.value) || 0)}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  handleChange('seuil_rupture', value);
+                }}
+                inputProps={{ min: 0, step: 1 }}
                 error={!!errors.seuil_rupture}
                 helperText={errors.seuil_rupture}
                 disabled={loading}
-                inputProps={{ min: 0 }}
               />
             </Grid>
 

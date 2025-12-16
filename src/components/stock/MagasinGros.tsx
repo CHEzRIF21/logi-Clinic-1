@@ -519,7 +519,11 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               label="Quantité"
               type="number"
               value={receptionData.quantite_initiale}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, quantite_initiale: Number(e.target.value) }))}
+              onChange={(e) => {
+                const value = Math.max(0, Number(e.target.value) || 0);
+                setReceptionData(prev => ({ ...prev, quantite_initiale: value }));
+              }}
+              inputProps={{ min: 0, step: 1 }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -548,7 +552,11 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               label="Prix d'Achat (FCFA)"
               type="number"
               value={receptionData.prix_achat}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, prix_achat: Number(e.target.value) }))}
+              onChange={(e) => {
+                const value = Math.max(0, Number(e.target.value) || 0);
+                setReceptionData(prev => ({ ...prev, prix_achat: value }));
+              }}
+              inputProps={{ min: 0, step: 1 }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -633,7 +641,11 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               label="Quantité à Transférer"
               type="number"
               value={transfertData.quantite_demandee}
-              onChange={(e) => setTransfertData(prev => ({ ...prev, quantite_demandee: Number(e.target.value) }))}
+              onChange={(e) => {
+                const value = Math.max(0, Number(e.target.value) || 0);
+                setTransfertData(prev => ({ ...prev, quantite_demandee: value }));
+              }}
+              inputProps={{ min: 0, step: 1 }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -710,7 +722,11 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               label="Quantité à Retourner"
               type="number"
               value={retourData.quantite}
-              onChange={(e) => setRetourData(prev => ({ ...prev, quantite: Number(e.target.value) }))}
+              onChange={(e) => {
+                const value = Math.max(0, Number(e.target.value) || 0);
+                setRetourData(prev => ({ ...prev, quantite: value }));
+              }}
+              inputProps={{ min: 0, step: 1 }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>

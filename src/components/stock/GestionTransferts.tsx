@@ -595,34 +595,50 @@ const GestionTransferts: React.FC = () => {
           {/* Réception des transferts */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Réception des Ajustements - Magasin Détail
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  Réception des Ajustements - Magasin Détail
+                </Typography>
+                <Chip 
+                  icon={<LocalShipping />} 
+                  label="Sens unique : Magasin Gros → Magasin Détail" 
+                  color="primary" 
+                  variant="outlined"
+                />
+              </Box>
               
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
                   <strong>Processus :</strong> Le pharmacien/infirmier réceptionne les transferts 
-                  validés et met à jour le stock du Magasin Détail.
+                  validés depuis le Magasin Gros et confirme l'entrée en stock du Magasin Détail.
+                  <br />
+                  <strong>⚠️ Important :</strong> Les transferts sont à sens unique (Gros → Détail). Cliquez sur "Confirmer Réception" pour valider chaque ajustement.
                 </Typography>
               </Alert>
 
-              <TableContainer>
+              <TableContainer component={Paper} elevation={2}>
                 <Table>
                   <TableHead>
-                    <TableRow>
-                      <TableCell>N° Transfert</TableCell>
-                      <TableCell>Médicament</TableCell>
-                      <TableCell>Quantité</TableCell>
-                      <TableCell>Date Validation</TableCell>
-                      <TableCell>Statut</TableCell>
-                      <TableCell>Actions</TableCell>
+                    <TableRow sx={{ backgroundColor: 'primary.light' }}>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>N° Transfert</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Médicament</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Quantité</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Date Validation</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Statut</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Action de Réception</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {transfertsDemo
                       .filter(t => t.statut === 'valide' || t.statut === 'reçu')
                       .map((transfert) => (
-                        <TableRow key={transfert.id}>
+                        <TableRow 
+                          key={transfert.id}
+                          sx={{ 
+                            '&:hover': { backgroundColor: 'action.hover' },
+                            backgroundColor: transfert.statut === 'valide' ? 'warning.light' : 'inherit'
+                          }}
+                        >
                           <TableCell>
                             <Typography variant="body2" fontWeight="bold">
                               {transfert.numeroTransfert}
@@ -633,30 +649,53 @@ const GestionTransferts: React.FC = () => {
                               <Typography variant="body2" fontWeight="bold">
                                 {transfert.medicamentNom}
                               </Typography>
-                                <Typography variant="caption" color="text.secondary">
+                              <Typography variant="caption" color="text.secondary">
                                 {transfert.medicamentCode}
                               </Typography>
                             </Box>
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2">
+                            <Typography variant="body2" fontWeight="bold" color="primary.main">
                               {transfert.quantite} unités
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2">
                               {transfert.dateValidation?.toLocaleDateString()}
-                                </Typography>
+                            </Typography>
                           </TableCell>
                           <TableCell>
                             <Chip
-                              label={transfert.statut}
-                              color={getStatutColor(transfert.statut)}
+                              label={transfert.statut === 'valide' ? 'En attente de réception' : 'Réceptionné'}
+                              color={transfert.statut === 'valide' ? 'warning' : 'success'}
                               size="small"
                             />
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                              {transfert.statut === 'valide' ? (
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  startIcon={<CheckCircle />}
+                                  onClick={() => {
+                                    setSelectedTransfert(transfert);
+                                    setOpenReception(true);
+                                  }}
+                                  sx={{ fontWeight: 'bold' }}
+                                >
+                                  Confirmer Réception
+                                </Button>
+                              ) : (
+                                <Chip
+                                  icon={<CheckCircle />}
+                                  label="Réception confirmée"
+                                  color="success"
+                                  variant="outlined"
+                                  size="small"
+                                />
+                              )}
                               <Tooltip title="Voir détails">
                                 <IconButton
                                   size="small"
@@ -665,27 +704,21 @@ const GestionTransferts: React.FC = () => {
                                   <Visibility />
                                 </IconButton>
                               </Tooltip>
-                              {transfert.statut === 'valide' && (
-                                <Tooltip title="Réceptionner">
-                                  <IconButton
-                                    size="small"
-                                    color="success"
-                                    onClick={() => {
-                                      setSelectedTransfert(transfert);
-                                      setOpenReception(true);
-                                    }}
-                                  >
-                                    <Inventory />
-                                  </IconButton>
-                                </Tooltip>
-                            )}
-                          </Box>
+                            </Box>
                           </TableCell>
                         </TableRow>
                       ))}
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              {transfertsDemo.filter(t => t.statut === 'valide').length === 0 && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    ✅ Tous les ajustements ont été réceptionnés. Aucun transfert en attente.
+                  </Typography>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </Box>
@@ -845,7 +878,11 @@ const GestionTransferts: React.FC = () => {
                 label="Quantité demandée"
                 type="number"
                 value={demandeForm.quantite_demandee}
-                onChange={(e) => setDemandeForm(prev => ({ ...prev, quantite_demandee: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setDemandeForm(prev => ({ ...prev, quantite_demandee: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -908,7 +945,11 @@ const GestionTransferts: React.FC = () => {
                 label="Quantité validée"
                 type="number"
                 value={validationForm.quantite_validee}
-                onChange={(e) => setValidationForm(prev => ({ ...prev, quantite_validee: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setValidationForm(prev => ({ ...prev, quantite_validee: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -957,7 +998,11 @@ const GestionTransferts: React.FC = () => {
                 label="Quantité reçue"
                 type="number"
                 value={receptionForm.quantite_recue}
-                onChange={(e) => setReceptionForm(prev => ({ ...prev, quantite_recue: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setReceptionForm(prev => ({ ...prev, quantite_recue: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12}>

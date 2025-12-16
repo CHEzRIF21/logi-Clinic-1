@@ -326,7 +326,10 @@ export class DispensationService {
         .insert({
           date_dispensation: new Date().toISOString(),
           patient_id: data.type_dispensation === 'patient' ? data.patient_id : null,
+          patient_nom: data.type_dispensation === 'patient' ? data.patient_nom : null,
+          patient_prenoms: data.type_dispensation === 'patient' ? data.patient_prenoms : null,
           service_id: data.type_dispensation === 'service' ? data.service_id : null,
+          service_nom: data.type_dispensation === 'service' ? data.service_nom : null,
           type_dispensation: data.type_dispensation,
           statut: 'en_cours',
           utilisateur_id: utilisateurId,

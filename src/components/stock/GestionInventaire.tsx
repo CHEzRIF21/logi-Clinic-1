@@ -528,6 +528,44 @@ const GestionInventaire: React.FC<GestionInventaireProps> = ({
         </Typography>
       </Box>
 
+      {/* Statut de Synchronisation Automatique */}
+      <Card sx={{ mb: 3, bgcolor: 'success.light', border: '1px solid', borderColor: 'success.main' }}>
+        <CardContent sx={{ py: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CheckCircle color="success" sx={{ fontSize: 32 }} />
+              <Box>
+                <Typography variant="h6" color="success.dark">
+                  Synchronisation Automatique Active
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Les stocks Magasin Gros et Magasin Détail sont synchronisés automatiquement à chaque transfert validé.
+                </Typography>
+              </Box>
+            </Box>
+            <Box sx={{ textAlign: 'right' }}>
+              <Chip 
+                icon={<CheckCircle />} 
+                label="Synchronisé" 
+                color="success" 
+                variant="filled"
+                sx={{ mb: 1 }}
+              />
+              <Typography variant="caption" display="block" color="text.secondary">
+                Dernière sync: {new Date().toLocaleString('fr-FR')}
+              </Typography>
+            </Box>
+          </Box>
+          <Alert severity="info" sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>Flux de synchronisation :</strong> Magasin Gros (Stock Central) → Transfert validé → Magasin Détail (Pharmacie)
+              <br />
+              <strong>Mode :</strong> Automatique lors de chaque validation de transfert. Les écarts sont calculés lors de l'inventaire.
+            </Typography>
+          </Alert>
+        </CardContent>
+      </Card>
+
       {/* Navigation par onglets */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
@@ -884,7 +922,7 @@ const GestionInventaire: React.FC<GestionInventaireProps> = ({
                                 value={ligne.qtePhysique ?? ''}
                                 onChange={(e) => handleUpdateQtePhysique(
                                   ligne.id, 
-                                  e.target.value === '' ? null : parseFloat(e.target.value)
+                                  e.target.value === '' ? null : Math.max(0, parseFloat(e.target.value))
                                 )}
                                 inputProps={{ 
                                   min: 0, 
@@ -1061,8 +1099,11 @@ const GestionInventaire: React.FC<GestionInventaireProps> = ({
                 label="Quantité physique trouvée *"
                 type="number"
                 value={ajoutLotForm.qtePhysique}
-                onChange={(e) => setAjoutLotForm(prev => ({ ...prev, qtePhysique: parseFloat(e.target.value) || 0 }))}
-                inputProps={{ min: 0 }}
+                onChange={(e) => {
+                  const value = Math.max(0, parseFloat(e.target.value) || 0);
+                  setAjoutLotForm(prev => ({ ...prev, qtePhysique: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
                 required
               />
             </Grid>

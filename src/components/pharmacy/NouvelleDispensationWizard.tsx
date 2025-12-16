@@ -109,11 +109,87 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
 
   const chargerTousMedicaments = async () => {
     try {
+      // D'abord, essayer de charger les médicaments avec des lots disponibles dans le magasin détail
+      const { data: lotsDetail, error: lotsError } = await supabase
+        .from('lots')
+        .select(`
+          medicament_id,
+          quantite_disponible,
+          medicaments!inner(
+            id,
+            code,
+            nom,
+            dci,
+            forme,
+            dosage,
+            unite,
+            prix_unitaire,
+            prix_unitaire_detail,
+            seuil_alerte
+          )
+        `)
+        .eq('magasin', 'detail')
+        .eq('statut', 'actif')
+        .gt('quantite_disponible', 0);
+
+      if (!lotsError && lotsDetail && lotsDetail.length > 0) {
+        // Agréger par médicament pour avoir la quantité totale disponible
+        const medicamentsMap = new Map<string, any>();
+        
+        lotsDetail.forEach((lot: any) => {
+          const med = lot.medicaments;
+          if (!med) return;
+          
+          const existingMed = medicamentsMap.get(lot.medicament_id);
+          if (existingMed) {
+            existingMed.quantite_stock = (existingMed.quantite_stock || 0) + lot.quantite_disponible;
+          } else {
+            medicamentsMap.set(lot.medicament_id, {
+              id: med.id,
+              code: med.code || '',
+              nom: med.nom || 'Inconnu',
+              dci: med.dci || '',
+              forme: med.forme || '',
+              dosage: med.dosage || '',
+              unite: med.unite || 'Unité',
+              prix_unitaire: med.prix_unitaire_detail || med.prix_unitaire || 0,
+              prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
+              seuil_alerte: med.seuil_alerte || 10,
+              quantite_stock: lot.quantite_disponible,
+            });
+          }
+        });
+        
+        const medsFromLots = Array.from(medicamentsMap.values());
+        if (medsFromLots.length > 0) {
+          setAllMedicaments(medsFromLots);
+          setMedicamentsRecherches(medsFromLots);
+          console.log('Médicaments chargés depuis les lots détail:', medsFromLots.length);
+          return;
+        }
+      }
+
+      // Si aucun lot dans le magasin détail, charger tous les médicaments
       const medicaments = await MedicamentService.getAllMedicaments();
-      setAllMedicaments(medicaments);
-      setMedicamentsRecherches(medicaments);
+      // Enrichir avec prix_unitaire_detail si disponible
+      const medsEnrichis = medicaments.map((med: any) => ({
+        ...med,
+        prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
+        quantite_stock: 0, // Pas de stock dans le détail
+      }));
+      setAllMedicaments(medsEnrichis);
+      setMedicamentsRecherches(medsEnrichis);
+      console.log('Médicaments chargés depuis la table médicaments:', medsEnrichis.length);
     } catch (err: any) {
       console.error('Erreur lors du chargement des médicaments:', err);
+      // En cas d'erreur, essayer de charger juste les médicaments de base
+      try {
+        const medicaments = await MedicamentService.getAllMedicaments();
+        setAllMedicaments(medicaments);
+        setMedicamentsRecherches(medicaments);
+      } catch (fallbackErr) {
+        console.error('Erreur fallback:', fallbackErr);
+      }
     }
   };
 
@@ -276,33 +352,49 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
       const ligneExistante = nouvellesLignes[index];
       const ligneMiseAJour = { ...ligneExistante, ...updates };
 
-      // Si le médicament change, charger les lots
+      // Si le médicament change, charger les lots et le prix unitaire détail
       if (updates.medicament_id && updates.medicament_id !== ligneExistante.medicament_id) {
         chargerLotsDisponibles(updates.medicament_id);
-        // Mettre à jour le nom du médicament
-        const medicamentTrouve = medicamentsRecherches.find(m => m.id === updates.medicament_id);
+        // Mettre à jour les infos du médicament incluant le prix unitaire détail
+        const medicamentTrouve = allMedicaments.find(m => m.id === updates.medicament_id) 
+          || medicamentsRecherches.find(m => m.id === updates.medicament_id);
         if (medicamentTrouve) {
           ligneMiseAJour.medicament_nom = medicamentTrouve.nom;
           ligneMiseAJour.dosage = medicamentTrouve.dosage;
           ligneMiseAJour.forme = medicamentTrouve.forme;
+          // Charger le prix unitaire détail du médicament
+          ligneMiseAJour.prix_unitaire = medicamentTrouve.prix_unitaire_detail || medicamentTrouve.prix_unitaire || 0;
         }
       }
 
-      // Si le lot change, mettre à jour les informations du lot
+      // Si le lot change, mettre à jour les informations du lot (sauf le prix qui vient du médicament)
       if (updates.lot_id && updates.lot_id !== ligneExistante.lot_id) {
         const lots = lotsDisponibles[ligneMiseAJour.medicament_id] || [];
         const lotSelectionne = lots.find(l => l.id === updates.lot_id);
         if (lotSelectionne) {
           ligneMiseAJour.numero_lot = lotSelectionne.numero_lot;
           ligneMiseAJour.date_expiration = lotSelectionne.date_expiration;
-          ligneMiseAJour.prix_unitaire = lotSelectionne.prix_unitaire;
+          // Utiliser le prix du lot (qui devrait être le prix_unitaire_detail du médicament)
+          if (lotSelectionne.prix_unitaire > 0) {
+            ligneMiseAJour.prix_unitaire = lotSelectionne.prix_unitaire;
+          }
         }
       }
 
-      // Calculer le prix total
-      if (ligneMiseAJour.quantite_delivree && ligneMiseAJour.prix_unitaire) {
-        ligneMiseAJour.prix_total = ligneMiseAJour.quantite_delivree * ligneMiseAJour.prix_unitaire;
+      // S'assurer que les quantités ne sont jamais négatives
+      if (ligneMiseAJour.quantite_prescite < 0) {
+        ligneMiseAJour.quantite_prescite = 0;
       }
+      if (ligneMiseAJour.quantite_delivree < 0) {
+        ligneMiseAJour.quantite_delivree = 0;
+      }
+      if (ligneMiseAJour.prix_unitaire < 0) {
+        ligneMiseAJour.prix_unitaire = 0;
+      }
+
+      // Calculer le prix total (toujours >= 0)
+      const prixTotal = (ligneMiseAJour.quantite_delivree || 0) * (ligneMiseAJour.prix_unitaire || 0);
+      ligneMiseAJour.prix_total = Math.max(0, prixTotal);
 
       // Déterminer le statut automatiquement
       if (ligneMiseAJour.quantite_delivree > 0) {
@@ -732,7 +824,7 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                     <TableRow key={index}>
                       <TableCell>
                         <Autocomplete
-                          options={medicamentsRecherches.length > 0 ? medicamentsRecherches : allMedicaments}
+                          options={allMedicaments}
                           getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
                           value={allMedicaments.find(m => m.id === ligne.medicament_id) || null}
                           onChange={(_, newValue) => {
@@ -743,27 +835,42 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                                 medicament_code: newValue.code,
                                 dosage: newValue.dosage,
                                 forme: newValue.forme,
+                                prix_unitaire: newValue.prix_unitaire_detail || newValue.prix_unitaire || 0,
                               });
                             }
                           }}
-                          onInputChange={(_, value) => {
-                            setRechercheMedicament(value);
-                            rechercherMedicaments(value);
-                          }}
-                          onOpen={() => {
-                            // Afficher tous les médicaments quand on ouvre le menu
-                            if (medicamentsRecherches.length === 0) {
-                              setMedicamentsRecherches(allMedicaments);
+                          onInputChange={(_, value, reason) => {
+                            if (reason === 'input') {
+                              setRechercheMedicament(value);
+                              rechercherMedicaments(value);
                             }
+                          }}
+                          filterOptions={(options, { inputValue }) => {
+                            if (!inputValue) return options;
+                            const termeLower = inputValue.toLowerCase();
+                            return options.filter(option =>
+                              option.nom?.toLowerCase().includes(termeLower) ||
+                              option.code?.toLowerCase().includes(termeLower) ||
+                              option.dci?.toLowerCase().includes(termeLower)
+                            );
                           }}
                           renderOption={(props, option) => (
                             <Box component="li" {...props} key={option.id}>
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {option.nom} {option.dosage || ''}
-                                </Typography>
+                              <Box sx={{ width: '100%' }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {option.nom} {option.dosage || ''}
+                                  </Typography>
+                                  <Chip 
+                                    size="small" 
+                                    label={`${(option.prix_unitaire_detail || option.prix_unitaire || 0).toLocaleString('fr-FR')} FCFA`}
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ ml: 1 }}
+                                  />
+                                </Box>
                                 <Typography variant="caption" color="text.secondary">
-                                  {option.code} • {option.forme || ''} • Stock: {option.quantite_stock || 0}
+                                  {option.code} • {option.forme || ''} • Stock: {option.quantite_stock || 0} {option.unite || ''}
                                 </Typography>
                               </Box>
                             </Box>
@@ -777,10 +884,14 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                             />
                           )}
                           ListboxProps={{
-                            style: { maxHeight: 300 }
+                            style: { maxHeight: 350 }
                           }}
-                          noOptionsText="Aucun médicament trouvé"
+                          noOptionsText={allMedicaments.length === 0 ? "Chargement des médicaments..." : "Aucun médicament trouvé"}
+                          loading={allMedicaments.length === 0}
                           openOnFocus
+                          clearOnBlur={false}
+                          selectOnFocus
+                          handleHomeEndKeys
                         />
                       </TableCell>
                       <TableCell>
@@ -788,11 +899,13 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           size="small"
                           type="number"
                           value={ligne.quantite_prescite}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const value = Math.max(0, parseInt(e.target.value) || 0);
                             mettreAJourLigne(index, {
-                              quantite_prescite: parseInt(e.target.value) || 0,
-                            })
-                          }
+                              quantite_prescite: value,
+                            });
+                          }}
+                          inputProps={{ min: 0, step: 1 }}
                           sx={{ width: 100 }}
                         />
                       </TableCell>
@@ -802,9 +915,10 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           type="number"
                           value={ligne.quantite_delivree}
                           onChange={(e) => {
-                            const qty = parseInt(e.target.value) || 0;
+                            const qty = Math.max(0, parseInt(e.target.value) || 0);
                             mettreAJourLigne(index, { quantite_delivree: qty });
                           }}
+                          inputProps={{ min: 0, step: 1 }}
                           sx={{ width: 100 }}
                         />
                       </TableCell>

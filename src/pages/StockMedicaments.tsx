@@ -34,10 +34,8 @@ import { LocalPharmacy, MedicalServices, Receipt } from '@mui/icons-material';
 import TraceabiliteLots from '../components/stock/TraceabiliteLots';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
-import SynchronisationStocks from '../components/stock/SynchronisationStocks';
 import GestionInventaire from '../components/stock/GestionInventaire';
 import TestFluxComplet from '../components/stock/TestFluxComplet';
-import MedicamentManagement from '../components/stock/MedicamentManagement';
 import { StockService } from '../services/stockService';
 import { MedicamentService } from '../services/medicamentService';
 import { MedicamentFormData } from '../services/stockSupabase';
@@ -949,7 +947,6 @@ const StockMedicaments: React.FC = () => {
               <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
               <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
               <Tab icon={<Timeline />} label="Traçabilité" iconPosition="start" />
-              <Tab icon={<Add />} label="Gestion Médicaments" iconPosition="start" />
               <Tab icon={<Refresh />} label="Test Flux" iconPosition="start" />
             </Tabs>
           </Box>
@@ -1294,13 +1291,8 @@ const StockMedicaments: React.FC = () => {
           <TraceabiliteLots />
         )}
 
-        {/* Onglet Synchronisation */}
-        {activeTab === 7 && (
-          <SynchronisationStocks />
-        )}
-
         {/* Onglet Test Flux */}
-        {activeTab === 8 && (
+        {activeTab === 7 && (
           <TestFluxComplet />
         )}
 
@@ -1444,8 +1436,11 @@ const StockMedicaments: React.FC = () => {
                           label="Quantité *"
                           type="number"
                           value={line.quantite}
-                          onChange={(e) => handleUpdateReceptionLine(line.id, 'quantite', parseInt(e.target.value) || 0)}
-                          inputProps={{ min: 1 }}
+                          onChange={(e) => {
+                            const value = Math.max(0, parseInt(e.target.value) || 0);
+                            handleUpdateReceptionLine(line.id, 'quantite', value);
+                          }}
+                          inputProps={{ min: 0, step: 1 }}
                           required
                         />
                       </Grid>
@@ -1466,8 +1461,11 @@ const StockMedicaments: React.FC = () => {
                           label="Prix unitaire (FCFA)"
                           type="number"
                           value={line.prixUnitaire}
-                          onChange={(e) => handleUpdateReceptionLine(line.id, 'prixUnitaire', parseInt(e.target.value) || 0)}
-                          inputProps={{ min: 0 }}
+                          onChange={(e) => {
+                            const value = Math.max(0, parseInt(e.target.value) || 0);
+                            handleUpdateReceptionLine(line.id, 'prixUnitaire', value);
+                          }}
+                          inputProps={{ min: 0, step: 1 }}
                         />
                       </Grid>
                       <Grid item xs={12} md={6}>
@@ -1521,7 +1519,11 @@ const StockMedicaments: React.FC = () => {
                   label="Quantité à transférer"
                   type="number"
                   value={transfertForm.quantite}
-                  onChange={(e) => setTransfertForm(prev => ({ ...prev, quantite: parseInt(e.target.value) || 0 }))}
+                  onChange={(e) => {
+                    const value = Math.max(0, parseInt(e.target.value) || 0);
+                    setTransfertForm(prev => ({ ...prev, quantite: value }));
+                  }}
+                  inputProps={{ min: 0, step: 1 }}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
@@ -1718,7 +1720,11 @@ const StockMedicaments: React.FC = () => {
                 label="Seuil minimum"
                 type="number"
                 value={nouveauMedicamentForm.seuilMinimum}
-                onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, seuilMinimum: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setNouveauMedicamentForm(prev => ({ ...prev, seuilMinimum: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -1727,7 +1733,11 @@ const StockMedicaments: React.FC = () => {
                 label="Seuil maximum"
                 type="number"
                 value={nouveauMedicamentForm.seuilMaximum}
-                onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, seuilMaximum: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setNouveauMedicamentForm(prev => ({ ...prev, seuilMaximum: value }));
+                }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             
@@ -1744,7 +1754,7 @@ const StockMedicaments: React.FC = () => {
                 type="number"
                 value={nouveauMedicamentForm.prixUnitaireEntree}
                 onChange={(e) => {
-                  const prixEntree = parseInt(e.target.value) || 0;
+                  const prixEntree = Math.max(0, parseInt(e.target.value) || 0);
                   setNouveauMedicamentForm(prev => ({ 
                     ...prev, 
                     prixUnitaireEntree: prixEntree,
@@ -1753,7 +1763,7 @@ const StockMedicaments: React.FC = () => {
                   }));
                 }}
                 helperText="Prix d'achat par unité"
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12} md={4}>
@@ -1762,9 +1772,12 @@ const StockMedicaments: React.FC = () => {
                 label="Prix Total d'Entrée (XOF)"
                 type="number"
                 value={nouveauMedicamentForm.prixTotalEntree}
-                onChange={(e) => setNouveauMedicamentForm(prev => ({ ...prev, prixTotalEntree: parseInt(e.target.value) || 0 }))}
+                onChange={(e) => {
+                  const value = Math.max(0, parseInt(e.target.value) || 0);
+                  setNouveauMedicamentForm(prev => ({ ...prev, prixTotalEntree: value }));
+                }}
                 helperText="Montant total de l'achat"
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, step: 1 }}
               />
             </Grid>
             <Grid item xs={12} md={4}>
@@ -1774,7 +1787,7 @@ const StockMedicaments: React.FC = () => {
                 type="number"
                 value={nouveauMedicamentForm.prixUnitaireDetail}
                 onChange={(e) => {
-                  const prixDetail = parseInt(e.target.value) || 0;
+                  const prixDetail = Math.max(0, parseInt(e.target.value) || 0);
                   setNouveauMedicamentForm(prev => ({ 
                     ...prev, 
                     prixUnitaireDetail: prixDetail,
@@ -1782,7 +1795,7 @@ const StockMedicaments: React.FC = () => {
                   }));
                 }}
                 helperText="Prix de vente pharmacie/détail"
-                inputProps={{ min: 0 }}
+                inputProps={{ min: 0, step: 1 }}
                 required
                 sx={{ 
                   '& .MuiOutlinedInput-root': {

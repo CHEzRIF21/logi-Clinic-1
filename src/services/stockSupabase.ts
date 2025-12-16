@@ -177,11 +177,19 @@ export interface DispensationSupabase {
   numero_dispensation: string;
   date_dispensation: string;
   patient_id?: string;
+  patient_nom?: string;
+  patient_prenoms?: string;
   service_id?: string;
+  service_nom?: string;
   type_dispensation: 'patient' | 'service';
-  statut: 'en_cours' | 'terminee' | 'annulee';
+  statut: 'en_cours' | 'terminee' | 'annulee' | 'validee';
   utilisateur_id: string;
+  prescripteur_id?: string;
+  prescripteur_nom?: string;
+  service_prescripteur?: string;
+  consultation_id?: string;
   prescription_id?: string;
+  statut_prise_charge?: string;
   observations?: string;
   created_at: string;
   updated_at: string;
@@ -192,9 +200,17 @@ export interface DispensationLigneSupabase {
   dispensation_id: string;
   medicament_id: string;
   lot_id: string;
-  quantite: number;
+  quantite: number; // Quantité totale (pour compatibilité)
+  quantite_prescite: number;
+  quantite_delivree: number;
+  numero_lot: string;
+  date_expiration: string;
+  statut: 'delivre' | 'partiellement_delivre' | 'substitution' | 'rupture';
+  medicament_substitue_id?: string;
   prix_unitaire: number;
   prix_total: number;
+  observations?: string;
+  prescription_line_id?: string;
   created_at: string;
   updated_at: string;
 }
