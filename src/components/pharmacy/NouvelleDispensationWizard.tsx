@@ -364,14 +364,14 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
 
   const rechercherMedicaments = async (searchTerm: string) => {
     if (!searchTerm || searchTerm.length < 1) {
-      // Afficher tous les médicaments si pas de recherche
-      setMedicamentsRecherches(allMedicaments);
+      // Recharger tous les médicaments enrichis si pas de recherche
+      await chargerTousMedicaments();
       return;
     }
 
-    // Filtrer localement pour une réponse plus rapide
+    // Filtrer localement sur les médicaments déjà chargés et enrichis
     const termeLower = searchTerm.toLowerCase();
-    const resultats = allMedicaments.filter(med => 
+    const resultats = medicamentsRecherches.filter((med: any) => 
       med.nom?.toLowerCase().includes(termeLower) ||
       med.code?.toLowerCase().includes(termeLower) ||
       med.dci?.toLowerCase().includes(termeLower)
@@ -999,10 +999,10 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                     <TableRow key={index}>
                       <TableCell>
                         <Autocomplete
-                          options={allMedicaments}
-                          getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
-                          value={allMedicaments.find(m => m.id === ligne.medicament_id) || null}
-                          onChange={(_, newValue) => {
+                          options={medicamentsRecherches}
+                          getOptionLabel={(option: any) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
+                          value={medicamentsRecherches.find((m: any) => m.id === ligne.medicament_id) || null}
+                          onChange={(_, newValue: any) => {
                             if (newValue) {
                               mettreAJourLigne(index, {
                                 medicament_id: newValue.id,
@@ -1023,13 +1023,13 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           filterOptions={(options, { inputValue }) => {
                             if (!inputValue) return options;
                             const termeLower = inputValue.toLowerCase();
-                            return options.filter(option =>
+                            return options.filter((option: any) =>
                               option.nom?.toLowerCase().includes(termeLower) ||
                               option.code?.toLowerCase().includes(termeLower) ||
                               option.dci?.toLowerCase().includes(termeLower)
                             );
                           }}
-                          renderOption={(props, option) => (
+                          renderOption={(props, option: any) => (
                             <Box component="li" {...props} key={option.id}>
                               <Box sx={{ width: '100%' }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1038,14 +1038,14 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                                   </Typography>
                                   <Chip 
                                     size="small" 
-                                    label={`${(option.prix_unitaire_detail || option.prix_unitaire || 0).toLocaleString('fr-FR')} FCFA`}
+                                    label={`${(option.prix_unitaire_detail || option.prix_unitaire || 0).toLocaleString('fr-FR')} XOF`}
                                     color="primary"
                                     variant="outlined"
                                     sx={{ ml: 1 }}
                                   />
                                 </Box>
                                 <Typography variant="caption" color="text.secondary">
-                                  {option.code} • {option.forme || ''} • Stock: {(option as any).quantite_stock || 0} {option.unite || ''}
+                                  {option.code} • {option.forme || ''} • Stock: {option.quantite_stock || 0} {option.unite || ''}
                                 </Typography>
                               </Box>
                             </Box>
@@ -1061,8 +1061,8 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           ListboxProps={{
                             style: { maxHeight: 350 }
                           }}
-                          noOptionsText={allMedicaments.length === 0 ? "Chargement des médicaments..." : "Aucun médicament trouvé"}
-                          loading={allMedicaments.length === 0}
+                          noOptionsText={medicamentsRecherches.length === 0 ? "Chargement des médicaments..." : "Aucun médicament trouvé"}
+                          loading={medicamentsRecherches.length === 0}
                           openOnFocus
                           clearOnBlur={false}
                           selectOnFocus
@@ -1305,7 +1305,7 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                             />
                           </TableCell>
                           <TableCell align="right">
-                            {ligne.prix_total.toLocaleString('fr-FR')} FCFA
+                            {ligne.prix_total.toLocaleString('fr-FR')} XOF
                           </TableCell>
                         </TableRow>
                       ))}
