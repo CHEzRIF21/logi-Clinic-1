@@ -1943,6 +1943,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       >
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* Logo avec nom de domaine */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
+              <Logo 
+                variant="default" 
+                size="medium" 
+                animated={false}
+                showDomain={true}
+              />
+            </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Typography 
               variant="body2"

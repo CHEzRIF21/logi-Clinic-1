@@ -1,19 +1,32 @@
 {
-  "short_name": "Logi Clinic",
-  "name": "Logi Clinic - Système de gestion de clinique médicale",
+  "short_name": "LogiClinic",
+  "name": "Logi Clinic - logiclinic.org",
   "description": "Système de gestion de clinique médicale pour l'Afrique de l'Ouest",
   "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
     {
       "src": "/logo192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logo192.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#2563eb",
   "background_color": "#ffffff",
-  "orientation": "portrait-primary"
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "fr"
 }
 

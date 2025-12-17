@@ -1,20 +1,24 @@
 import React, { useEffect, useRef } from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { useThemeMode } from '../../hooks/useThemeMode';
 import { gsap } from 'gsap';
 
 interface LogoProps {
-  variant?: 'default' | 'compact' | 'icon';
+  variant?: 'default' | 'compact' | 'icon' | 'withDomain';
   size?: 'small' | 'medium' | 'large';
   animated?: boolean;
   className?: string;
+  showDomain?: boolean; // Afficher le nom de domaine logiclinic.org
+  useImage?: boolean; // Utiliser l'image PNG au lieu du SVG
 }
 
 const Logo: React.FC<LogoProps> = ({ 
   variant = 'default', 
   size = 'medium',
   animated = true,
-  className 
+  className,
+  showDomain = false,
+  useImage = false 
 }) => {
   const { isDark } = useThemeMode();
   const logoRef = useRef<HTMLDivElement>(null);
@@ -173,6 +177,65 @@ const Logo: React.FC<LogoProps> = ({
     
     // Ajuster les couleurs selon le contexte (fond sombre ou clair)
     const adjustedCrossColor = isDarkMode ? '#60a5fa' : '#3b82f6';
+
+    // Si useImage est activé, utiliser l'image PNG
+    if (useImage) {
+      const logoSrc = isDarkMode ? '/logo/logo-light.png' : '/logo/logo-dark.png';
+      
+      return (
+        <Box
+          ref={logoRef}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: showDomain ? 2 : 0,
+            opacity: animated ? 0 : 1,
+          }}
+        >
+          <Box
+            component="img"
+            src={logoSrc}
+            alt="Logi Clinic Logo"
+            sx={{
+              height: currentSize.height,
+              width: 'auto',
+              objectFit: 'contain',
+            }}
+          />
+          {showDomain && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+              }}
+            >
+              <Typography
+                variant={size === 'large' ? 'h4' : size === 'medium' ? 'h6' : 'body1'}
+                sx={{
+                  fontWeight: 700,
+                  color: primaryColor,
+                  fontFamily: '"Outfit", "Roboto", sans-serif',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                LogiClinic
+              </Typography>
+              <Typography
+                variant={size === 'large' ? 'body1' : size === 'medium' ? 'body2' : 'caption'}
+                sx={{
+                  color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+                  fontFamily: '"Roboto", sans-serif',
+                  fontWeight: 500,
+                }}
+              >
+                logiclinic.org
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      );
+    }
 
     if (variant === 'icon') {
       // Version icône seulement (le cross)
@@ -405,6 +468,28 @@ const Logo: React.FC<LogoProps> = ({
             }}
           >
             Clinic
+          </Box>
+        )}
+
+        {/* Affichage du nom de domaine si activé */}
+        {showDomain && !useImage && variant === 'default' && (
+          <Box
+            sx={{
+              marginTop: '0.5em',
+              textAlign: 'center',
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.5)',
+                fontFamily: '"Roboto", sans-serif',
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+              }}
+            >
+              logiclinic.org
+            </Typography>
           </Box>
         )}
       </Box>
