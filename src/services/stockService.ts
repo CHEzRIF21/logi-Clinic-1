@@ -461,7 +461,35 @@ export class StockService {
               magasin: 'detail'
             });
 
-          if (createDetailError) throw createDetailError;
+          if (createDetailError) {
+            // Vérifier si c'est une erreur de contrainte unique
+            if (createDetailError.code === '23505' || createDetailError.message?.includes('duplicate key')) {
+              // Réessayer de récupérer le lot (peut-être créé entre-temps par une autre validation)
+              const { data: lotDetailRetry, error: retryError } = await supabase
+                .from('lots')
+                .select('*')
+                .eq('medicament_id', ligne.medicament_id)
+                .eq('numero_lot', lotGros.numero_lot)
+                .eq('magasin', 'detail')
+                .single();
+
+              if (!retryError && lotDetailRetry) {
+                // Le lot existe maintenant, le mettre à jour
+                const { error: updateRetryError } = await supabase
+                  .from('lots')
+                  .update({
+                    quantite_disponible: lotDetailRetry.quantite_disponible + qte
+                  })
+                  .eq('id', lotDetailRetry.id);
+
+                if (updateRetryError) throw updateRetryError;
+              } else {
+                throw new Error(`Le lot ${lotGros.numero_lot} existe déjà. Veuillez réessayer ou contacter l'administrateur.`);
+              }
+            } else {
+              throw createDetailError;
+            }
+          }
         }
 
         // Mettre à jour la quantité validée sur la ligne
