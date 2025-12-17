@@ -151,10 +151,12 @@ export interface TransfertSupabase {
   date_transfert: string;
   magasin_source: 'gros';
   magasin_destination: 'detail';
-  statut: 'en_cours' | 'valide' | 'annule';
+  statut: 'en_attente' | 'en_cours' | 'valide' | 'refuse' | 'annule' | 'recu';
   utilisateur_source_id: string;
   utilisateur_destination_id?: string;
   date_validation?: string;
+  date_reception?: string;
+  utilisateur_reception_id?: string;
   observations?: string;
   created_at: string;
   updated_at: string;

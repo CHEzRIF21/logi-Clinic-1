@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { emailService } from '../services/emailService';
 
 const router = Router();
 
@@ -119,6 +120,22 @@ router.post('/register-request', async (req: Request, res: Response) => {
         message: 'Erreur lors de la création de la demande',
         error: error.message,
       });
+    }
+
+    // Envoyer une notification par email à tech@logiclinic.org
+    try {
+      await emailService.sendRegistrationNotification({
+        nom: data.nom,
+        prenom: data.prenom,
+        email: data.email,
+        telephone: data.telephone,
+        roleSouhaite: data.role_souhaite,
+        adresse: data.adresse,
+        specialite: data.specialite,
+      });
+    } catch (emailError) {
+      // Ne pas bloquer la réponse si l'email échoue
+      console.error('Erreur lors de l\'envoi de l\'email de notification:', emailError);
     }
 
     res.status(201).json({

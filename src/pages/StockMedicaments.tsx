@@ -34,6 +34,7 @@ import { LocalPharmacy, MedicalServices, Receipt } from '@mui/icons-material';
 import TraceabiliteLots from '../components/stock/TraceabiliteLots';
 import SystemeAlertes from '../components/stock/SystemeAlertes';
 import GestionTransferts from '../components/stock/GestionTransferts';
+import { GestionCommandesFournisseur } from '../components/stock/GestionCommandesFournisseur';
 import GestionInventaire from '../components/stock/GestionInventaire';
 import TestFluxComplet from '../components/stock/TestFluxComplet';
 import { StockService } from '../services/stockService';
@@ -943,7 +944,8 @@ const StockMedicaments: React.FC = () => {
               <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
               <Tab icon={<Store />} label="Magasin Gros" iconPosition="start" />
               <Tab icon={<Inventory />} label="Inventaire" iconPosition="start" />
-              <Tab icon={<LocalShipping />} label="Ajustement" iconPosition="start" />
+              <Tab icon={<LocalShipping />} label="Demandes internes" iconPosition="start" />
+              <Tab icon={<Receipt />} label="Achats fournisseurs" iconPosition="start" />
               <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
               <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
               <Tab icon={<Timeline />} label="Traçabilité" iconPosition="start" />
@@ -1230,11 +1232,16 @@ const StockMedicaments: React.FC = () => {
 
         {/* Onglet Transferts */}
         {activeTab === 3 && (
-          <GestionTransferts />
+          <GestionTransferts context="stock" />
+        )}
+
+        {/* Onglet Achats fournisseurs */}
+        {activeTab === 4 && (
+          <GestionCommandesFournisseur />
         )}
 
         {/* Onglet Rapports */}
-        {activeTab === 4 && (
+        {activeTab === 5 && (
           <Box>
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
@@ -1282,17 +1289,17 @@ const StockMedicaments: React.FC = () => {
         )}
 
         {/* Onglet Alertes */}
-        {activeTab === 5 && (
+        {activeTab === 6 && (
           <SystemeAlertes />
         )}
 
         {/* Onglet Traçabilité */}
-        {activeTab === 6 && (
+        {activeTab === 7 && (
           <TraceabiliteLots />
         )}
 
         {/* Onglet Test Flux */}
-        {activeTab === 7 && (
+        {activeTab === 8 && (
           <TestFluxComplet />
         )}
 

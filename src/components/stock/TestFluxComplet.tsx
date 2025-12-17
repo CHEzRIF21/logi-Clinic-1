@@ -22,6 +22,7 @@ import {
   Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { StockService } from '../../services/stockService';
+import { supabase } from '../../services/supabase';
 
 const TestFluxComplet: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -43,20 +44,32 @@ const TestFluxComplet: React.FC = () => {
     setTestResults({});
 
     try {
+      // Créer ou récupérer un médicament de test
+      const { data: medicaments, error: medError } = await supabase
+        .from('medicaments')
+        .select('id')
+        .limit(1);
+      
+      if (medError || !medicaments || medicaments.length === 0) {
+        throw new Error('Aucun médicament trouvé dans la base. Veuillez d\'abord créer au moins un médicament.');
+      }
+
+      const testMedicamentId = medicaments[0].id;
+
       // Étape 1: Réception médicaments
       setCurrentStep(1);
       setTestResults(prev => ({ ...prev, reception: 'pending' }));
       
       const receptionResult = await StockService.receptionMedicament({
-        medicament_id: 'test-med-1',
-        numero_lot: 'LOT-TEST-001',
+        medicament_id: testMedicamentId,
+        numero_lot: `LOT-TEST-${Date.now()}`,
         quantite_initiale: 100,
         date_reception: new Date().toISOString().split('T')[0],
         date_expiration: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         prix_achat: 500,
         fournisseur: 'Fournisseur Test',
-        utilisateur_id: 'test-user',
-        reference_document: 'FAC-TEST-001',
+        utilisateur_id: 'test-user-auto',
+        reference_document: `FAC-TEST-${Date.now()}`,
         observations: 'Test de réception automatique'
       });
       
@@ -67,10 +80,10 @@ const TestFluxComplet: React.FC = () => {
       setTestResults(prev => ({ ...prev, demande: 'pending' }));
       
       const demandeResult = await StockService.creerDemandeTransfert({
-        medicament_id: 'test-med-1',
+        medicament_id: testMedicamentId,
         lot_id: receptionResult.lot.id,
         quantite_demandee: 50,
-        utilisateur_demandeur_id: 'test-user',
+        utilisateur_demandeur_id: 'test-user-auto',
         motif: 'Test de demande de transfert',
         observations: 'Test automatique'
       });
@@ -81,43 +94,68 @@ const TestFluxComplet: React.FC = () => {
       setCurrentStep(3);
       setTestResults(prev => ({ ...prev, validation: 'pending' }));
       
-      const validationResult = await StockService.validerTransfert(
+      await StockService.validerTransfert(
         demandeResult.transfert.id,
-        'test-validator'
+        'test-validator-auto'
       );
       
       setTestResults(prev => ({ ...prev, validation: 'success' }));
 
-      // Étape 4: Dispensation patient
+      // Étape 4: Dispensation patient - Récupérer un patient existant
       setCurrentStep(4);
       setTestResults(prev => ({ ...prev, dispensation: 'pending' }));
       
-      const dispensationResult = await StockService.dispensationPatient({
-        patient_id: 'test-patient-1',
-        type_dispensation: 'patient',
-        lignes: [{
-          medicament_id: 'test-med-1',
-          lot_id: receptionResult.lot.id,
-          quantite: 10,
-          prix_unitaire: 500
-        }],
-        utilisateur_id: 'test-user',
-        observations: 'Test de dispensation'
-      });
+      const { data: patients, error: patError } = await supabase
+        .from('patients')
+        .select('id')
+        .limit(1);
       
-      setTestResults(prev => ({ ...prev, dispensation: 'success' }));
+      if (!patError && patients && patients.length > 0) {
+        // Récupérer le lot créé dans le magasin détail après le transfert
+        const { data: lotDetail } = await supabase
+          .from('lots')
+          .select('id')
+          .eq('medicament_id', testMedicamentId)
+          .eq('magasin', 'detail')
+          .eq('statut', 'actif')
+          .gt('quantite_disponible', 0)
+          .limit(1);
+
+        if (lotDetail && lotDetail.length > 0) {
+          await StockService.dispensationPatient({
+            patient_id: patients[0].id,
+            type_dispensation: 'patient',
+            lignes: [{
+              medicament_id: testMedicamentId,
+              lot_id: lotDetail[0].id,
+              quantite: 10,
+              prix_unitaire: 500
+            }],
+            utilisateur_id: 'test-user-auto',
+            observations: 'Test de dispensation'
+          });
+          
+          setTestResults(prev => ({ ...prev, dispensation: 'success' }));
+        } else {
+          setTestResults(prev => ({ ...prev, dispensation: 'error' }));
+          console.warn('Aucun lot disponible dans le magasin détail pour la dispensation');
+        }
+      } else {
+        setTestResults(prev => ({ ...prev, dispensation: 'error' }));
+        console.warn('Aucun patient trouvé pour le test de dispensation');
+      }
 
       // Étape 5: Retour/Perte
       setCurrentStep(5);
       setTestResults(prev => ({ ...prev, retour: 'pending' }));
       
-      const retourResult = await StockService.enregistrerPerteRetour({
+      await StockService.enregistrerPerteRetour({
         type: 'retour',
-        medicament_id: 'test-med-1',
+        medicament_id: testMedicamentId,
         lot_id: receptionResult.lot.id,
         quantite: 5,
         motif: 'Test de retour',
-        utilisateur_id: 'test-user',
+        utilisateur_id: 'test-user-auto',
         observations: 'Test automatique de retour'
       });
       
@@ -127,14 +165,19 @@ const TestFluxComplet: React.FC = () => {
       setCurrentStep(6);
       setTestResults(prev => ({ ...prev, alertes: 'pending' }));
       
-      await StockService.verifierAlertes('test-med-1');
+      await StockService.verifierAlertes(testMedicamentId);
       
       setTestResults(prev => ({ ...prev, alertes: 'success' }));
 
       setCurrentStep(6);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors du test:', error);
-      setTestResults(prev => ({ ...prev, [steps[currentStep - 1]]: 'error' }));
+      const stepKeys = ['reception', 'demande', 'validation', 'dispensation', 'retour', 'alertes'];
+      const currentKey = stepKeys[currentStep - 1];
+      if (currentKey) {
+        setTestResults(prev => ({ ...prev, [currentKey]: 'error' }));
+      }
+      alert(`Erreur à l'étape ${currentStep}: ${error.message || error}`);
     } finally {
       setLoading(false);
     }

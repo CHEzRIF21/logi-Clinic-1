@@ -491,7 +491,7 @@ const Pharmacie: React.FC = () => {
               <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
               <Tab icon={<Store />} label="Stock Détail" iconPosition="start" />
               <Tab icon={<MedicalServices />} label="Dispensations" iconPosition="start" />
-              <Tab icon={<LocalShipping />} label="Ajustement" iconPosition="start" />
+              <Tab icon={<LocalShipping />} label="Ravitaillement" iconPosition="start" />
               <Tab icon={<Assignment />} label="Inventaire" iconPosition="start" />
               <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
               <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
@@ -950,7 +950,7 @@ const Pharmacie: React.FC = () => {
 
         {/* Onglet Ajustement */}
         {activeTab === 3 && (
-          <GestionTransferts />
+          <GestionTransferts context="pharmacie" />
         )}
 
         {/* Onglet Inventaire */}

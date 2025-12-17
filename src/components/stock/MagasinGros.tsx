@@ -43,7 +43,8 @@ import {
   Assessment as ReportIcon,
   Dashboard as DashboardIcon,
   Settings as SettingsIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import { StockService } from '../../services/stockService';
 import { LotSupabase, MedicamentSupabase } from '../../services/stockSupabase';
@@ -68,32 +69,52 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
   
   // Dialogs
   const [receptionDialog, setReceptionDialog] = useState(false);
-  const [transfertDialog, setTransfertDialog] = useState(false);
   const [retourDialog, setRetourDialog] = useState(false);
   const [inventaireDialog, setInventaireDialog] = useState(false);
   const [rapportDialog, setRapportDialog] = useState(false);
   const [alertesDialog, setAlertesDialog] = useState(false);
 
-  // Form data
-  const [receptionData, setReceptionData] = useState({
-    medicament_id: '',
-    numero_lot: '',
-    quantite_initiale: 0,
+  // Utilisateur courant (si auth Supabase activée)
+  const [currentUserId, setCurrentUserId] = useState<string>('system');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data?.user?.id) setCurrentUserId(data.user.id);
+      } catch {
+        // garder "system" si pas d'auth
+      }
+    })();
+  }, []);
+
+  // Form data - Réception fournisseur multi-lignes (Magasin Gros)
+  interface ReceptionLigne {
+    id: string; // id temporaire
+    medicament_id: string;
+    numero_lot: string;
+    quantite_initiale: number;
+    date_expiration: string;
+    prix_achat: number;
+    observations?: string;
+  }
+
+  const [receptionMeta, setReceptionMeta] = useState({
     date_reception: new Date().toISOString().split('T')[0],
-    date_expiration: '',
-    prix_achat: 0,
     fournisseur: '',
     reference_document: '',
     observations: ''
   });
-
-  const [transfertData, setTransfertData] = useState({
-    medicament_id: '',
-    lot_id: '',
-    quantite_demandee: 0,
-    motif: '',
-    observations: ''
-  });
+  const [receptionLignes, setReceptionLignes] = useState<ReceptionLigne[]>([
+    {
+      id: `rec-${Date.now()}`,
+      medicament_id: '',
+      numero_lot: '',
+      quantite_initiale: 0,
+      date_expiration: '',
+      prix_achat: 0
+    }
+  ]);
 
   const [retourData, setRetourData] = useState({
     medicament_id: '',
@@ -138,54 +159,44 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
   const handleReception = async () => {
     try {
       setLoading(true);
-      await StockService.receptionMedicament({
-        ...receptionData,
-        utilisateur_id: 'current-user-id' // À remplacer par l'ID utilisateur réel
+      await StockService.receptionMedicamentMultiple({
+        fournisseur: receptionMeta.fournisseur,
+        date_reception: receptionMeta.date_reception,
+        utilisateur_id: currentUserId,
+        reference_document: receptionMeta.reference_document || undefined,
+        observations: receptionMeta.observations || undefined,
+        lignes: receptionLignes.map(l => ({
+          medicament_id: l.medicament_id,
+          numero_lot: l.numero_lot,
+          quantite_initiale: l.quantite_initiale,
+          date_expiration: l.date_expiration,
+          prix_achat: l.prix_achat,
+          observations: l.observations
+        }))
       });
       
       setReceptionDialog(false);
-      setReceptionData({
-        medicament_id: '',
-        numero_lot: '',
-        quantite_initiale: 0,
+      setReceptionMeta({
         date_reception: new Date().toISOString().split('T')[0],
-        date_expiration: '',
-        prix_achat: 0,
         fournisseur: '',
         reference_document: '',
         observations: ''
       });
+      setReceptionLignes([
+        {
+          id: `rec-${Date.now()}`,
+          medicament_id: '',
+          numero_lot: '',
+          quantite_initiale: 0,
+          date_expiration: '',
+          prix_achat: 0
+        }
+      ]);
       
       await loadData();
       onRefresh?.();
     } catch (error) {
       console.error('Erreur lors de la réception:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTransfert = async () => {
-    try {
-      setLoading(true);
-      await StockService.creerDemandeTransfert({
-        ...transfertData,
-        utilisateur_demandeur_id: 'current-user-id' // À remplacer par l'ID utilisateur réel
-      });
-      
-      setTransfertDialog(false);
-      setTransfertData({
-        medicament_id: '',
-        lot_id: '',
-        quantite_demandee: 0,
-        motif: '',
-        observations: ''
-      });
-      
-      await loadData();
-      onRefresh?.();
-    } catch (error) {
-      console.error('Erreur lors de la création du transfert:', error);
     } finally {
       setLoading(false);
     }
@@ -197,7 +208,7 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
       await StockService.enregistrerPerteRetour({
         type: 'retour',
         ...retourData,
-        utilisateur_id: 'current-user-id' // À remplacer par l'ID utilisateur réel
+        utilisateur_id: currentUserId
       });
       
       setRetourDialog(false);
@@ -295,7 +306,7 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                   Valeur Stock
                 </Typography>
                 <Typography variant="h4">
-                  {stats.valeur_stock.toLocaleString()} FCFA
+                  {stats.valeur_stock.toLocaleString()} XOF
                 </Typography>
               </Box>
               <ReportIcon color="info" sx={{ fontSize: 40 }} />
@@ -332,16 +343,21 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => setReceptionDialog(true)}
+                onClick={() => {
+                  if (receptionLignes.length === 0) {
+                    setReceptionLignes([{
+                      id: `rec-${Date.now()}`,
+                      medicament_id: '',
+                      numero_lot: '',
+                      quantite_initiale: 0,
+                      date_expiration: '',
+                      prix_achat: 0
+                    }]);
+                  }
+                  setReceptionDialog(true);
+                }}
               >
-                Nouvelle Réception
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<TransferIcon />}
-                onClick={() => setTransfertDialog(true)}
-              >
-                Créer Transfert
+                Nouvelle Réception Fournisseur (multi-produits)
               </Button>
               <Button
                 variant="outlined"
@@ -460,23 +476,9 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                   </TableCell>
                   <TableCell>{lot.fournisseur}</TableCell>
                   <TableCell>
-                    <Box display="flex" gap={1}>
-                      <Tooltip title="Créer transfert">
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            setTransfertData(prev => ({
-                              ...prev,
-                              medicament_id: lot.medicament_id,
-                              lot_id: lot.id
-                            }));
-                            setTransfertDialog(true);
-                          }}
-                        >
-                          <TransferIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Le ravitaillement interne est initié par la Pharmacie / Magasin Détail (voir module Ajustement).
+                    </Typography>
                   </TableCell>
                 </TableRow>
               );
@@ -489,93 +491,33 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
 
   const renderReceptionDialog = () => (
     <Dialog open={receptionDialog} onClose={() => setReceptionDialog(false)} maxWidth="md" fullWidth>
-      <DialogTitle>Nouvelle Réception</DialogTitle>
+      <DialogTitle>Nouvelle Réception Fournisseur (Magasin Gros)</DialogTitle>
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Médicament</InputLabel>
-              <Select
-                value={receptionData.medicament_id}
-                label="Médicament"
-                onChange={(e) => setReceptionData(prev => ({ ...prev, medicament_id: e.target.value }))}
-              >
-                {medicaments.map((med) => (
-                  <MenuItem key={med.id} value={med.id}>
-                    {med.nom} ({med.code})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Numéro de Lot"
-              value={receptionData.numero_lot}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, numero_lot: e.target.value }))}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Quantité"
-              type="number"
-              value={receptionData.quantite_initiale}
-              onChange={(e) => {
-                const value = Math.max(0, Number(e.target.value) || 0);
-                setReceptionData(prev => ({ ...prev, quantite_initiale: value }));
-              }}
-              inputProps={{ min: 0, step: 1 }}
-            />
-          </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
               label="Date de Réception"
               type="date"
-              value={receptionData.date_reception}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, date_reception: e.target.value }))}
+              value={receptionMeta.date_reception}
+              onChange={(e) => setReceptionMeta(prev => ({ ...prev, date_reception: e.target.value }))}
               InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Date d'Expiration"
-              type="date"
-              value={receptionData.date_expiration}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, date_expiration: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Prix d'Achat (FCFA)"
-              type="number"
-              value={receptionData.prix_achat}
-              onChange={(e) => {
-                const value = Math.max(0, Number(e.target.value) || 0);
-                setReceptionData(prev => ({ ...prev, prix_achat: value }));
-              }}
-              inputProps={{ min: 0, step: 1 }}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
               label="Fournisseur"
-              value={receptionData.fournisseur}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, fournisseur: e.target.value }))}
+              value={receptionMeta.fournisseur}
+              onChange={(e) => setReceptionMeta(prev => ({ ...prev, fournisseur: e.target.value }))}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
               label="Référence Document"
-              value={receptionData.reference_document}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, reference_document: e.target.value }))}
+              value={receptionMeta.reference_document}
+              onChange={(e) => setReceptionMeta(prev => ({ ...prev, reference_document: e.target.value }))}
             />
           </Grid>
           <Grid item xs={12}>
@@ -584,97 +526,166 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
               label="Observations"
               multiline
               rows={3}
-              value={receptionData.observations}
-              onChange={(e) => setReceptionData(prev => ({ ...prev, observations: e.target.value }))}
+              value={receptionMeta.observations}
+              onChange={(e) => setReceptionMeta(prev => ({ ...prev, observations: e.target.value }))}
             />
+          </Grid>
+          <Grid item xs={12}>
+            <Alert severity="info">
+              Ce ravitaillement peut contenir plusieurs types de produits (comprimé, flacon, réactif, gélule, etc.).
+            </Alert>
+          </Grid>
+          <Grid item xs={12}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                Lignes de réception
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => setReceptionLignes(prev => ([...prev, {
+                  id: `rec-${Date.now()}-${Math.random()}`,
+                  medicament_id: '',
+                  numero_lot: '',
+                  quantite_initiale: 0,
+                  date_expiration: '',
+                  prix_achat: 0
+                }]))}
+              >
+                Ajouter une ligne
+              </Button>
+            </Box>
+
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Médicament</TableCell>
+                    <TableCell>Type / Forme</TableCell>
+                    <TableCell>Lot</TableCell>
+                    <TableCell>Qté</TableCell>
+                    <TableCell>Expiration</TableCell>
+                    <TableCell>Prix achat (XOF)</TableCell>
+                    <TableCell>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {receptionLignes.map((ligne, idx) => {
+                    const med = medicaments.find(m => m.id === ligne.medicament_id);
+                    return (
+                      <TableRow key={ligne.id}>
+                        <TableCell sx={{ minWidth: 220 }}>
+                          <FormControl fullWidth size="small">
+                            <InputLabel>Médicament</InputLabel>
+                            <Select
+                              value={ligne.medicament_id}
+                              label="Médicament"
+                              onChange={(e) => {
+                                const value = e.target.value as string;
+                                setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, medicament_id: value } : l));
+                              }}
+                            >
+                              {medicaments.map((m) => (
+                                <MenuItem key={m.id} value={m.id}>
+                                  {m.nom} ({m.code})
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" color="text.secondary">
+                            {med?.forme || '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 140 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            value={ligne.numero_lot}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, numero_lot: v } : l));
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ width: 110 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            type="number"
+                            value={ligne.quantite_initiale}
+                            onChange={(e) => {
+                              const v = Math.max(0, Number(e.target.value) || 0);
+                              setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, quantite_initiale: v } : l));
+                            }}
+                            inputProps={{ min: 0, step: 1 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ width: 160 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            type="date"
+                            value={ligne.date_expiration}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, date_expiration: v } : l));
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ width: 150 }}>
+                          <TextField
+                            size="small"
+                            fullWidth
+                            type="number"
+                            value={ligne.prix_achat}
+                            onChange={(e) => {
+                              const v = Math.max(0, Number(e.target.value) || 0);
+                              setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, prix_achat: v } : l));
+                            }}
+                            inputProps={{ min: 0, step: 1 }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ width: 90 }}>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            disabled={receptionLignes.length <= 1}
+                            onClick={() => setReceptionLignes(prev => prev.filter(l => l.id !== ligne.id))}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Grid>
         </Grid>
       </DialogContent>
       <DialogActions>
         <Button onClick={() => setReceptionDialog(false)}>Annuler</Button>
-        <Button onClick={handleReception} variant="contained" disabled={loading}>
+        <Button
+          onClick={handleReception}
+          variant="contained"
+          disabled={
+            loading ||
+            !receptionMeta.fournisseur.trim() ||
+            receptionLignes.length === 0 ||
+            receptionLignes.some(l =>
+              !l.medicament_id ||
+              !l.numero_lot.trim() ||
+              !l.date_expiration ||
+              (l.quantite_initiale || 0) <= 0
+            )
+          }
+        >
           Enregistrer
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-
-  const renderTransfertDialog = () => (
-    <Dialog open={transfertDialog} onClose={() => setTransfertDialog(false)} maxWidth="md" fullWidth>
-      <DialogTitle>Créer Transfert vers Magasin Détail</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Médicament</InputLabel>
-              <Select
-                value={transfertData.medicament_id}
-                label="Médicament"
-                onChange={(e) => setTransfertData(prev => ({ ...prev, medicament_id: e.target.value }))}
-              >
-                {medicaments.map((med) => (
-                  <MenuItem key={med.id} value={med.id}>
-                    {med.nom} ({med.code})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormControl fullWidth>
-              <InputLabel>Lot</InputLabel>
-              <Select
-                value={transfertData.lot_id}
-                label="Lot"
-                onChange={(e) => setTransfertData(prev => ({ ...prev, lot_id: e.target.value }))}
-              >
-                {lots
-                  .filter(lot => lot.medicament_id === transfertData.medicament_id && lot.magasin === 'gros')
-                  .map((lot) => (
-                    <MenuItem key={lot.id} value={lot.id}>
-                      {lot.numero_lot} (Stock: {lot.quantite_disponible})
-                    </MenuItem>
-                  ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Quantité à Transférer"
-              type="number"
-              value={transfertData.quantite_demandee}
-              onChange={(e) => {
-                const value = Math.max(0, Number(e.target.value) || 0);
-                setTransfertData(prev => ({ ...prev, quantite_demandee: value }));
-              }}
-              inputProps={{ min: 0, step: 1 }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Motif"
-              value={transfertData.motif}
-              onChange={(e) => setTransfertData(prev => ({ ...prev, motif: e.target.value }))}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Observations"
-              multiline
-              rows={3}
-              value={transfertData.observations}
-              onChange={(e) => setTransfertData(prev => ({ ...prev, observations: e.target.value }))}
-            />
-          </Grid>
-        </Grid>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setTransfertDialog(false)}>Annuler</Button>
-        <Button onClick={handleTransfert} variant="contained" disabled={loading}>
-          Créer Demande
         </Button>
       </DialogActions>
     </Dialog>
@@ -809,7 +820,6 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
       </Box>
 
       {renderReceptionDialog()}
-      {renderTransfertDialog()}
       {renderRetourDialog()}
     </Box>
   );

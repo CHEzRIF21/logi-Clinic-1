@@ -1756,7 +1756,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </Typography>
                     <Typography 
                       component="a"
-                      href="mailto:groupita25@gmail.com"
+                      href="mailto:contact@logiclinic.org"
                       variant="body2"
                       sx={{
                         color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
@@ -1769,7 +1769,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                         transition: 'all 0.2s ease',
                       }}
                     >
-                      groupita25@gmail.com
+                      contact@logiclinic.org
                     </Typography>
                   </Box>
                 </Box>

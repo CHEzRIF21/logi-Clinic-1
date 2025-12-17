@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { emailService } from './emailService';
 
 const prisma = new PrismaClient();
 
@@ -277,10 +278,17 @@ class LicenseService {
         }
       }
 
-      // Envoyer par email si configuré (nécessite un service d'email)
+      // Envoyer par email si configuré
       if (alertEmail) {
-        console.log('Alerte email à envoyer:', alertEmail, alertData);
-        // TODO: Implémenter l'envoi d'email avec nodemailer ou un service similaire
+        try {
+          await emailService.sendTechnicalAlert({
+            type: alertData.type,
+            timestamp: alertData.timestamp,
+            details: alertData,
+          });
+        } catch (error) {
+          console.error('Erreur lors de l\'envoi de l\'email d\'alerte:', error);
+        }
       }
     } catch (error) {
       console.error('Erreur lors de l\'envoi de l\'alerte:', error);

@@ -2,6 +2,36 @@ import { supabase, MedicamentSupabase, LotSupabase, MouvementStockSupabase, Tran
 
 // Service principal pour la gestion du stock
 export class StockService {
+  // ============================================
+  // JOURNALISATION (stock_audit_log)
+  // ============================================
+  static async logStockAction(payload: {
+    entity_type: 'transfert' | 'commande_fournisseur' | string;
+    entity_id: string; // UUID
+    action: string;
+    actor_id: string;
+    old_status?: string | null;
+    new_status?: string | null;
+    old_data?: any;
+    new_data?: any;
+  }) {
+    try {
+      const { error } = await supabase.from('stock_audit_log').insert({
+        entity_type: payload.entity_type,
+        entity_id: payload.entity_id,
+        action: payload.action,
+        actor_id: payload.actor_id,
+        old_status: payload.old_status ?? null,
+        new_status: payload.new_status ?? null,
+        old_data: payload.old_data ?? null,
+        new_data: payload.new_data ?? null,
+      });
+      if (error) throw error;
+    } catch (e) {
+      // Ne pas bloquer les flux métier si la journalisation échoue
+      console.warn('⚠️ Impossible d’écrire dans stock_audit_log:', e);
+    }
+  }
   
   // 1. RÉCEPTION MÉDICAMENTS → MAGASIN GROS (enregistrement + stockage)
   static async receptionMedicament(data: {
@@ -68,6 +98,94 @@ export class StockService {
     }
   }
 
+  // 1b. RÉCEPTION FOURNISSEUR MULTI-LIGNES → MAGASIN GROS
+  // Permet d'enregistrer un ravitaillement fournisseur contenant plusieurs produits
+  // (comprimé, flacon, réactif, gélule, etc.) avec un lot/quantité par ligne.
+  static async receptionMedicamentMultiple(data: {
+    fournisseur: string;
+    date_reception: string;
+    utilisateur_id: string;
+    reference_document?: string;
+    observations?: string;
+    lignes: Array<{
+      medicament_id: string;
+      numero_lot: string;
+      quantite_initiale: number;
+      date_expiration: string;
+      prix_achat: number;
+      observations?: string;
+    }>;
+  }) {
+    try {
+      if (!data.lignes || data.lignes.length === 0) {
+        throw new Error('Au moins une ligne de réception est requise');
+      }
+      if (!data.fournisseur?.trim()) {
+        throw new Error('Le fournisseur est obligatoire');
+      }
+
+      const lotsCrees: any[] = [];
+
+      // Traitement séquentiel (plus simple et évite la surcharge)
+      for (const [idx, ligne] of data.lignes.entries()) {
+        if (!ligne.medicament_id) throw new Error(`Ligne ${idx + 1}: médicament obligatoire`);
+        if (!ligne.numero_lot?.trim()) throw new Error(`Ligne ${idx + 1}: numéro de lot obligatoire`);
+        if (!ligne.date_expiration) throw new Error(`Ligne ${idx + 1}: date d'expiration obligatoire`);
+        if (!ligne.quantite_initiale || ligne.quantite_initiale <= 0) throw new Error(`Ligne ${idx + 1}: quantité invalide`);
+        if (ligne.prix_achat == null || ligne.prix_achat < 0) throw new Error(`Ligne ${idx + 1}: prix d'achat invalide`);
+
+        const { data: lot, error: lotError } = await supabase
+          .from('lots')
+          .insert({
+            medicament_id: ligne.medicament_id,
+            numero_lot: ligne.numero_lot,
+            quantite_initiale: ligne.quantite_initiale,
+            quantite_disponible: ligne.quantite_initiale,
+            date_reception: data.date_reception,
+            date_expiration: ligne.date_expiration,
+            prix_achat: ligne.prix_achat,
+            fournisseur: data.fournisseur,
+            statut: 'actif',
+            magasin: 'gros'
+          })
+          .select()
+          .single();
+
+        if (lotError) throw lotError;
+
+        const { error: mouvementError } = await supabase
+          .from('mouvements_stock')
+          .insert({
+            type: 'reception',
+            medicament_id: ligne.medicament_id,
+            lot_id: lot.id,
+            quantite: ligne.quantite_initiale,
+            quantite_avant: 0,
+            quantite_apres: ligne.quantite_initiale,
+            motif: 'Réception fournisseur',
+            utilisateur_id: data.utilisateur_id,
+            date_mouvement: data.date_reception,
+            magasin_source: 'externe',
+            magasin_destination: 'gros',
+            reference_document: data.reference_document,
+            observations: [data.observations, ligne.observations].filter(Boolean).join('\n')
+          });
+
+        if (mouvementError) throw mouvementError;
+
+        // Vérifier les alertes pour chaque médicament réceptionné
+        await this.verifierAlertes(ligne.medicament_id);
+
+        lotsCrees.push(lot);
+      }
+
+      return { success: true, lots: lotsCrees };
+    } catch (error) {
+      console.error('Erreur lors de la réception multiple:', error);
+      throw error;
+    }
+  }
+
   // 2. DEMANDE INTERNE → RESPONSABLE GROS (un seul médicament)
   static async creerDemandeTransfert(data: {
     medicament_id: string;
@@ -91,7 +209,7 @@ export class StockService {
         throw new Error('Stock insuffisant dans le magasin gros');
       }
 
-      // Créer le transfert
+      // Créer le transfert avec statut 'en_attente' pour attendre la validation du responsable gros
       const numero_transfert = `TRF-${Date.now()}`;
       const { data: transfert, error: transfertError } = await supabase
         .from('transferts')
@@ -100,8 +218,9 @@ export class StockService {
           date_transfert: new Date().toISOString(),
           magasin_source: 'gros',
           magasin_destination: 'detail',
-          statut: 'en_cours',
+          statut: 'en_attente', // En attente de validation par le responsable gros
           utilisateur_source_id: data.utilisateur_demandeur_id,
+          motif: data.motif,
           observations: data.observations
         })
         .select()
@@ -120,6 +239,17 @@ export class StockService {
         });
 
       if (ligneError) throw ligneError;
+
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert.id,
+        action: 'CREATED',
+        actor_id: data.utilisateur_demandeur_id,
+        old_status: null,
+        new_status: 'en_attente',
+        old_data: null,
+        new_data: transfert,
+      });
 
       return { success: true, transfert };
     } catch (error) {
@@ -164,7 +294,7 @@ export class StockService {
         }
       }
 
-      // Créer le transfert
+      // Créer le transfert avec statut 'en_attente' pour attendre la validation du responsable gros
       const numero_transfert = `TRF-${Date.now()}`;
       const { data: transfert, error: transfertError } = await supabase
         .from('transferts')
@@ -173,8 +303,9 @@ export class StockService {
           date_transfert: new Date().toISOString(),
           magasin_source: 'gros',
           magasin_destination: 'detail',
-          statut: 'en_cours',
+          statut: 'en_attente', // En attente de validation par le responsable gros
           utilisateur_source_id: data.utilisateur_demandeur_id,
+          motif: data.motif,
           observations: data.observations
         })
         .select()
@@ -196,6 +327,17 @@ export class StockService {
 
       if (lignesError) throw lignesError;
 
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert.id,
+        action: 'CREATED',
+        actor_id: data.utilisateur_demandeur_id,
+        old_status: null,
+        new_status: 'en_attente',
+        old_data: null,
+        new_data: { transfert, lignes: lignesAInserer },
+      });
+
       return { success: true, transfert };
     } catch (error) {
       console.error('Erreur lors de la création de la demande multiple:', error);
@@ -203,8 +345,12 @@ export class StockService {
     }
   }
 
-  // 3. VALIDATION + TRANSFERT → Mise à jour Magasin Gros (-) et Magasin Détail (+)
-  static async validerTransfert(transfert_id: string, utilisateur_validateur_id: string) {
+  // 3. VALIDATION + TRANSFERT (quantités accordées) → Gros (-) et Détail (+)
+  // Permet la validation partielle par ligne via quantite_validee.
+  static async validerTransfert(transfert_id: string, utilisateur_validateur_id: string, opts?: {
+    lignes?: Array<{ id: string; quantite_validee: number }>;
+    observations?: string;
+  }) {
     try {
       // Récupérer le transfert et ses lignes
       const { data: transfert, error: transfertError } = await supabase
@@ -222,16 +368,46 @@ export class StockService {
         .single();
 
       if (transfertError) throw transfertError;
-      if (transfert.statut !== 'en_cours') {
-        throw new Error('Le transfert ne peut pas être validé');
+      // Accepter les transferts en_attente OU en_cours pour la validation
+      if (transfert.statut !== 'en_attente' && transfert.statut !== 'en_cours') {
+        throw new Error('Le transfert ne peut pas être validé (statut actuel: ' + transfert.statut + ')');
+      }
+
+      const beforeTransfert = transfert;
+      const lignesInput = new Map<string, number>(
+        (opts?.lignes || []).map(l => [l.id, l.quantite_validee])
+      );
+
+      // Déterminer les quantités accordées par ligne
+      const lignesAvecAccord = (transfert.transfert_lignes || []).map((ligne: any) => {
+        const demandee = Number(ligne.quantite || 0);
+        const qv = lignesInput.has(ligne.id) ? Number(lignesInput.get(ligne.id)) : (ligne.quantite_validee != null ? Number(ligne.quantite_validee) : demandee);
+        const accordee = Math.max(0, Math.min(demandee, Number.isFinite(qv) ? qv : demandee));
+        return { ...ligne, quantite_demandee: demandee, quantite_accordee: accordee };
+      });
+
+      if (lignesAvecAccord.every((l: any) => (l.quantite_accordee || 0) <= 0)) {
+        throw new Error('Validation impossible: toutes les quantités accordées sont à 0. Utilisez plutôt "Refuser".');
       }
 
       // Traiter chaque ligne de transfert
-      for (const ligne of transfert.transfert_lignes) {
+      for (const ligne of lignesAvecAccord) {
         const lotGros = ligne.lots;
+        const qte = ligne.quantite_accordee;
+
+        // Rien à transférer sur cette ligne (validation partielle)
+        if (!qte || qte <= 0) {
+          // quand même stocker quantite_validee=0 pour traçabilité
+          const { error: upLine0 } = await supabase
+            .from('transfert_lignes')
+            .update({ quantite_validee: 0 })
+            .eq('id', ligne.id);
+          if (upLine0) throw upLine0;
+          continue;
+        }
         
         // Vérifier la disponibilité
-        if (lotGros.quantite_disponible < ligne.quantite) {
+        if (lotGros.quantite_disponible < qte) {
           throw new Error(`Stock insuffisant pour le lot ${lotGros.numero_lot}`);
         }
 
@@ -239,7 +415,7 @@ export class StockService {
         const { error: updateGrosError } = await supabase
           .from('lots')
           .update({
-            quantite_disponible: lotGros.quantite_disponible - ligne.quantite
+            quantite_disponible: lotGros.quantite_disponible - qte
           })
           .eq('id', lotGros.id);
 
@@ -263,7 +439,7 @@ export class StockService {
           const { error: updateDetailError } = await supabase
             .from('lots')
             .update({
-              quantite_disponible: lotDetail.quantite_disponible + ligne.quantite
+              quantite_disponible: lotDetail.quantite_disponible + qte
             })
             .eq('id', lotDetail.id);
 
@@ -275,8 +451,8 @@ export class StockService {
             .insert({
               medicament_id: ligne.medicament_id,
               numero_lot: lotGros.numero_lot,
-              quantite_initiale: ligne.quantite,
-              quantite_disponible: ligne.quantite,
+              quantite_initiale: qte,
+              quantite_disponible: qte,
               date_reception: lotGros.date_reception,
               date_expiration: lotGros.date_expiration,
               prix_achat: lotGros.prix_achat,
@@ -288,6 +464,13 @@ export class StockService {
           if (createDetailError) throw createDetailError;
         }
 
+        // Mettre à jour la quantité validée sur la ligne
+        const { error: updateLineError } = await supabase
+          .from('transfert_lignes')
+          .update({ quantite_validee: qte })
+          .eq('id', ligne.id);
+        if (updateLineError) throw updateLineError;
+
         // Enregistrer le mouvement de transfert
         const { error: mouvementError } = await supabase
           .from('mouvements_stock')
@@ -295,9 +478,9 @@ export class StockService {
             type: 'transfert',
             medicament_id: ligne.medicament_id,
             lot_id: lotGros.id,
-            quantite: ligne.quantite,
+            quantite: qte,
             quantite_avant: lotGros.quantite_disponible,
-            quantite_apres: lotGros.quantite_disponible - ligne.quantite,
+            quantite_apres: lotGros.quantite_disponible - qte,
             motif: 'Transfert interne Gros → Détail',
             utilisateur_id: utilisateur_validateur_id,
             date_mouvement: new Date().toISOString(),
@@ -309,21 +492,86 @@ export class StockService {
         if (mouvementError) throw mouvementError;
       }
 
-      // Marquer le transfert comme validé
+      const isPartial = lignesAvecAccord.some((l: any) => (l.quantite_accordee || 0) < (l.quantite_demandee || 0));
+      const newStatut = isPartial ? 'partiel' : 'valide';
+
+      // Marquer le transfert comme validé/partiel
       const { error: updateTransfertError } = await supabase
         .from('transferts')
         .update({
-          statut: 'valide',
+          statut: newStatut,
           date_validation: new Date().toISOString(),
-          utilisateur_destination_id: utilisateur_validateur_id
+          utilisateur_destination_id: utilisateur_validateur_id,
+          observations: [transfert.observations, opts?.observations ? `VALIDATION: ${opts.observations}` : null].filter(Boolean).join('\n')
         })
         .eq('id', transfert_id);
 
       if (updateTransfertError) throw updateTransfertError;
 
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert_id,
+        action: isPartial ? 'APPROVED_PARTIAL' : 'APPROVED',
+        actor_id: utilisateur_validateur_id,
+        old_status: beforeTransfert.statut,
+        new_status: newStatut,
+        old_data: beforeTransfert,
+        new_data: { ...beforeTransfert, statut: newStatut, lignes: lignesAvecAccord.map((l: any) => ({ id: l.id, quantite: l.quantite_demandee, quantite_validee: l.quantite_accordee })) },
+      });
+
       return { success: true, transfert };
     } catch (error) {
       console.error('Erreur lors de la validation du transfert:', error);
+      throw error;
+    }
+  }
+
+  // 3b. REFUS DE TRANSFERT → Le responsable gros refuse la demande
+  static async refuserTransfert(transfert_id: string, utilisateur_id: string, motif_refus: string) {
+    try {
+      // Récupérer le transfert
+      const { data: transfert, error: transfertError } = await supabase
+        .from('transferts')
+        .select('*')
+        .eq('id', transfert_id)
+        .single();
+
+      if (transfertError) throw transfertError;
+      if (transfert.statut !== 'en_attente') {
+        throw new Error('Seuls les transferts en attente peuvent être refusés');
+      }
+
+      const before = transfert;
+      // Mettre à jour le statut du transfert
+      const { error: updateError } = await supabase
+        .from('transferts')
+        .update({
+          statut: 'refuse',
+          date_validation: new Date().toISOString(),
+          utilisateur_destination_id: utilisateur_id,
+          motif_refus: motif_refus,
+          observations: transfert.observations 
+            ? `${transfert.observations}\n\nREFUSÉ: ${motif_refus}` 
+            : `REFUSÉ: ${motif_refus}`
+        })
+        .eq('id', transfert_id);
+
+      if (updateError) throw updateError;
+
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert_id,
+        action: 'REJECTED',
+        actor_id: utilisateur_id,
+        old_status: before.statut,
+        new_status: 'refuse',
+        old_data: before,
+        new_data: { ...before, statut: 'refuse', motif_refus },
+      });
+
+      return { success: true, message: 'Transfert refusé' };
+    } catch (error) {
+      console.error('Erreur lors du refus du transfert:', error);
       throw error;
     }
   }
@@ -795,6 +1043,7 @@ export class StockService {
     }
   }
 
+  // Récupérer les transferts actifs (en_attente et en_cours)
   static async getTransfertsEnCours() {
     try {
       const { data, error } = await supabase
@@ -811,13 +1060,118 @@ export class StockService {
             )
           )
         `)
-        .eq('statut', 'en_cours')
+        .in('statut', ['en_attente', 'en_cours']) // Inclure les demandes en attente ET en cours
         .order('date_transfert', { ascending: false });
 
       if (error) throw error;
       return data;
     } catch (error) {
       console.error('Erreur lors de la récupération des transferts:', error);
+      throw error;
+    }
+  }
+
+  // 3c. RÉCEPTION TRANSFERT → Accusé de réception côté Magasin Détail (sans re-déplacer le stock)
+  static async receptionnerTransfert(transfert_id: string, utilisateur_reception_id: string, observations?: string) {
+    try {
+      const { data: transfert, error: transfertError } = await supabase
+        .from('transferts')
+        .select('*')
+        .eq('id', transfert_id)
+        .single();
+
+      if (transfertError) throw transfertError;
+      if (transfert.statut !== 'valide') {
+        // On accepte aussi "partiel" (réception après validation partielle)
+        if (transfert.statut !== 'partiel') {
+          throw new Error('Seuls les transferts validés/partiels peuvent être réceptionnés');
+        }
+      }
+
+      const before = transfert;
+      const { error: updateError } = await supabase
+        .from('transferts')
+        .update({
+          statut: 'recu',
+          date_reception: new Date().toISOString(),
+          utilisateur_reception_id,
+          observations: [transfert.observations, observations ? `RECEPTION: ${observations}` : null].filter(Boolean).join('\n')
+        })
+        .eq('id', transfert_id);
+
+      if (updateError) throw updateError;
+
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert_id,
+        action: 'RECEIVED',
+        actor_id: utilisateur_reception_id,
+        old_status: before.statut,
+        new_status: 'recu',
+        old_data: before,
+        new_data: { ...before, statut: 'recu' },
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Erreur lors de la réception du transfert:', error);
+      throw error;
+    }
+  }
+
+  // Récupérer les transferts par statut spécifique
+  static async getTransfertsByStatut(statut: 'en_attente' | 'en_cours' | 'valide' | 'refuse' | 'annule' | 'recu') {
+    try {
+      const { data, error } = await supabase
+        .from('transferts')
+        .select(`
+          *,
+          transfert_lignes (
+            *,
+            medicaments (
+              *
+            ),
+            lots (
+              *
+            )
+          )
+        `)
+        .eq('statut', statut)
+        .order('date_transfert', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des transferts:', error);
+      throw error;
+    }
+  }
+
+  // Récupérer l'historique des transferts (validés, reçus, refusés, annulés)
+  static async getTransfertsHistorique() {
+    try {
+      const { data, error } = await supabase
+        .from('transferts')
+        .select(`
+          *,
+          transfert_lignes (
+            *,
+            medicaments (
+              *
+            ),
+            lots (
+              *
+            )
+          )
+        `)
+        .in('statut', ['valide', 'recu', 'refuse', 'annule'])
+        .order('date_transfert', { ascending: false })
+        .limit(100); // Limiter l'historique aux 100 derniers
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'historique:', error);
       throw error;
     }
   }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -73,7 +73,7 @@ interface Transfert {
   dateDemande: Date;
   dateValidation?: Date;
   dateReception?: Date;
-  statut: 'en_attente' | 'valide' | 'en_cours' | 'reçu' | 'annulé';
+  statut: 'en_attente' | 'valide' | 'en_cours' | 'recu' | 'annule';
   origine: 'magasin_gros';
   destination: 'magasin_detail';
   demandeur: string;
@@ -98,21 +98,61 @@ interface DemandeTransfert {
   priorite: 'normale' | 'urgente' | 'critique';
 }
 
-const GestionTransferts: React.FC = () => {
+export type GestionTransfertsContext = 'pharmacie' | 'stock';
+
+const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ context = 'stock' }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [openDemande, setOpenDemande] = useState(false);
   const [openValidation, setOpenValidation] = useState(false);
   const [openReception, setOpenReception] = useState(false);
   const [selectedTransfert, setSelectedTransfert] = useState<any>(null);
-  const [selectedDemande, setSelectedDemande] = useState<DemandeTransfert | null>(null);
+  // (legacy) demandes demo non utilisées, conservées pour compatibilité UI
   const [loading, setLoading] = useState(false);
+
+  // Éviter de rester sur l'onglet "Réception" côté Magasin Gros
+  useEffect(() => {
+    if (context === 'stock' && activeTab === 2) {
+      setActiveTab(0);
+    }
+  }, [context, activeTab]);
+
+  // Utilisateur courant (si auth Supabase activée)
+  const [currentUserId, setCurrentUserId] = useState<string>('system');
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data?.user?.id) setCurrentUserId(data.user.id);
+      } catch {
+        // garder "system" si pas d'auth
+      }
+    })();
+  }, []);
 
   // Données réelles
   const [transferts, setTransferts] = useState<TransfertSupabase[]>([]);
+  const [transfertsHistorique, setTransfertsHistorique] = useState<TransfertSupabase[]>([]);
   const [lots, setLots] = useState<LotSupabase[]>([]);
   
   // Utiliser le hook centralisé pour les médicaments
   const { medicaments } = useMedicaments({ autoRefresh: true });
+
+  // Filtrage selon le contexte:
+  // - Pharmacie: ne voit que ses demandes + peut réceptionner
+  // - Stock (Magasin Gros): voit toutes les demandes + peut valider/refuser
+  const transfertsVisibles = useMemo(() => {
+    if (context === 'pharmacie') {
+      return (transferts || []).filter((t: any) => t.utilisateur_source_id === currentUserId);
+    }
+    return transferts || [];
+  }, [context, transferts, currentUserId]);
+
+  const transfertsHistoriqueVisibles = useMemo(() => {
+    if (context === 'pharmacie') {
+      return (transfertsHistorique || []).filter((t: any) => t.utilisateur_source_id === currentUserId);
+    }
+    return transfertsHistorique || [];
+  }, [context, transfertsHistorique, currentUserId]);
 
   // États pour les formulaires
   const [demandeForm, setDemandeForm] = useState({
@@ -144,10 +184,45 @@ const GestionTransferts: React.FC = () => {
     quantite_validee: 0
   });
 
+  interface ValidationLine {
+    ligne_id: string;
+    medicament_nom: string;
+    lot_numero: string;
+    quantite_demandee: number;
+    stock_disponible: number;
+    quantite_validee: number;
+  }
+
+  const [validationLines, setValidationLines] = useState<ValidationLine[]>([]);
+
   const [receptionForm, setReceptionForm] = useState({
     observations: '',
     quantite_recue: 0
   });
+
+  useEffect(() => {
+    if (!openValidation || !selectedTransfert) return;
+    const lignes: ValidationLine[] = (selectedTransfert.transfert_lignes || []).map((l: any) => ({
+      ligne_id: l.id,
+      medicament_nom: l.medicaments?.nom || 'Médicament',
+      lot_numero: l.lots?.numero_lot || '-',
+      quantite_demandee: Number(l.quantite || 0),
+      stock_disponible: Number(l.lots?.quantite_disponible || 0),
+      quantite_validee: l.quantite_validee != null ? Number(l.quantite_validee) : Number(l.quantite || 0),
+    }));
+    setValidationLines(lignes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openValidation, selectedTransfert?.id]);
+
+  const setQuantiteValidee = (ligneId: string, value: number) => {
+    setValidationLines(prev =>
+      prev.map(l => {
+        if (l.ligne_id !== ligneId) return l;
+        const bounded = Math.max(0, Math.min(l.quantite_demandee, value));
+        return { ...l, quantite_validee: bounded };
+      })
+    );
+  };
 
   useEffect(() => {
     loadData();
@@ -156,12 +231,14 @@ const GestionTransferts: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [transfertsData, lotsData] = await Promise.all([
+      const [transfertsData, historiqueData, lotsData] = await Promise.all([
         StockService.getTransfertsEnCours(),
+        StockService.getTransfertsHistorique(),
         StockService.getLotsByMagasin('gros')
       ]);
       
       setTransferts(transfertsData || []);
+      setTransfertsHistorique(historiqueData || []);
       setLots(lotsData || []);
       // Les médicaments sont chargés automatiquement par le hook useMedicaments
     } catch (error) {
@@ -206,7 +283,7 @@ const GestionTransferts: React.FC = () => {
       dateDemande: new Date('2024-07-20'),
       dateValidation: new Date('2024-07-20'),
       dateReception: new Date('2024-07-21'),
-      statut: 'reçu',
+      statut: 'recu',
       origine: 'magasin_gros',
       destination: 'magasin_detail',
       demandeur: 'Pharmacien Principal',
@@ -281,8 +358,8 @@ const GestionTransferts: React.FC = () => {
           lot_id: l.lot_id,
           quantite_demandee: l.quantite_demandee
         })),
-        utilisateur_demandeur_id: 'current-user-id', // À remplacer par l'ID utilisateur réel
-        motif: motifTransfert || 'Transfert Gros → Détail',
+        utilisateur_demandeur_id: currentUserId,
+        motif: motifTransfert || 'Demande interne de ravitaillement (Pharmacie → Magasin Gros)',
         observations: observationsTransfert
       });
       
@@ -337,18 +414,53 @@ const GestionTransferts: React.FC = () => {
     
     try {
       setLoading(true);
-      await StockService.validerTransfert(selectedTransfert.id, 'current-user-id');
+      await StockService.validerTransfert(selectedTransfert.id, currentUserId, {
+        lignes: validationLines.map(l => ({ id: l.ligne_id, quantite_validee: l.quantite_validee })),
+        observations: validationForm.observations || undefined,
+      });
       
       setOpenValidation(false);
       setValidationForm({
         observations: '',
         quantite_validee: 0
       });
+      setValidationLines([]);
       setSelectedTransfert(null);
       
+      alert('Validation enregistrée. Les stocks ont été mis à jour.');
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de la validation du transfert:', error);
+      alert(`Erreur: ${error.message || 'Impossible de valider le transfert'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refuser un transfert
+  const [openRefus, setOpenRefus] = useState(false);
+  const [motifRefus, setMotifRefus] = useState('');
+
+  const handleRefuserTransfert = async () => {
+    if (!selectedTransfert) return;
+    if (!motifRefus.trim()) {
+      alert('Veuillez saisir un motif de refus');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await StockService.refuserTransfert(selectedTransfert.id, currentUserId, motifRefus);
+      
+      setOpenRefus(false);
+      setMotifRefus('');
+      setSelectedTransfert(null);
+      
+      alert('Transfert refusé.');
+      await loadData();
+    } catch (error: any) {
+      console.error('Erreur lors du refus du transfert:', error);
+      alert(`Erreur: ${error.message || 'Impossible de refuser le transfert'}`);
     } finally {
       setLoading(false);
     }
@@ -359,9 +471,11 @@ const GestionTransferts: React.FC = () => {
     
     try {
       setLoading(true);
-      // Ici on pourrait ajouter une méthode pour marquer le transfert comme reçu
-      // Pour l'instant, on simule la réception
-      console.log('Transfert reçu:', receptionForm);
+      await StockService.receptionnerTransfert(
+        selectedTransfert.id,
+        currentUserId,
+        receptionForm.observations || undefined
+      );
       
       setOpenReception(false);
       setReceptionForm({
@@ -370,6 +484,7 @@ const GestionTransferts: React.FC = () => {
       });
       setSelectedTransfert(null);
       
+      alert('Réception confirmée.');
       await loadData();
     } catch (error) {
       console.error('Erreur lors de la réception du transfert:', error);
@@ -382,9 +497,10 @@ const GestionTransferts: React.FC = () => {
     switch (statut) {
       case 'en_attente': return 'warning';
       case 'valide': return 'info';
+      case 'partiel': return 'secondary';
       case 'en_cours': return 'primary';
-      case 'reçu': return 'success';
-      case 'annulé': return 'error';
+      case 'recu': return 'success';
+      case 'annule': return 'error';
       default: return 'default';
     }
   };
@@ -402,9 +518,10 @@ const GestionTransferts: React.FC = () => {
     switch (statut) {
       case 'en_attente': return <Warning />;
       case 'valide': return <CheckCircle />;
+      case 'partiel': return <CheckCircle />;
       case 'en_cours': return <LocalShipping />;
-      case 'reçu': return <Inventory />;
-      case 'annulé': return <Cancel />;
+      case 'recu': return <Inventory />;
+      case 'annule': return <Cancel />;
       default: return <Assignment />;
     }
   };
@@ -412,13 +529,32 @@ const GestionTransferts: React.FC = () => {
   return (
     <Box>
       {/* En-tête */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Gestion des Ajustements
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Ajustements de stock et bons de commande
-        </Typography>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Gestion des Ajustements
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Ajustements de stock et bons de commande
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {transfertsVisibles.filter((t: any) => t.statut === 'en_attente').length > 0 && (
+            <Chip 
+              icon={<Warning />}
+              label={`${transfertsVisibles.filter((t: any) => t.statut === 'en_attente').length} demande(s) en attente`}
+              color="warning"
+            />
+          )}
+          <Button 
+            variant="outlined" 
+            startIcon={<Refresh />} 
+            onClick={loadData}
+            disabled={loading}
+          >
+            {loading ? 'Chargement...' : 'Rafraîchir'}
+          </Button>
+        </Box>
       </Box>
 
       {/* Navigation par onglets */}
@@ -441,9 +577,25 @@ const GestionTransferts: React.FC = () => {
             }
           }}
         >
-          <Tab icon={<Assignment />} label="Demandes" iconPosition="start" />
-          <Tab icon={<LocalShipping />} label="Ajustements" iconPosition="start" />
-          <Tab icon={<Inventory />} label="Réception" iconPosition="start" />
+          <Tab 
+            icon={<Assignment />} 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {context === 'pharmacie' ? 'Mes demandes' : 'Demandes en instance'}
+                {transfertsVisibles.filter((t: any) => t.statut === 'en_attente').length > 0 && (
+                  <Chip 
+                    label={transfertsVisibles.filter((t: any) => t.statut === 'en_attente').length} 
+                    size="small" 
+                    color="warning"
+                    sx={{ height: 20, fontSize: '0.7rem' }}
+                  />
+                )}
+              </Box>
+            } 
+            iconPosition="start" 
+          />
+          <Tab icon={<LocalShipping />} label="Suivi" iconPosition="start" />
+          <Tab icon={<Inventory />} label="Réception" iconPosition="start" disabled={context === 'stock'} />
           <Tab icon={<Description />} label="Historique" iconPosition="start" />
         </Tabs>
       </Box>
@@ -456,27 +608,32 @@ const GestionTransferts: React.FC = () => {
         <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-                  Commande - Bon de Ravitaillement
+                  Demande interne de ravitaillement (Magasin Détail → Magasin Gros)
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => {
-                // Initialiser avec une ligne vide pour faciliter l'ajout
-                if (lignesTransfert.length === 0) {
-                  ajouterLigneTransfert();
-                }
-                setOpenDemande(true);
-              }}
-            >
-              Nouvelle Commande
-            </Button>
+            {context === 'pharmacie' && (
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => {
+                  // Initialiser avec une ligne vide pour faciliter l'ajout
+                  if (lignesTransfert.length === 0) {
+                    ajouterLigneTransfert();
+                  }
+                  setOpenDemande(true);
+                }}
+              >
+                Nouvelle Demande
+              </Button>
+            )}
           </Box>
 
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  <strong>Processus :</strong> Le pharmacien/infirmier identifie un besoin et crée un bon de commande 
-                  pour se ravitailler. Le responsable valide et génère le bon de commande.
+                  <strong>Flux :</strong> La Pharmacie / Magasin Détail crée une demande interne de transfert vers le Magasin Gros
+                  (le Magasin Gros se ravitaille depuis l’externe auprès des fournisseurs via les réceptions).
+                  <br />
+                  <strong>Contrôle :</strong> Le système vérifie la disponibilité au Magasin Gros. Le responsable Magasin Gros valide ou refuse.
+                  En cas de validation, le stock est transféré et les stocks sont mis à jour (Gros −, Détail +).
                 </Typography>
               </Alert>
 
@@ -484,86 +641,109 @@ const GestionTransferts: React.FC = () => {
                 <Table>
               <TableHead>
                 <TableRow>
-                      <TableCell>Médicament</TableCell>
-                      <TableCell>Quantité Demandée</TableCell>
+                      <TableCell>N° Transfert</TableCell>
+                      <TableCell>Médicament(s)</TableCell>
+                      <TableCell>Quantité</TableCell>
                       <TableCell>Motif</TableCell>
-                      <TableCell>Demandeur</TableCell>
                   <TableCell>Date</TableCell>
-                      <TableCell>Priorité</TableCell>
                   <TableCell>Statut</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                    {demandesDemo.map((demande) => (
-                      <TableRow key={demande.id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="bold">
-                            Paracétamol 500mg
+                    {transfertsVisibles.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center">
+                          <Typography variant="body2" color="text.secondary">
+                            Aucune demande de transfert en cours
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            MED-001
-                          </Typography>
-                        </TableCell>
-                      <TableCell>
-                          <Typography variant="body2">
-                            {demande.quantiteDemandee} unités
-                          </Typography>
-                      </TableCell>
-                      <TableCell>
-                          <Typography variant="body2">
-                            {demande.motif}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                            {demande.demandeur}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                            {demande.dateDemande.toLocaleDateString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                            label={demande.priorite}
-                            color={getPrioriteColor(demande.priorite)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={demande.statut}
-                            color={getStatutColor(demande.statut)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <Tooltip title="Voir détails">
-                              <IconButton size="small">
-                                <Visibility />
-                              </IconButton>
-                            </Tooltip>
-                            {demande.statut === 'en_attente' && (
-                              <>
-                                <Tooltip title="Approuver">
-                                  <IconButton size="small" color="success">
-                                    <CheckCircle />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Rejeter">
-                                  <IconButton size="small" color="error">
-                                    <Cancel />
-                                  </IconButton>
-                                </Tooltip>
-                              </>
-                            )}
-                          </Box>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      transfertsVisibles.map((transfert: any) => (
+                        <TableRow key={transfert.id}>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="bold">
+                              {transfert.numero_transfert}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                              <Box key={idx}>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {ligne.medicaments?.nom || 'Médicament'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Lot: {ligne.lots?.numero_lot || '-'}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </TableCell>
+                          <TableCell>
+                            {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                              <Typography key={idx} variant="body2">
+                                {ligne.quantite} unités
+                              </Typography>
+                            ))}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {transfert.motif || transfert.observations || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {new Date(transfert.date_transfert).toLocaleDateString('fr-FR')}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={transfert.statut}
+                              color={getStatutColor(transfert.statut)}
+                              size="small"
+                              icon={getStatutIcon(transfert.statut)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Tooltip title="Voir détails">
+                                <IconButton size="small" onClick={() => setSelectedTransfert(transfert)}>
+                                  <Visibility />
+                                </IconButton>
+                              </Tooltip>
+                              {context === 'stock' && transfert.statut === 'en_attente' && (
+                                <>
+                                  <Tooltip title="Valider le transfert">
+                                    <IconButton 
+                                      size="small" 
+                                      color="success"
+                                      onClick={() => {
+                                        setSelectedTransfert(transfert);
+                                        setOpenValidation(true);
+                                      }}
+                                    >
+                                      <CheckCircle />
+                                    </IconButton>
+                                  </Tooltip>
+                                  <Tooltip title="Refuser le transfert">
+                                    <IconButton 
+                                      size="small" 
+                                      color="error"
+                                      onClick={() => {
+                                        setSelectedTransfert(transfert);
+                                        setOpenRefus(true);
+                                      }}
+                                    >
+                                      <Cancel />
+                                    </IconButton>
+                                  </Tooltip>
+                                </>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -595,78 +775,94 @@ const GestionTransferts: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {transfertsDemo
-                      .filter(t => t.statut === 'en_cours' || t.statut === 'valide')
-                      .map((transfert) => (
-                        <TableRow key={transfert.id}>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">
-                              {transfert.numeroTransfert}
+                    {transfertsVisibles
+                      .filter((t: any) => t.statut === 'en_cours' || t.statut === 'valide' || t.statut === 'partiel')
+                      .length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} align="center">
+                            <Typography variant="body2" color="text.secondary">
+                              Aucun ajustement en cours
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Box>
-                              <Typography variant="body2" fontWeight="bold">
-                                {transfert.medicamentNom}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {transfert.medicamentCode}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {transfert.quantite} unités
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {transfert.dateDemande.toLocaleDateString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {transfert.validateur}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {getStatutIcon(transfert.statut)}
-                              <Chip
-                                label={transfert.statut}
-                                color={getStatutColor(transfert.statut)}
-                                size="small"
-                              />
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Tooltip title="Voir détails">
-                            <IconButton
-                              size="small"
-                                  onClick={() => setSelectedTransfert(transfert)}
-                            >
-                                  <Visibility />
-                            </IconButton>
-                              </Tooltip>
-                              {transfert.statut === 'valide' && (
-                                <Tooltip title="Réceptionner">
-                            <IconButton
-                              size="small"
-                                    color="success"
-                                    onClick={() => {
-                                      setSelectedTransfert(transfert);
-                                      setOpenReception(true);
-                                    }}
-                                  >
-                                    <Inventory />
-                            </IconButton>
-                                </Tooltip>
-                              )}
-                          </Box>
-                      </TableCell>
-                    </TableRow>
-                      ))}
+                        </TableRow>
+                      ) : (
+                        transfertsVisibles
+                          .filter((t: any) => t.statut === 'en_cours' || t.statut === 'valide' || t.statut === 'partiel')
+                          .map((transfert: any) => (
+                            <TableRow key={transfert.id}>
+                              <TableCell>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {transfert.numero_transfert}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                                  <Box key={idx}>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {ligne.medicaments?.nom || 'Médicament'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {ligne.medicaments?.code || ''}
+                                    </Typography>
+                                  </Box>
+                                ))}
+                              </TableCell>
+                              <TableCell>
+                                {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                                  <Typography key={idx} variant="body2">
+                                    {ligne.quantite} unités
+                                  </Typography>
+                                ))}
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {new Date(transfert.date_transfert).toLocaleDateString('fr-FR')}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {transfert.utilisateur_destination_id || '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {getStatutIcon(transfert.statut)}
+                                  <Chip
+                                    label={transfert.statut}
+                                    color={getStatutColor(transfert.statut)}
+                                    size="small"
+                                  />
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                  <Tooltip title="Voir détails">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => setSelectedTransfert(transfert)}
+                                    >
+                                      <Visibility />
+                                    </IconButton>
+                                  </Tooltip>
+                                  {context === 'pharmacie' && (transfert.statut === 'valide' || transfert.statut === 'partiel') && (
+                                    <Tooltip title="Réceptionner">
+                                      <IconButton
+                                        size="small"
+                                        color="success"
+                                        onClick={() => {
+                                          setSelectedTransfert(transfert);
+                                          setOpenReception(true);
+                                        }}
+                                      >
+                                        <Inventory />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                      )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -714,90 +910,96 @@ const GestionTransferts: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {transfertsDemo
-                      .filter(t => t.statut === 'valide' || t.statut === 'reçu')
-                      .map((transfert) => (
-                        <TableRow 
-                          key={transfert.id}
-                          sx={{ 
-                            '&:hover': { backgroundColor: 'action.hover' },
-                            backgroundColor: transfert.statut === 'valide' ? 'warning.light' : 'inherit'
-                          }}
-                        >
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">
-                              {transfert.numeroTransfert}
+                    {transfertsVisibles
+                      .filter((t: any) => t.statut === 'valide' || t.statut === 'partiel')
+                      .length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">
+                            <Typography variant="body2" color="text.secondary">
+                              Aucun transfert en attente de réception
                             </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Box>
-                              <Typography variant="body2" fontWeight="bold">
-                                {transfert.medicamentNom}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {transfert.medicamentCode}
-                              </Typography>
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold" color="primary.main">
-                              {transfert.quantite} unités
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2">
-                              {transfert.dateValidation?.toLocaleDateString()}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={transfert.statut === 'valide' ? 'En attente de réception' : 'Réceptionné'}
-                              color={transfert.statut === 'valide' ? 'warning' : 'success'}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                              {transfert.statut === 'valide' ? (
-                                <Button
-                                  variant="contained"
-                                  color="success"
-                                  size="small"
-                                  startIcon={<CheckCircle />}
-                                  onClick={() => {
-                                    setSelectedTransfert(transfert);
-                                    setOpenReception(true);
-                                  }}
-                                  sx={{ fontWeight: 'bold' }}
-                                >
-                                  Confirmer Réception
-                                </Button>
-                              ) : (
-                                <Chip
-                                  icon={<CheckCircle />}
-                                  label="Réception confirmée"
-                                  color="success"
-                                  variant="outlined"
-                                  size="small"
-                                />
-                              )}
-                              <Tooltip title="Voir détails">
-                                <IconButton
-                                  size="small"
-                                  onClick={() => setSelectedTransfert(transfert)}
-                                >
-                                  <Visibility />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        transfertsVisibles
+                          .filter((t: any) => t.statut === 'valide' || t.statut === 'partiel')
+                          .map((transfert: any) => (
+                            <TableRow 
+                              key={transfert.id}
+                              sx={{ 
+                                '&:hover': { backgroundColor: 'action.hover' },
+                                backgroundColor: 'warning.light'
+                              }}
+                            >
+                              <TableCell>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {transfert.numero_transfert}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                                  <Box key={idx}>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {ligne.medicaments?.nom || 'Médicament'}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {ligne.medicaments?.code || ''}
+                                    </Typography>
+                                  </Box>
+                                ))}
+                              </TableCell>
+                              <TableCell>
+                                {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                                  <Typography key={idx} variant="body2" fontWeight="bold" color="primary.main">
+                                    {ligne.quantite} unités
+                                  </Typography>
+                                ))}
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {transfert.date_validation ? new Date(transfert.date_validation).toLocaleDateString('fr-FR') : '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label="En attente de réception"
+                                  color="warning"
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                  <Button
+                                    variant="contained"
+                                    color="success"
+                                    size="small"
+                                    startIcon={<CheckCircle />}
+                                    onClick={() => {
+                                      setSelectedTransfert(transfert);
+                                      setOpenReception(true);
+                                    }}
+                                    sx={{ fontWeight: 'bold' }}
+                                  >
+                                    Confirmer Réception
+                                  </Button>
+                                  <Tooltip title="Voir détails">
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => setSelectedTransfert(transfert)}
+                                    >
+                                      <Visibility />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                      )}
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              {transfertsDemo.filter(t => t.statut === 'valide').length === 0 && (
+              {transfertsVisibles.filter((t: any) => t.statut === 'valide' || t.statut === 'partiel').length === 0 && (
                 <Alert severity="success" sx={{ mt: 2 }}>
                   <Typography variant="body2">
                     ✅ Tous les ajustements ont été réceptionnés. Aucun transfert en attente.
@@ -842,58 +1044,72 @@ const GestionTransferts: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {transfertsDemo.map((transfert) => (
-                      <TableRow key={transfert.id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="bold">
-                            {transfert.numeroTransfert}
+                    {transfertsHistoriqueVisibles.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center">
+                          <Typography variant="body2" color="text.secondary">
+                            Aucun historique de transfert
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Box>
+                      </TableRow>
+                    ) : (
+                      transfertsHistoriqueVisibles.map((transfert: any) => (
+                        <TableRow key={transfert.id}>
+                          <TableCell>
                             <Typography variant="body2" fontWeight="bold">
-                              {transfert.medicamentNom}
+                              {transfert.numero_transfert}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {transfert.medicamentCode}
+                          </TableCell>
+                          <TableCell>
+                            {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                              <Box key={idx}>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {ligne.medicaments?.nom || 'Médicament'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {ligne.medicaments?.code || ''}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </TableCell>
+                          <TableCell>
+                            {transfert.transfert_lignes?.map((ligne: any, idx: number) => (
+                              <Typography key={idx} variant="body2">
+                                {ligne.quantite} unités
+                              </Typography>
+                            ))}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {new Date(transfert.date_transfert).toLocaleDateString('fr-FR')}
                             </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {transfert.quantite} unités
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {transfert.dateDemande.toLocaleDateString()}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {transfert.dateReception?.toLocaleDateString() || '-'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={transfert.statut}
-                            color={getStatutColor(transfert.statut)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Tooltip title="Voir détails">
-                            <IconButton
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {transfert.date_validation ? new Date(transfert.date_validation).toLocaleDateString('fr-FR') : '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={transfert.statut}
+                              color={getStatutColor(transfert.statut)}
                               size="small"
-                              onClick={() => setSelectedTransfert(transfert)}
-                            >
-                              <Visibility />
-                            </IconButton>
-                          </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                ))}
-              </TableBody>
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip title="Voir détails">
+                              <IconButton
+                                size="small"
+                                onClick={() => setSelectedTransfert(transfert)}
+                              >
+                                <Visibility />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
             </Table>
           </TableContainer>
         </CardContent>
@@ -917,7 +1133,7 @@ const GestionTransferts: React.FC = () => {
       >
         <DialogTitle>
           <Box display="flex" alignItems="center" justifyContent="space-between">
-            <Typography variant="h6">Nouvelle Commande de Ravitaillement</Typography>
+            <Typography variant="h6">Nouvelle Demande de Ravitaillement (Interne)</Typography>
             <Button
               variant="outlined"
               size="small"
@@ -1128,7 +1344,7 @@ const GestionTransferts: React.FC = () => {
             variant="contained"
             disabled={lignesTransfert.length === 0 || lignesTransfert.some(l => !l.medicament_id || !l.lot_id || l.quantite_demandee <= 0)}
           >
-            Créer Transfert ({lignesTransfert.length})
+            Envoyer la demande ({lignesTransfert.length})
           </Button>
         </DialogActions>
       </Dialog>
@@ -1150,21 +1366,59 @@ const GestionTransferts: React.FC = () => {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <Alert severity="warning">
-                Vérifiez la disponibilité du stock avant de valider ce transfert.
+                Vérifiez la disponibilité du stock au Magasin Gros. Vous pouvez accorder une quantité inférieure par ligne (validation partielle).
               </Alert>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Quantité validée"
-                type="number"
-                value={validationForm.quantite_validee}
-                onChange={(e) => {
-                  const value = Math.max(0, parseInt(e.target.value) || 0);
-                  setValidationForm(prev => ({ ...prev, quantite_validee: value }));
-                }}
-                inputProps={{ min: 0, step: 1 }}
-              />
+            <Grid item xs={12}>
+              <TableContainer component={Paper} sx={{ maxHeight: 280, overflow: 'auto' }}>
+                <Table stickyHeader size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Médicament</TableCell>
+                      <TableCell>Lot</TableCell>
+                      <TableCell align="right">Demandée</TableCell>
+                      <TableCell align="right">Stock Gros</TableCell>
+                      <TableCell align="right">Accordée</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {validationLines.map((l) => {
+                      const maxAccord = Math.min(l.quantite_demandee, l.stock_disponible);
+                      const isOverStock = l.quantite_validee > l.stock_disponible;
+                      return (
+                        <TableRow key={l.ligne_id} sx={{ backgroundColor: isOverStock ? 'error.light' : undefined }}>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="bold">
+                              {l.medicament_nom}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{l.lot_numero}</Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2">{l.quantite_demandee}</Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="body2" fontWeight="bold">{l.stock_disponible}</Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={l.quantite_validee}
+                              onChange={(e) => setQuantiteValidee(l.ligne_id, Math.max(0, parseInt(e.target.value) || 0))}
+                              inputProps={{ min: 0, step: 1, max: maxAccord }}
+                              error={isOverStock}
+                              helperText={isOverStock ? 'Dépasse le stock' : ''}
+                              sx={{ width: 120 }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </Grid>
             <Grid item xs={12}>
               <TextField
@@ -1239,9 +1493,67 @@ const GestionTransferts: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Dialog Refus de Transfert */}
+      <Dialog 
+        open={openRefus} 
+        onClose={(event, reason) => {
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenRefus(false);
+          }
+        }}
+        disableEscapeKeyDown
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle sx={{ color: 'error.main' }}>Refuser le Transfert</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <Alert severity="warning">
+                <Typography variant="body2">
+                  Vous êtes sur le point de refuser cette demande de transfert.
+                  <br />
+                  <strong>N° Transfert :</strong> {selectedTransfert?.numero_transfert}
+                </Typography>
+              </Alert>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Motif du refus *"
+                multiline
+                rows={3}
+                value={motifRefus}
+                onChange={(e) => setMotifRefus(e.target.value)}
+                placeholder="Veuillez expliquer pourquoi vous refusez cette demande..."
+                required
+                error={!motifRefus.trim()}
+                helperText={!motifRefus.trim() ? 'Le motif de refus est obligatoire' : ''}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setOpenRefus(false);
+            setMotifRefus('');
+          }}>
+            Annuler
+          </Button>
+          <Button 
+            onClick={handleRefuserTransfert} 
+            variant="contained" 
+            color="error"
+            disabled={!motifRefus.trim() || loading}
+          >
+            Confirmer le Refus
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog Détails du Transfert */}
       <Dialog 
-        open={selectedTransfert !== null} 
+        open={selectedTransfert !== null && !openValidation && !openRefus} 
         onClose={(event, reason) => {
           if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
             setSelectedTransfert(null);
@@ -1252,7 +1564,7 @@ const GestionTransferts: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          Détails du Transfert - {selectedTransfert?.numeroTransfert}
+          Détails du Transfert - {selectedTransfert?.numero_transfert || selectedTransfert?.numeroTransfert}
         </DialogTitle>
         <DialogContent>
           {selectedTransfert && (
