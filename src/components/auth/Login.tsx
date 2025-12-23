@@ -429,6 +429,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       if (!clinicCheck) {
         console.log('🔍 Recherche dans les codes temporaires...');
+        
+        // Rechercher d'abord dans clinic_temporary_codes sans jointure
         const { data: tempCodeData, error: tempCodeError } = await supabase
           .from('clinic_temporary_codes')
           .select(`
@@ -437,24 +439,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             temporary_code,
             is_used,
             is_converted,
-            expires_at,
-            clinics!inner(id, code, name, active, is_temporary_code, requires_code_change)
+            expires_at
           `)
           .eq('temporary_code', clinicCodeUpper)
           .maybeSingle();
 
-        if (tempCodeData && !tempCodeError) {
-          const clinicData = tempCodeData.clinics as any;
-          tempClinic = {
-            id: clinicData.id,
-            code: tempCodeData.temporary_code,
-            name: clinicData.name,
-            active: clinicData.active,
-            is_temporary_code: true,
-            requires_code_change: true,
-          };
-          isUsingTempCode = true;
+        console.log('📊 Résultat recherche code temporaire:', { tempCodeData, tempCodeError });
 
+        if (tempCodeData && !tempCodeError) {
           // Vérifier si le code temporaire a expiré
           if (new Date(tempCodeData.expires_at) < new Date()) {
             setError('Ce code temporaire a expiré. Contactez le Super-Admin pour obtenir un nouveau code.');
@@ -469,7 +461,34 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             return;
           }
 
-          console.log('✅ Code temporaire trouvé:', tempClinic);
+          // Maintenant récupérer la clinique via clinic_id
+          const { data: clinicData, error: clinicDataError } = await supabase
+            .from('clinics')
+            .select('id, code, name, active, is_temporary_code, requires_code_change')
+            .eq('id', tempCodeData.clinic_id)
+            .single();
+
+          console.log('📊 Données clinique récupérées:', { clinicData, clinicDataError });
+
+          if (clinicData && !clinicDataError) {
+            tempClinic = {
+              id: clinicData.id,
+              code: tempCodeData.temporary_code, // Utiliser le code temporaire, pas celui de la clinique
+              name: clinicData.name,
+              active: clinicData.active,
+              is_temporary_code: true,
+              requires_code_change: true,
+            };
+            isUsingTempCode = true;
+            console.log('✅ Code temporaire trouvé:', tempClinic);
+          } else {
+            console.error('❌ Clinique non trouvée pour le code temporaire:', clinicDataError);
+            setError('Code temporaire trouvé mais clinique associée introuvable. Contactez le support.');
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          console.log('❌ Code temporaire non trouvé dans clinic_temporary_codes');
         }
       }
 
