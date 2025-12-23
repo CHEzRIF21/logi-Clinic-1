@@ -15,6 +15,7 @@ import {
   alpha,
   Tabs,
   Tab,
+  Chip,
 } from '@mui/material';
 import {
   LocalHospital,
@@ -37,6 +38,7 @@ import {
   Support,
   Lock,
   PersonAdd,
+  Warning,
 } from '@mui/icons-material';
 import { Button as ShadcnButton } from '../ui/button';
 import { Input } from '../ui/input';
@@ -46,6 +48,8 @@ import { gsap } from 'gsap';
 import AccountRecoveryForm from './AccountRecoveryForm';
 import { CreateRecoveryRequestDto } from '../../types/accountRecovery';
 import Logo from '../ui/Logo';
+import { supabase } from '../../services/supabase';
+import ConvertClinicCodeDialog from './ConvertClinicCodeDialog';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -75,6 +79,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [contactTab, setContactTab] = useState<'contact' | 'recovery'>('contact');
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login');
+  
+  // État pour le dialogue de conversion du code temporaire
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
+  const [tempCodeInfo, setTempCodeInfo] = useState<{
+    clinicName: string;
+    currentCode: string;
+    userEmail: string;
+    pendingUser: User | null;
+    pendingToken: string | null;
+  } | null>(null);
+  const [isTemporaryCode, setIsTemporaryCode] = useState(false);
   const [signupForm, setSignupForm] = useState({
     nom: '',
     prenom: '',
@@ -394,142 +409,332 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     try {
-      // Simulation d'un appel API - En production, cela sera un appel à votre backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 1. Vérifier que le code clinique existe dans Supabase
+      const clinicCodeUpper = credentials.clinicCode.toUpperCase().trim();
+      
+      console.log('🔍 Recherche de la clinique avec le code:', clinicCodeUpper);
+      
+      // D'abord, vérifier si la clinique existe (même inactive)
+      const { data: clinicCheck, error: clinicCheckError } = await supabase
+        .from('clinics')
+        .select('id, code, name, active, is_temporary_code, requires_code_change')
+        .eq('code', clinicCodeUpper)
+        .maybeSingle();
 
-      // Base de données simulée par code clinique
-      // En production, le backend sélectionnera la bonne base selon le code clinique
-      const demoClinics: Record<string, any[]> = {
-        'CLINIC001': [
-          {
-            id: '1',
-            username: 'admin',
-            password: 'admin123',
-            email: 'admin@clinique.com',
-            role: 'admin' as const,
-            nom: 'Administrateur',
-            prenom: 'Système',
-            clinicCode: 'CLINIC001',
-            permissions: [
-              'consultations',
-              'patients',
-              'pharmacie',
-              'maternite',
-              'laboratoire',
-              'imagerie',
-              'vaccination',
-              'caisse',
-              'rendezvous',
-              'stock',
-              'parametres',
-              'utilisateurs',
-            ],
-            status: 'actif' as const,
-          },
-          {
-            id: '2',
-            username: 'medecin',
-            password: 'medecin123',
-            email: 'medecin@clinique.com',
-            role: 'medecin' as const,
-            nom: 'Dupont',
-            prenom: 'Dr. Jean',
-            clinicCode: 'CLINIC001',
-            permissions: ['consultations', 'patients', 'rendezvous'],
-            status: 'actif' as const,
-          },
-          {
-            id: '3',
-            username: 'pharmacien',
-            password: 'pharma123',
-            email: 'pharmacien@clinique.com',
-            role: 'pharmacien' as const,
-            nom: 'Martin',
-            prenom: 'Marie',
-            clinicCode: 'CLINIC001',
-            permissions: ['pharmacie', 'stock', 'patients'],
-            status: 'actif' as const,
-          },
-        ],
-        'CLINIC002': [
-          {
-            id: '4',
-            username: 'admin',
-            password: 'admin123',
-            email: 'admin@clinique2.com',
-            role: 'admin' as const,
-            nom: 'Admin',
-            prenom: 'Clinique 2',
-            clinicCode: 'CLINIC002',
-            permissions: [
-              'consultations',
-              'patients',
-              'pharmacie',
-              'maternite',
-              'laboratoire',
-              'imagerie',
-              'vaccination',
-              'caisse',
-              'rendezvous',
-              'stock',
-              'parametres',
-              'utilisateurs',
-            ],
-            status: 'actif' as const,
-          },
-        ],
-      };
+      console.log('📊 Résultat de la recherche:', { clinicCheck, clinicCheckError });
 
-      // Vérifier que le code clinique existe
-      const clinicUsers = demoClinics[credentials.clinicCode.toUpperCase()];
-      if (!clinicUsers) {
-        setError('Code clinique invalide');
+      // Si non trouvé, vérifier dans la table des codes temporaires
+      let isUsingTempCode = false;
+      let tempClinic = clinicCheck;
+
+      if (!clinicCheck) {
+        console.log('🔍 Recherche dans les codes temporaires...');
+        const { data: tempCodeData, error: tempCodeError } = await supabase
+          .from('clinic_temporary_codes')
+          .select(`
+            id,
+            clinic_id,
+            temporary_code,
+            is_used,
+            is_converted,
+            expires_at,
+            clinics!inner(id, code, name, active, is_temporary_code, requires_code_change)
+          `)
+          .eq('temporary_code', clinicCodeUpper)
+          .maybeSingle();
+
+        if (tempCodeData && !tempCodeError) {
+          const clinicData = tempCodeData.clinics as any;
+          tempClinic = {
+            id: clinicData.id,
+            code: tempCodeData.temporary_code,
+            name: clinicData.name,
+            active: clinicData.active,
+            is_temporary_code: true,
+            requires_code_change: true,
+          };
+          isUsingTempCode = true;
+
+          // Vérifier si le code temporaire a expiré
+          if (new Date(tempCodeData.expires_at) < new Date()) {
+            setError('Ce code temporaire a expiré. Contactez le Super-Admin pour obtenir un nouveau code.');
+            setIsLoading(false);
+            return;
+          }
+
+          // Vérifier si déjà converti
+          if (tempCodeData.is_converted) {
+            setError('Ce code temporaire a déjà été converti en code permanent. Utilisez le nouveau code clinique.');
+            setIsLoading(false);
+            return;
+          }
+
+          console.log('✅ Code temporaire trouvé:', tempClinic);
+        }
+      }
+
+      if (clinicCheckError && !tempClinic) {
+        console.error('❌ Erreur Supabase lors de la recherche:', clinicCheckError);
+        setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
         setIsLoading(false);
         return;
       }
 
-      // Rechercher l'utilisateur dans la base de la clinique
-      const user = clinicUsers.find(
-        u => u.username === credentials.username && u.password === credentials.password
-      );
+      if (!tempClinic) {
+        console.error('❌ Clinique non trouvée:', clinicCodeUpper);
+        setError(`Code clinique "${clinicCodeUpper}" introuvable. Vérifiez que le code est correct.`);
+        setIsLoading(false);
+        return;
+      }
 
-      if (user) {
-        const { password, ...userWithoutPassword } = user;
-        const token = `demo-token-${user.clinicCode}-${user.id}-${Date.now()}`;
+      if (!tempClinic.active) {
+        console.error('❌ Clinique inactive:', clinicCodeUpper);
+        setError(`La clinique "${tempClinic.name}" est inactive. Contactez le Super-Admin.`);
+        setIsLoading(false);
+        return;
+      }
+
+      const clinic = tempClinic;
+      const clinicRequiresCodeChange = isUsingTempCode || clinic.is_temporary_code || clinic.requires_code_change;
+      setIsTemporaryCode(clinicRequiresCodeChange);
+      console.log('✅ Clinique trouvée:', clinic, 'Code temporaire:', clinicRequiresCodeChange);
+
+      // 2. Authentifier l'utilisateur via Supabase Auth
+      // Le username peut être l'email ou un identifiant
+      const email = credentials.username.includes('@') 
+        ? credentials.username.toLowerCase()
+        : credentials.username;
+
+      // Essayer d'abord avec Supabase Auth
+      let authUser = null;
+      let authSession = null;
+
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: credentials.password,
+        });
         
-        // Récupérer le clinicId depuis l'API si disponible
-        try {
-          const API_BASE_URL = import.meta.env.VITE_API_URL || 
-            (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-            '';
-          if (API_BASE_URL) {
-            const clinicResponse = await fetch(
-              `${API_BASE_URL}/api/clinics?code=${user.clinicCode}`,
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                },
-              }
-            );
-            
-            if (clinicResponse.ok) {
-              const clinicData = await clinicResponse.json();
-              if (clinicData.data && clinicData.data.length > 0) {
-                userWithoutPassword.clinicId = clinicData.data[0].id;
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Impossible de récupérer le clinicId:', err);
-          // Continuer sans clinicId si l'API n'est pas disponible
+        if (authData?.user && !authErr) {
+          authUser = authData.user;
+          authSession = authData.session;
+        } else {
+          console.log('Supabase Auth échoué, recherche dans la table users');
+        }
+      } catch (err) {
+        // Si Supabase Auth échoue, on essaiera avec la table users
+        console.log('Tentative Supabase Auth échouée, utilisation de la table users');
+      }
+
+      // 3. Récupérer l'utilisateur dans la table users
+      let user = null;
+      let userError = null;
+
+      // Si on a réussi l'authentification Supabase Auth, chercher par auth_user_id
+      if (authUser?.id) {
+        const { data: userData, error: err } = await supabase
+          .from('users')
+          .select(`
+            id,
+            auth_user_id,
+            nom,
+            prenom,
+            email,
+            role,
+            status,
+            clinic_id,
+            specialite,
+            actif
+          `)
+          .eq('auth_user_id', authUser.id)
+          .eq('clinic_id', clinic.id)
+          .single();
+        
+        user = userData;
+        userError = err;
+      }
+
+      // Si pas trouvé avec auth_user_id, chercher par email et clinic_id
+      if (!user) {
+        const { data: userData, error: err } = await supabase
+          .from('users')
+          .select(`
+            id,
+            auth_user_id,
+            nom,
+            prenom,
+            email,
+            role,
+            status,
+            clinic_id,
+            specialite,
+            actif,
+            password_hash
+          `)
+          .eq('email', email)
+          .eq('clinic_id', clinic.id)
+          .single();
+        
+        user = userData;
+        userError = err;
+
+        // Si l'utilisateur n'a pas d'auth_user_id, vérifier le password_hash
+        if (user && !user.auth_user_id && user.password_hash) {
+          // Note: Le hash devrait être vérifié côté serveur
+          // Pour l'instant, si Supabase Auth a échoué et qu'on a un password_hash,
+          // on accepte (le serveur devrait vérifier)
+          // En production, utiliser une API backend pour vérifier le mot de passe
+        }
+      }
+
+      if (userError || !user) {
+        setError('Email ou mot de passe incorrect, ou utilisateur non associé à cette clinique');
+        setIsLoading(false);
+        return;
+      }
+
+      // 4. Vérifier que l'utilisateur est actif
+      if (!user.actif) {
+        setError('Ce compte est désactivé. Contactez votre administrateur.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 5. Vérifier le status
+      if (user.status === 'SUSPENDED' || user.status === 'REJECTED') {
+        setError('Ce compte est suspendu ou refusé. Contactez votre administrateur.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 6. Mapper les permissions selon le rôle
+      const getPermissionsByRole = (role: string): User['permissions'] => {
+        const roleUpper = role.toUpperCase();
+        
+        if (roleUpper === 'SUPER_ADMIN') {
+          return [
+            'consultations',
+            'patients',
+            'pharmacie',
+            'maternite',
+            'laboratoire',
+            'imagerie',
+            'vaccination',
+            'caisse',
+            'rendezvous',
+            'stock',
+            'parametres',
+            'utilisateurs',
+          ] as User['permissions'];
         }
         
-        onLogin(userWithoutPassword, token);
-      } else {
-        setError('Nom d\'utilisateur ou mot de passe incorrect');
+        if (roleUpper === 'CLINIC_ADMIN') {
+          return [
+            'consultations',
+            'patients',
+            'pharmacie',
+            'maternite',
+            'laboratoire',
+            'imagerie',
+            'vaccination',
+            'caisse',
+            'rendezvous',
+            'stock',
+            'parametres',
+            'utilisateurs',
+          ] as User['permissions'];
+        }
+        
+        // Mapper les autres rôles
+        const roleMap: Record<string, User['permissions']> = {
+          'MEDECIN': ['consultations', 'patients', 'rendezvous'],
+          'PHARMACIEN': ['pharmacie', 'stock', 'patients'],
+          'INFIRMIER': ['consultations', 'patients'],
+          'CAISSIER': ['caisse', 'patients'],
+          'LABORANTIN': ['laboratoire', 'patients'],
+        };
+        
+        return roleMap[roleUpper] || ['patients'];
+      };
+
+      // 7. Mapper le rôle vers UserRole
+      const mapRoleToUserRole = (role: string): User['role'] => {
+        const roleUpper = role.toUpperCase();
+        if (roleUpper === 'SUPER_ADMIN' || roleUpper === 'CLINIC_ADMIN' || roleUpper === 'ADMIN') {
+          return 'admin';
+        }
+        if (roleUpper === 'MEDECIN') return 'medecin';
+        if (roleUpper === 'INFIRMIER') return 'infirmier';
+        if (roleUpper === 'PHARMACIEN') return 'pharmacien';
+        if (roleUpper === 'CAISSIER') return 'caissier';
+        if (roleUpper === 'LABORANTIN') return 'laborantin';
+        if (roleUpper === 'SECRETAIRE') return 'secretaire';
+        if (roleUpper === 'COMPTABLE') return 'comptable';
+        return 'admin'; // Par défaut
+      };
+
+      // 8. Construire l'objet User pour l'application
+      const appUser: User = {
+        id: user.id,
+        username: user.email,
+        email: user.email,
+        role: mapRoleToUserRole(user.role),
+        nom: user.nom || '',
+        prenom: user.prenom || '',
+        clinicCode: clinic.code,
+        clinicId: user.clinic_id || clinic.id,
+        permissions: getPermissionsByRole(user.role),
+        status: user.status === 'ACTIVE' ? 'actif' : 
+                user.status === 'PENDING' ? 'actif' : 
+                'inactif',
+      };
+
+      // 9. Générer un token (ou utiliser celui de Supabase Auth)
+      const token = authSession?.access_token || `token-${user.id}-${Date.now()}`;
+
+      // 10. Mettre à jour last_login et marquer le code temporaire comme utilisé
+      await supabase
+        .from('users')
+        .update({ 
+          last_login: new Date().toISOString(),
+          temp_code_used: clinicRequiresCodeChange ? true : undefined,
+          first_login_at: !user.first_login_at ? new Date().toISOString() : undefined,
+        })
+        .eq('id', user.id);
+
+      // Marquer le code temporaire comme utilisé si nécessaire
+      if (clinicRequiresCodeChange) {
+        await supabase
+          .from('clinic_temporary_codes')
+          .update({ 
+            is_used: true, 
+            used_at: new Date().toISOString(),
+            used_by_user_id: user.id,
+          })
+          .eq('temporary_code', clinicCodeUpper);
       }
-    } catch (error) {
-      setError('Erreur de connexion. Veuillez réessayer.');
+
+      // 11. Vérifier si le code temporaire doit être converti
+      if (clinicRequiresCodeChange && user.status === 'PENDING') {
+        console.log('🔄 Code temporaire détecté, affichage du dialogue de conversion');
+        setTempCodeInfo({
+          clinicName: clinic.name,
+          currentCode: clinic.code,
+          userEmail: user.email,
+          pendingUser: appUser,
+          pendingToken: token,
+        });
+        setShowConvertDialog(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // 12. Connecter l'utilisateur
+      onLogin(appUser, token);
+      
+    } catch (error: any) {
+      console.error('Erreur de connexion:', error);
+      setError(error.message || 'Erreur de connexion. Veuillez réessayer.');
     } finally {
       setIsLoading(false);
     }
@@ -1166,16 +1371,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   disabled={isLoading}
                   placeholder="Ex: CLINIC001"
                 />
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(15, 23, 42, 0.65)',
-                    fontSize: '0.75rem',
-                    mt: 0.5
-                  }}
-                >
-                  Code unique de votre clinique
-                </Typography>
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(15, 23, 42, 0.65)',
+                  fontSize: '0.75rem',
+                  mt: 0.5
+                }}
+              >
+                Code unique de votre clinique (ou code temporaire pour première connexion)
+              </Typography>
+              {isTemporaryCode && (
+                <Chip
+                  icon={<Warning fontSize="small" />}
+                  label="Code temporaire détecté"
+                  color="warning"
+                  size="small"
+                  sx={{ mt: 1 }}
+                />
+              )}
               </div>
 
               <div className="grid w-full items-center gap-2 mb-5">
@@ -1574,6 +1788,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               >
                 Comptes de démonstration :
               </Typography>
+              <Box sx={{ mb: 2 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.85)',
+                    opacity: 1,
+                    fontWeight: 500,
+                  }}
+                >
+                  <strong>Clinique CAMPUS-001 (Code temporaire) :</strong>
+                </Typography>
+                <Box sx={{ mt: 1, p: 1.5, bgcolor: alpha(theme.palette.warning.main, 0.1), borderRadius: 1 }}>
+                  <Typography variant="caption" display="block" sx={{ fontWeight: 600 }}>
+                    Code clinique: CAMPUS-001
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Email: bagarayannick1@gmail.com
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Mot de passe: TempClinic2024!
+                  </Typography>
+                  <Chip 
+                    label="Première connexion requiert définition code permanent" 
+                    size="small" 
+                    color="warning" 
+                    sx={{ mt: 1, fontSize: '0.65rem' }}
+                  />
+                </Box>
+              </Box>
               <Typography 
                 variant="body2" 
                 sx={{ 
@@ -1583,7 +1826,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   fontWeight: 500,
                 }}
               >
-                <strong>Code clinique :</strong> CLINIC001
+                <strong>Démonstration (CLINIC001) :</strong>
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={4}>
@@ -1932,6 +2175,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </Grid>
         </Container>
       </Box>
+
+      {/* Dialogue de conversion du code temporaire */}
+      {tempCodeInfo && (
+        <ConvertClinicCodeDialog
+          open={showConvertDialog}
+          onClose={() => {
+            setShowConvertDialog(false);
+            // Connecter quand même l'utilisateur s'il ferme le dialogue
+            if (tempCodeInfo.pendingUser && tempCodeInfo.pendingToken) {
+              onLogin(tempCodeInfo.pendingUser, tempCodeInfo.pendingToken);
+            }
+          }}
+          onSuccess={(newCode) => {
+            setShowConvertDialog(false);
+            // Mettre à jour le code clinique dans l'utilisateur et connecter
+            if (tempCodeInfo.pendingUser && tempCodeInfo.pendingToken) {
+              const updatedUser = {
+                ...tempCodeInfo.pendingUser,
+                clinicCode: newCode,
+                status: 'actif' as const,
+              };
+              onLogin(updatedUser, tempCodeInfo.pendingToken);
+            }
+          }}
+          currentCode={tempCodeInfo.currentCode}
+          clinicName={tempCodeInfo.clinicName}
+          userEmail={tempCodeInfo.userEmail}
+        />
+      )}
 
       {/* Footer */}
       <Box

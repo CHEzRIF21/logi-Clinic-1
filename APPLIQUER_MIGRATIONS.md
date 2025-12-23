@@ -4,6 +4,23 @@
 
 L'erreur "new row violates row-level security policy" signifie que les politiques RLS bloquent l'insertion. Suivez ces étapes pour corriger.
 
+## ✅ Fix des erreurs "Database Linter" (RLS + View SECURITY DEFINER)
+
+Si Supabase affiche des erreurs du type :
+- `security_definer_view` sur `public.v_lab_prescriptions_tarification`
+- `rls_disabled_in_public` sur plusieurs tables
+
+Appliquez d'abord la migration officielle Supabase (dossier standard) :
+
+1. Ouvrez le fichier `supabase/migrations/20251223120000_fix_rls_and_view_security.sql`
+2. Copiez tout le contenu
+3. Collez dans Supabase Dashboard → **SQL Editor**
+4. Exécutez (**Run**)
+
+> Note: cette migration active RLS et ajoute des policies permissives pour `anon` et `authenticated`,
+> car les Edge Functions utilisent actuellement `SUPABASE_ANON_KEY`. En production, remplacez ces policies
+> par des policies strictes et évitez d'écrire en base via `anon`.
+
 ## 📋 Étapes à suivre
 
 ### 1. Ouvrir Supabase Dashboard
