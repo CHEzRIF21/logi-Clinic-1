@@ -85,3 +85,5 @@ Invoke-WebRequest -Uri "https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/ap
 
 Votre backend est prêt ! Il ne reste plus qu'à configurer les secrets et Vercel. 🚀
 
+
+

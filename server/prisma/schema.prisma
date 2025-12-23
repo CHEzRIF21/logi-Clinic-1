@@ -11,19 +11,37 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
-  password  String
-  role      String // ADMIN, CAISSIER, CAISSE_MANAGER, SOIGNANT, PHARMACIEN, LABORANTIN
-  lastLogin DateTime?
-  clinic    Clinic?   @relation(fields: [clinicId], references: [id])
-  clinicId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  authUserId  String?   @unique // Lien avec Supabase Auth (auth.users.id)
+  name        String
+  nom         String?   // Nom de famille
+  prenom      String?   // Prénom
+  email       String    @unique
+  password    String?   // Hash du mot de passe (optionnel si auth via Supabase)
+  role        String    @default("STAFF") // SUPER_ADMIN, CLINIC_ADMIN, STAFF, ADMIN, CAISSIER, etc.
+  status      String    @default("PENDING") // PENDING, ACTIVE, SUSPENDED, REJECTED
+  specialite  String?   // Spécialité médicale
+  telephone   String?
+  adresse     String?
+  lastLogin   DateTime?
+  clinic      Clinic?   @relation(fields: [clinicId], references: [id])
+  clinicId    String?
+  createdBy   String?   // ID de l'utilisateur qui a créé ce compte
+  creator     User?     @relation("UserCreator", fields: [createdBy], references: [id])
+  createdUsers User[]   @relation("UserCreator") // Utilisateurs créés par cet utilisateur
+  actif       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  auditLogs      AuditLog[]
-  pricingHistory ClinicPricingHistory[]
+  auditLogs           AuditLog[]
+  pricingHistory      ClinicPricingHistory[]
+  reviewedRequests    RegistrationRequest[] @relation("Reviewer")
+
+  @@index([authUserId])
+  @@index([role])
+  @@index([status])
+  @@index([clinicId])
+  @@index([createdBy])
 }
 
 model Patient {
@@ -397,6 +415,7 @@ model License {
   revoked        Boolean   @default(false) // Permet de révoquer une licence sans la supprimer
   revokedAt      DateTime? // Date de révocation
   revokedReason  String?   // Raison de la révocation
+  clinic         Clinic?   @relation(fields: [clinicId], references: [id])
   clinicId       String?   // Lien vers la clinique associée
   metadata       Json? // Métadonnées supplémentaires
   createdAt      DateTime  @default(now())
@@ -430,24 +449,58 @@ model DeploymentAttempt {
   @@index([createdAt])
 }
 
+// Modèle pour les demandes d'inscription
+
+model RegistrationRequest {
+  id               String    @id @default(uuid())
+  nom              String
+  prenom           String
+  email            String
+  passwordHash     String?
+  telephone        String?
+  adresse          String?
+  roleSouhaite     String    @default("STAFF") // Rôle demandé
+  specialite       String?
+  securityQuestions Json?    // Questions de sécurité
+  clinicCode       String?   // Code de la clinique où s'inscrire
+  clinic           Clinic?   @relation(fields: [clinicId], references: [id])
+  clinicId         String?
+  statut           String    @default("pending") // pending, approved, rejected
+  reviewedBy       String?   // ID de l'admin qui a traité la demande
+  reviewer         User?     @relation("Reviewer", fields: [reviewedBy], references: [id])
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([email, clinicCode])
+  @@index([clinicId])
+  @@index([statut])
+  @@index([email])
+  @@index([reviewedBy])
+}
+
 // Modèles pour le système de tarification multi-clinique
 
 model Clinic {
-  id        String   @id @default(uuid())
-  code      String   @unique
-  name      String
-  address   String?
-  phone     String?
-  email     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  code                 String   @unique
+  name                 String
+  address              String?
+  phone                String?
+  email                String?
+  active               Boolean  @default(true)
+  createdBySuperAdmin  String?  // UUID du SUPER_ADMIN qui a créé cette clinique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  users   User[]
-  pricing ClinicPricing[]
+  users                User[]
+  pricing              ClinicPricing[]
+  registrationRequests RegistrationRequest[]
+  licenses             License[]
 
   @@index([code])
   @@index([active])
+  @@index([createdBySuperAdmin])
 }
 
 model ClinicPricing {

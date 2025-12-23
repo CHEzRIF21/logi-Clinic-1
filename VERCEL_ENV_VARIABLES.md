@@ -101,3 +101,5 @@ Si vous devez régénérer vos clés :
 - Vérifiez que les Edge Functions Supabase sont bien déployées
 - Testez l'API directement : `curl https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api/health`
 
+
+

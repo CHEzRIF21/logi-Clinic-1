@@ -866,3 +866,5 @@ Les modules Pharmacie et Stock des Médicaments sont fonctionnels mais présente
 *Auteur: Analyse technique approfondie*
 *Contexte: Système de gestion pharmaceutique - Afrique de l'Ouest (XOF)*
 
+
+
