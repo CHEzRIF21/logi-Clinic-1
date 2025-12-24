@@ -1,0 +1,99 @@
+===========================================
+🚀 COMMANDES RAPIDES - Bootstrap Clinic Admin
+===========================================
+
+📋 ÉTAPE 1 : Déployer la fonction
+----------------------------------
+# Obtenir le token Supabase (si pas déjà fait)
+# Allez sur: https://supabase.com/dashboard/account/tokens
+
+$env:SUPABASE_ACCESS_TOKEN='sbp_5da8e97668cd218ba3095c6f1321603303f5aee3VOTRE_TOKEN_SUPABASE'
+cd "c:\Users\Mustafa\Desktop\logi Clinic 1"
+npx supabase link --project-ref bnfgemmlokvetmohiqch
+npx supabase functions deploy bootstrap-clinic-admin-auth
+
+===========================================
+📋 ÉTAPE 2 : Obtenir le token SUPER_ADMIN
+===========================================
+Option A - Via l'application frontend:
+1. Connectez-vous avec babocher21@gmail.com
+2. Console navigateur (F12) → Application → Local Storage
+3. Ou exécutez dans la console:
+   const { data: { session } } = await supabase.auth.getSession();
+   console.log(session?.access_token);
+
+Option B - Via PowerShell (si vous avez le mot de passe):
+$body = @{
+    email = "babocher21@gmail.com"
+    password = "VOTRE_MOT_DE_PASSE"
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Uri "https://bnfgemmlokvetmohiqch.supabase.co/auth/v1/token?grant_type=password" `
+    -Method Post `
+    -Headers @{
+        "Content-Type" = "application/json"
+        "apikey" = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8"
+    } `
+    -Body $body
+
+$superAdminToken = $response.access_token
+Write-Host "Token: $superAdminToken"
+
+===========================================
+📋 ÉTAPE 3 : Appeler la fonction
+===========================================
+
+Option A - Via le script PowerShell (RECOMMANDÉ):
+.\bootstrap-clinic-admin.ps1 -SuperAdminToken "VOTRE_TOKEN_SUPER_ADMIN"
+
+Option B - Via PowerShell manuel:
+$superAdminToken = "VOTRE_TOKEN_SUPER_ADMIN"
+$body = @{
+    clinicCode = "CAMPUS-001"
+    adminEmail = "bagarayannick1@gmail.com"
+    adminPassword = "TempClinic2024!"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/bootstrap-clinic-admin-auth" `
+    -Method Post `
+    -Headers @{
+        "Authorization" = "Bearer $superAdminToken"
+        "Content-Type" = "application/json"
+        "apikey" = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8"
+    } `
+    -Body $body
+
+Option C - Via curl:
+curl -X POST "https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/bootstrap-clinic-admin-auth" \
+  -H "Authorization: Bearer VOTRE_TOKEN_SUPER_ADMIN" \
+  -H "Content-Type: application/json" \
+  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8" \
+  -d '{
+    "clinicCode": "CAMPUS-001",
+    "adminEmail": "bagarayannick1@gmail.com",
+    "adminPassword": "TempClinic2024!"
+  }'
+
+===========================================
+✅ VÉRIFICATION
+===========================================
+# Vérifier dans Supabase Dashboard → SQL Editor:
+SELECT 
+  u.email,
+  u.role,
+  u.status,
+  u.auth_user_id,
+  c.code as clinic_code
+FROM users u
+LEFT JOIN clinics c ON u.clinic_id = c.id
+WHERE u.email = 'bagarayannick1@gmail.com';
+
+# Résultat attendu:
+# - auth_user_id n'est plus NULL
+# - clinic_code = 'CAMPUS-001'
+
+===========================================
+📖 GUIDE COMPLET
+===========================================
+Consultez GUIDE_BOOTSTRAP_CLINIC_ADMIN.md pour plus de détails
+

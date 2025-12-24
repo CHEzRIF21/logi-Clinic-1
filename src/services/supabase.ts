@@ -37,6 +37,33 @@ export const supabase: SupabaseClient = hasValidConfig
       },
     });
 
+// #region agent log (debug-session)
+try {
+  const host = (() => {
+    try {
+      return new URL(supabaseUrl).host;
+    } catch {
+      return 'invalid-url';
+    }
+  })();
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: 'debug-session',
+      runId: 'campus001-run1',
+      hypothesisId: 'H4',
+      location: 'src/services/supabase.ts:client',
+      message: 'supabase_client_config',
+      data: { supabaseHost: host, hasValidConfig, hasAnonKey: !!supabaseAnonKey },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+} catch {
+  // ignore
+}
+// #endregion agent log (debug-session)
+
 // Avertissement si la configuration n'est pas valide
 if (!hasValidConfig) {
   console.warn('⚠️ Configuration Supabase non valide ou manquante!');
