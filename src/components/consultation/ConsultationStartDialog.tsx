@@ -108,14 +108,21 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
   const specialites = Array.from(new Set(templates.map((t) => t.specialite)));
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={handleClose} 
+      maxWidth="md" 
+      fullWidth
+      disableEnforceFocus
+      disableAutoFocus
+    >
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box display="flex" alignItems="center" gap={2}>
             <Description color="primary" />
             <Typography variant="h6">Démarrer une Nouvelle Consultation</Typography>
           </Box>
-          <IconButton onClick={handleClose} size="small">
+          <IconButton onClick={handleClose} size="small" aria-label="Fermer">
             <Close />
           </IconButton>
         </Box>

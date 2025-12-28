@@ -43,17 +43,76 @@ export async function getMyClinicId(): Promise<string | null> {
   }
 
   try {
-    // Appeler la fonction SQL
-    const { data, error } = await supabase.rpc('get_my_clinic_id');
-    
-    if (error) {
-      console.error('Erreur get_my_clinic_id:', error);
-      return null;
+    // Méthode 1: Essayer la fonction RPC
+    try {
+      const { data, error } = await supabase.rpc('get_my_clinic_id');
+      
+      if (!error && data) {
+        cachedClinicId = data;
+        cacheTimestamp = Date.now();
+        return data;
+      }
+    } catch (rpcError) {
+      console.warn('RPC get_my_clinic_id échoué, utilisation du fallback:', rpcError);
     }
 
-    cachedClinicId = data;
-    cacheTimestamp = Date.now();
-    return data;
+    // Méthode 2: Fallback - Récupérer depuis getCurrentUserInfo
+    const userInfo = await getCurrentUserInfo();
+    if (userInfo?.clinicId) {
+      cachedClinicId = userInfo.clinicId;
+      cacheTimestamp = Date.now();
+      return userInfo.clinicId;
+    }
+
+    // Méthode 3: Fallback - Récupérer depuis localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        
+        // Vérifier si clinicId est directement dans l'objet user
+        if (user.clinicId) {
+          cachedClinicId = user.clinicId;
+          cacheTimestamp = Date.now();
+          return user.clinicId;
+        }
+        
+        // Si on a auth_user_id, chercher par auth_user_id
+        if (user.auth_user_id) {
+          const { data: userFromAuth, error: authError } = await supabase
+            .from('users')
+            .select('id, clinic_id')
+            .eq('auth_user_id', user.auth_user_id)
+            .single();
+          
+          if (!authError && userFromAuth?.clinic_id) {
+            cachedClinicId = userFromAuth.clinic_id;
+            cacheTimestamp = Date.now();
+            return userFromAuth.clinic_id;
+          }
+        }
+        
+        // Chercher par ID utilisateur
+        if (user.id) {
+          const { data: userFromId, error: idError } = await supabase
+            .from('users')
+            .select('clinic_id')
+            .eq('id', user.id)
+            .single();
+          
+          if (!idError && userFromId?.clinic_id) {
+            cachedClinicId = userFromId.clinic_id;
+            cacheTimestamp = Date.now();
+            return userFromId.clinic_id;
+          }
+        }
+      } catch (localError) {
+        console.error('Erreur récupération depuis localStorage:', localError);
+      }
+    }
+
+    console.error('Impossible de récupérer le clinic_id');
+    return null;
   } catch (err) {
     console.error('Erreur récupération clinic_id:', err);
     return null;
@@ -177,7 +236,8 @@ export async function queryWithClinicFilter<T>(
     query = additionalFilters(query);
   }
 
-  return await query;
+  const result = await query;
+  return { data: result.data as T[] | null, error: result.error };
 }
 
 /**

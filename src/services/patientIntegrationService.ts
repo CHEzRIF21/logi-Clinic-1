@@ -231,11 +231,12 @@ export class PatientIntegrationService {
    */
   static async getVaccinations(patientId: string) {
     try {
+      // Utiliser le nom correct de la table : patient_vaccinations
       const { data, error } = await supabase
-        .from('vaccinations')
+        .from('patient_vaccinations')
         .select('*')
         .eq('patient_id', patientId)
-        .order('date_vaccination', { ascending: false });
+        .order('date_administration', { ascending: false });
 
       if (error && error.code !== 'PGRST116') {
         throw error;
@@ -346,6 +347,14 @@ export class PatientIntegrationService {
         throw new Error('Patient non trouvé');
       }
 
+      // Récupérer d'abord les IDs des dossiers obstétricaux
+      const { data: dossiersData } = await supabase
+        .from('dossier_obstetrical')
+        .select('id')
+        .eq('patient_id', patientId);
+      
+      const dossierIds = dossiersData?.map(d => d.id) || [];
+
       const [
         dossiersResult,
         cpnResult,
@@ -354,14 +363,17 @@ export class PatientIntegrationService {
         vaccinationsResult,
       ] = await Promise.all([
         supabase.from('dossier_obstetrical').select('id', { count: 'exact', head: true }).eq('patient_id', patientId),
-        supabase.from('consultation_prenatale').select('id', { count: 'exact', head: true }).eq('dossier_obstetrical_id', 
-          supabase.from('dossier_obstetrical').select('id').eq('patient_id', patientId)
-        ),
-        supabase.from('accouchement').select('id', { count: 'exact', head: true }).eq('dossier_obstetrical_id',
-          supabase.from('dossier_obstetrical').select('id').eq('patient_id', patientId)
-        ),
+        // Utiliser .in() avec les IDs récupérés au lieu de passer une requête
+        dossierIds.length > 0
+          ? supabase.from('consultation_prenatale').select('id', { count: 'exact', head: true }).in('dossier_obstetrical_id', dossierIds)
+          : { count: 0, error: null },
+        // Utiliser .in() avec les IDs récupérés au lieu de passer une requête
+        dossierIds.length > 0
+          ? supabase.from('accouchement').select('id', { count: 'exact', head: true }).in('dossier_obstetrical_id', dossierIds)
+          : { count: 0, error: null },
         supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('patient_id', patientId),
-        supabase.from('vaccinations').select('id', { count: 'exact', head: true }).eq('patient_id', patientId),
+        // Utiliser le nom correct de la table : patient_vaccinations
+        supabase.from('patient_vaccinations').select('id', { count: 'exact', head: true }).eq('patient_id', patientId),
       ]);
 
       return {

@@ -1,17 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../config/supabase';
+import { logger } from '../utils/logger';
 import crypto from 'crypto';
 import { emailService } from '../services/emailService';
 
 const router = Router();
-
-// Configuration Supabase
-const supabaseUrl = process.env.SUPABASE_URL || 'https://bnfgemmlokvetmohiqch.supabase.co';
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
-
-const supabase = supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
 
 // Hash password simple (à remplacer par bcrypt en production)
 function hashPassword(password: string): string {
@@ -392,15 +385,16 @@ router.post('/registration-requests/:id/reject', async (req: Request, res: Respo
   }
 });
 
-// POST /api/auth/login - Connexion
+// POST /api/auth/login - Connexion avec code clinique
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { clinicCode, email, password } = req.body;
 
-    if (!email || !password) {
+    // Validation des champs requis
+    if (!clinicCode || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email et mot de passe requis',
+        message: 'Code clinique, email et mot de passe requis',
       });
     }
 
@@ -411,34 +405,53 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    const passwordHash = hashPassword(password);
+    // Normaliser le code clinique
+    const clinicCodeUpper = clinicCode.toUpperCase().trim();
+    const emailLower = email.toLowerCase().trim();
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('email', email.toLowerCase())
-      .eq('password_hash', passwordHash)
-      .single();
+    logger.loginAttempt({ clinicCode: clinicCodeUpper, email: emailLower });
 
-    if (error || !user) {
-      return res.status(401).json({
+    // Utiliser la fonction RPC validate_clinic_login qui vérifie clinic_code + email + password
+    const { data: loginResult, error: rpcError } = await supabase.rpc('validate_clinic_login', {
+      p_clinic_code: clinicCodeUpper,
+      p_email: emailLower,
+      p_password: password,
+    });
+
+    if (rpcError) {
+      logger.loginError(rpcError.message, { clinicCode: clinicCodeUpper, email: emailLower });
+      return res.status(500).json({
         success: false,
-        message: 'Email ou mot de passe incorrect',
+        message: 'Erreur lors de la vérification des identifiants',
+        details: rpcError.message,
       });
     }
 
-    if (!user.actif) {
+    // Vérifier le résultat de la fonction RPC
+    if (!loginResult || !loginResult.success) {
+      logger.loginError(loginResult?.error || 'Raison inconnue', { clinicCode: clinicCodeUpper, email: emailLower });
       return res.status(401).json({
         success: false,
-        message: 'Ce compte est désactivé',
+        message: loginResult?.error || 'Code clinique, email ou mot de passe incorrect',
       });
     }
 
-    // Mettre à jour le dernier login
-    await supabase
-      .from('users')
-      .update({ last_login: new Date().toISOString() })
-      .eq('id', user.id);
+    const userData = loginResult.user;
+
+    if (!userData) {
+      logger.loginError('Utilisateur non trouvé dans le résultat', { clinicCode: clinicCodeUpper, email: emailLower });
+      return res.status(401).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+      });
+    }
+
+    logger.loginSuccess({
+      userId: userData.id,
+      email: userData.email,
+      role: userData.role,
+      clinicCode: userData.clinic_code || clinicCodeUpper,
+    });
 
     // Générer un token simple (à remplacer par JWT en production)
     const token = crypto.randomBytes(32).toString('hex');
@@ -447,20 +460,24 @@ router.post('/login', async (req: Request, res: Response) => {
       success: true,
       message: 'Connexion réussie',
       user: {
-        id: user.id,
-        nom: user.nom,
-        prenom: user.prenom,
-        email: user.email,
-        role: user.role,
-        specialite: user.specialite,
+        id: userData.id,
+        nom: userData.nom,
+        prenom: userData.prenom,
+        email: userData.email,
+        role: userData.role,
+        clinic_id: userData.clinic_id,
+        clinic_code: userData.clinic_code,
+        status: userData.status,
+        requires_password_change: userData.requires_password_change || false,
       },
       token,
     });
   } catch (error: any) {
-    console.error('Erreur login:', error);
+    console.error('[LOGIN] Erreur:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur interne du serveur',
+      details: error.message,
     });
   }
 });

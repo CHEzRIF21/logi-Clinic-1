@@ -286,7 +286,7 @@ const Consultations: React.FC = () => {
   // Si une consultation est en cours, afficher le workflow
   if (currentConsultation && selectedPatient) {
     return (
-      <Box sx={{ height: '100vh', overflow: 'hidden' }}>
+      <Box sx={{ height: '100vh', overflow: 'auto' }}>
         <ConsultationWorkflow
           consultation={currentConsultation}
           patient={selectedPatient}

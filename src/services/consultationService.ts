@@ -15,10 +15,12 @@ export interface Consultation {
   diagnostics: string[];
   diagnostics_detail: any[];
   prochaine_consultation?: string;
-  opened_at?: string;
+  started_at?: string; // Utilise started_at au lieu de opened_at
   closed_at?: string;
-  created_at: string;
-  updated_at: string;
+  opened_by?: string; // Utilisateur qui a ouvert la consultation
+  created_by?: string; // Utilisateur qui a créé la consultation
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ConsultationConstantes {
@@ -71,8 +73,28 @@ export class ConsultationService {
    * Créer une nouvelle consultation
    */
   static async createConsultation(patientId: string, userId: string): Promise<Consultation> {
-    const clinicId = await getMyClinicId();
-    if (!clinicId) throw new Error('Clinic ID non trouvé');
+    let clinicId = await getMyClinicId();
+    
+    // Fallback: Si getMyClinicId() retourne null, récupérer depuis l'utilisateur
+    if (!clinicId && userId) {
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('clinic_id')
+          .eq('id', userId)
+          .single();
+        
+        if (!userError && userData?.clinic_id) {
+          clinicId = userData.clinic_id;
+        }
+      } catch (err) {
+        console.error('Erreur récupération clinic_id depuis userId:', err);
+      }
+    }
+    
+    if (!clinicId) {
+      throw new Error('Clinic ID non trouvé. Vérifiez que l\'utilisateur est bien lié à une clinique.');
+    }
 
     const { data, error } = await supabase
       .from('consultations')
@@ -80,13 +102,19 @@ export class ConsultationService {
         patient_id: patientId,
         clinic_id: clinicId,
         opened_by: userId,
-        status: 'EN_COURS',
-        opened_at: new Date().toISOString()
+        created_by: userId,
+        type: 'Médecine générale', // Colonne REQUISE (NOT NULL) dans la table
+        status: 'EN_COURS'
+        // categorie_motif sera ajouté plus tard si nécessaire (colonne optionnelle)
+        // opened_at sera défini automatiquement par la valeur par défaut de la table
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Erreur création consultation:', error);
+      throw new Error(`Erreur lors de la création de la consultation: ${error.message}`);
+    }
     return data;
   }
 

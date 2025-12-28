@@ -26,13 +26,27 @@ export const ConsultationApiService = {
    * Récupérer les templates de consultation
    */
   async getTemplates(): Promise<ConsultationTemplate[]> {
-    const { data, error } = await supabase
-      .from('consultation_templates')
-      .select('*')
-      .eq('actif', true);
+    try {
+      const { data, error } = await supabase
+        .from('consultation_templates')
+        .select('*')
+        .eq('actif', true);
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        console.error('Erreur récupération templates:', error);
+        // Retourner un tableau vide si la table n'existe pas encore
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          console.warn('Table consultation_templates n\'existe pas encore, retour d\'un tableau vide');
+          return [];
+        }
+        throw error;
+      }
+      return data || [];
+    } catch (err: any) {
+      console.error('Erreur lors de la récupération des templates:', err);
+      // Retourner un tableau vide en cas d'erreur pour ne pas bloquer l'interface
+      return [];
+    }
   },
 
   /**
