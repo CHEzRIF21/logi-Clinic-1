@@ -51,11 +51,11 @@ try {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       sessionId: 'debug-session',
-      runId: 'campus001-run1',
-      hypothesisId: 'H4',
+      runId: 'run1',
+      hypothesisId: 'B',
       location: 'src/services/supabase.ts:client',
       message: 'supabase_client_config',
-      data: { supabaseHost: host, hasValidConfig, hasAnonKey: !!supabaseAnonKey },
+      data: { supabaseHost: host, hasValidConfig, hasAnonKey: !!supabaseAnonKey, urlLength: supabaseUrl.length, keyLength: supabaseAnonKey.length },
       timestamp: Date.now(),
     }),
   }).catch(() => {});

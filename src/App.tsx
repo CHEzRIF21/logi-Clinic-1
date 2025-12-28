@@ -20,14 +20,14 @@ import Bilan from './pages/Bilan';
 import Caisse from './pages/Caisse';
 import RendezVous from './pages/RendezVous';
 import GestionPatients from './pages/GestionPatients';
-import { ConsultationsComplete } from './pages/ConsultationsComplete';
-import ConsultationModule from './pages/ConsultationModule';
+import Consultations from './pages/Consultations';
 import UtilisateursPermissions from './pages/UtilisateursPermissions';
 import Vaccination from './pages/Vaccination';
 import Laboratoire from './pages/Laboratoire';
 import Imagerie from './pages/Imagerie';
 import AccountRecoveryManagement from './pages/AccountRecoveryManagement';
 import RegistrationRequests from './pages/RegistrationRequests';
+import StaffManagementPage from './pages/StaffManagementPage';
 
 // Types
 import { User } from './types/auth';
@@ -110,17 +110,7 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="consultations">
             <Layout user={user} onLogout={handleLogout}>
-              <ConsultationsComplete user={user} />
-            </Layout>
-          </ProtectedModuleRoute>
-        }
-      />
-      <Route
-        path="/consultation-module"
-        element={
-          <ProtectedModuleRoute user={user} requiredModule="consultations">
-            <Layout user={user} onLogout={handleLogout}>
-              <ConsultationModule />
+              <Consultations />
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -190,6 +180,20 @@ function App() {
             {canManageUsers(user) ? (
               <Layout user={user} onLogout={handleLogout}>
                 <RegistrationRequests user={user} />
+              </Layout>
+            ) : (
+              <Navigate to="/" replace />
+            )}
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/staff-management"
+        element={
+          <ProtectedRoute user={user}>
+            {canManageUsers(user) ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <StaffManagementPage user={user} />
               </Layout>
             ) : (
               <Navigate to="/" replace />

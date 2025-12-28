@@ -177,6 +177,8 @@ export const RecentActivities: React.FC<RecentActivitiesProps> = ({
                     )}
                   </Box>
                 }
+                primaryTypographyProps={{ component: 'div' }}
+                secondaryTypographyProps={{ component: 'div' }}
               />
             </ListItem>
           ))}

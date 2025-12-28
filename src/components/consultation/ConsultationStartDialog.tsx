@@ -79,15 +79,11 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
       return;
     }
 
-    if (!selectedTemplate && !customType.trim()) {
-      alert('Veuillez sélectionner un type de fiche ou saisir un type personnalisé');
-      return;
-    }
-
+    // Permettre de démarrer même sans template ni type personnalisé (utilisera un type par défaut)
     setLoading(true);
     try {
       const templateId = selectedTemplate?.id || '';
-      const type = selectedTemplate?.specialite || customType.trim();
+      const type = selectedTemplate?.specialite || customType.trim() || 'Médecine générale';
       await onStart(templateId, type);
       handleClose();
     } catch (error) {
@@ -213,7 +209,7 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
         <Button
           variant="contained"
           onClick={handleStart}
-          disabled={loading || (!selectedTemplate && !customType.trim())}
+          disabled={loading}
           startIcon={<Add />}
         >
           {loading ? 'Démarrage...' : 'Démarrer la Consultation'}

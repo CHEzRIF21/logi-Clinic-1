@@ -1,13 +1,13 @@
-// Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
-const API_URL = import.meta.env.VITE_API_URL || 
-  (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  '';
+import { supabase } from './supabase';
+import { getMyClinicId } from './clinicService';
 
 export interface Deparasitage {
   id: string;
   patient_id: string;
+  clinic_id: string;
   molecule: string;
   date_administration: string;
+  dose?: string;
   created_by?: string;
   created_at: string;
   updated_at: string;
@@ -17,6 +17,7 @@ export interface DeparasitageFormData {
   patient_id: string;
   molecule: string;
   date_administration: string;
+  dose?: string;
 }
 
 export class DeparasitageService {
@@ -27,54 +28,42 @@ export class DeparasitageService {
     patientId: string,
     limit: number = 50
   ): Promise<Deparasitage[]> {
-    if (!API_URL) {
-      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
-    }
-    const token = localStorage.getItem('token');
-    const url = new URL(`${API_URL}/api/deparasitage/patient/${patientId}`);
-    url.searchParams.append('limit', limit.toString());
+    const { data, error } = await supabase
+      .from('patient_deparasitage')
+      .select('*')
+      .eq('patient_id', patientId)
+      .order('date_administration', { ascending: false })
+      .limit(limit);
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors de la récupération du déparasitage');
+    if (error) {
+      console.error('Erreur lors de la récupération du déparasitage:', error);
+      throw error;
     }
 
-    const result = await response.json();
-    return result.data || [];
+    return data || [];
   }
 
   /**
    * Enregistrer un nouveau déparasitage
    */
   static async recordDeparasitage(data: DeparasitageFormData): Promise<Deparasitage> {
-    if (!API_URL) {
-      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
-    }
-    const token = localStorage.getItem('token');
+    const clinicId = await getMyClinicId();
+    
+    const { data: result, error } = await supabase
+      .from('patient_deparasitage')
+      .insert({
+        ...data,
+        clinic_id: clinicId,
+      })
+      .select()
+      .single();
 
-    const response = await fetch(`${API_URL}/api/deparasitage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors de l\'enregistrement du déparasitage');
+    if (error) {
+      console.error('Erreur lors de l\'enregistrement du déparasitage:', error);
+      throw error;
     }
 
-    const result = await response.json();
-    return result.data;
+    return result;
   }
 
   /**
@@ -84,49 +73,33 @@ export class DeparasitageService {
     id: string,
     data: Partial<DeparasitageFormData>
   ): Promise<Deparasitage> {
-    if (!API_URL) {
-      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
-    }
-    const token = localStorage.getItem('token');
+    const { data: result, error } = await supabase
+      .from('patient_deparasitage')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single();
 
-    const response = await fetch(`${API_URL}/api/deparasitage/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors de la mise à jour du déparasitage');
+    if (error) {
+      console.error('Erreur lors de la mise à jour du déparasitage:', error);
+      throw error;
     }
 
-    const result = await response.json();
-    return result.data;
+    return result;
   }
 
   /**
    * Supprimer un déparasitage
    */
   static async deleteDeparasitage(id: string): Promise<void> {
-    if (!API_URL) {
-      throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
-    }
-    const token = localStorage.getItem('token');
+    const { error } = await supabase
+      .from('patient_deparasitage')
+      .delete()
+      .eq('id', id);
 
-    const response = await fetch(`${API_URL}/api/deparasitage/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors de la suppression du déparasitage');
+    if (error) {
+      console.error('Erreur lors de la suppression du déparasitage:', error);
+      throw error;
     }
   }
 }
-

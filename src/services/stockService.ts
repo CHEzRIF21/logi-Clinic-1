@@ -1054,9 +1054,32 @@ export class StockService {
       const { data, error } = await supabase
         .from('lots')
         .select(`
-          *,
+          id,
+          medicament_id,
+          numero_lot,
+          quantite_initiale,
+          quantite_disponible,
+          date_reception,
+          date_expiration,
+          prix_achat,
+          fournisseur,
+          statut,
+          magasin,
           medicaments (
-            *
+            id,
+            code,
+            nom,
+            dci,
+            forme,
+            dosage,
+            unite,
+            prix_unitaire,
+            prix_unitaire_entree,
+            prix_unitaire_detail,
+            seuil_alerte,
+            seuil_maximum,
+            emplacement,
+            observations
           )
         `)
         .eq('magasin', magasin)
@@ -1209,9 +1232,22 @@ export class StockService {
       const { data, error } = await supabase
         .from('alertes_stock')
         .select(`
-          *,
+          id,
+          medicament_id,
+          type,
+          niveau,
+          message,
+          date_creation,
+          date_resolution,
+          statut,
+          utilisateur_resolution_id,
           medicaments (
-            *
+            id,
+            code,
+            nom,
+            dci,
+            forme,
+            dosage
           )
         `)
         .eq('statut', 'active')

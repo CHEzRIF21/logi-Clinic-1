@@ -32,6 +32,7 @@ router.post('/register-request', async (req: Request, res: Response) => {
       roleSouhaite,
       specialite,
       securityQuestions,
+      clinicCode, // Nouveau: code clinique requis
     } = req.body;
 
     // Validations
@@ -39,6 +40,14 @@ router.post('/register-request', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         message: 'Nom, prénom, email et mot de passe sont requis',
+      });
+    }
+
+    // Validation du code clinique (obligatoire)
+    if (!clinicCode || clinicCode.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'Le code clinique est requis pour l\'inscription',
       });
     }
 
@@ -61,6 +70,48 @@ router.post('/register-request', async (req: Request, res: Response) => {
       return res.status(500).json({
         success: false,
         message: 'Service de base de données non disponible',
+      });
+    }
+
+    // Vérifier que le code clinique existe et est actif
+    const clinicCodeUpper = clinicCode.toUpperCase().trim();
+    let clinicId: string | null = null;
+    let clinicName: string | null = null;
+
+    // D'abord chercher dans la table clinics
+    const { data: clinic, error: clinicError } = await supabase
+      .from('clinics')
+      .select('id, name, active, is_demo')
+      .eq('code', clinicCodeUpper)
+      .eq('active', true)
+      .single();
+
+    if (clinic) {
+      clinicId = clinic.id;
+      clinicName = clinic.name;
+    } else {
+      // Si non trouvé, chercher dans les codes temporaires
+      const { data: tempCode, error: tempCodeError } = await supabase
+        .from('clinic_temporary_codes')
+        .select('clinic_id, clinics(id, name, active)')
+        .eq('temporary_code', clinicCodeUpper)
+        .eq('is_converted', false)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (tempCode && tempCode.clinics) {
+        const clinicData = tempCode.clinics as any;
+        if (clinicData.active) {
+          clinicId = clinicData.id;
+          clinicName = clinicData.name;
+        }
+      }
+    }
+
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        message: `Code clinique "${clinicCodeUpper}" invalide ou inactif. Vérifiez le code auprès de votre administrateur.`,
       });
     }
 
@@ -95,7 +146,7 @@ router.post('/register-request', async (req: Request, res: Response) => {
     // Hash du mot de passe
     const passwordHash = hashPassword(password);
 
-    // Créer la demande d'inscription
+    // Créer la demande d'inscription avec le clinic_id
     const { data, error } = await supabase
       .from('registration_requests')
       .insert({
@@ -109,6 +160,8 @@ router.post('/register-request', async (req: Request, res: Response) => {
         specialite,
         security_questions: securityQuestions,
         statut: 'pending',
+        clinic_id: clinicId,
+        clinic_code: clinicCodeUpper,
       })
       .select()
       .single();
@@ -132,6 +185,8 @@ router.post('/register-request', async (req: Request, res: Response) => {
         roleSouhaite: data.role_souhaite,
         adresse: data.adresse,
         specialite: data.specialite,
+        clinicCode: clinicCodeUpper,
+        clinicName: clinicName,
       });
     } catch (emailError) {
       // Ne pas bloquer la réponse si l'email échoue
@@ -140,11 +195,13 @@ router.post('/register-request', async (req: Request, res: Response) => {
 
     res.status(201).json({
       success: true,
-      message: 'Demande d\'inscription soumise avec succès. Un administrateur va examiner votre demande.',
+      message: `Demande d'inscription soumise pour la clinique "${clinicName}". L'administrateur de cette clinique va examiner votre demande.`,
       data: {
         id: data.id,
         email: data.email,
         statut: data.statut,
+        clinicCode: clinicCodeUpper,
+        clinicName: clinicName,
       },
     });
   } catch (error: any) {
@@ -238,7 +295,7 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
       });
     }
 
-    // Créer l'utilisateur
+    // Créer l'utilisateur avec le clinic_id de la demande
     const { error: userError } = await supabase
       .from('users')
       .insert({
@@ -251,6 +308,8 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
         telephone: request.telephone,
         adresse: request.adresse,
         actif: true,
+        status: 'PENDING', // L'utilisateur devra changer son mot de passe à la première connexion
+        clinic_id: request.clinic_id, // Association à la clinique
       });
 
     if (userError) {

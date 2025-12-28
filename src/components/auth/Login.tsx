@@ -49,11 +49,24 @@ import AccountRecoveryForm from './AccountRecoveryForm';
 import { CreateRecoveryRequestDto } from '../../types/accountRecovery';
 import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
-import ConvertClinicCodeDialog from './ConvertClinicCodeDialog';
+import ChangePasswordDialog from './ChangePasswordDialog';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
 }
+
+/**
+ * Fonction de hachage SHA-256 compatible avec le backend
+ * Utilisée pour vérifier les mots de passe des comptes démo (sans auth_user_id)
+ */
+const hashPassword = async (password: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + 'logi_clinic_salt');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+};
 
 interface Feature {
   icon: React.ReactNode;
@@ -80,17 +93,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login');
   
-  // État pour le dialogue de conversion du code temporaire
-  const [showConvertDialog, setShowConvertDialog] = useState(false);
-  const [tempCodeInfo, setTempCodeInfo] = useState<{
+  // État pour le dialogue de changement de mot de passe (première connexion)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordDialogInfo, setPasswordDialogInfo] = useState<{
     clinicName: string;
-    currentCode: string;
+    clinicCode: string;
+    clinicId: string;
     userEmail: string;
     pendingUser: User | null;
     pendingToken: string | null;
+    authUserId?: string;
+    currentPassword?: string;
   } | null>(null);
-  const [isTemporaryCode, setIsTemporaryCode] = useState(false);
   const [signupForm, setSignupForm] = useState({
+    clinicCode: '', // Nouveau: code clinique obligatoire
     nom: '',
     prenom: '',
     email: '',
@@ -106,27 +122,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       question3: { question: '', answer: '' },
     },
   });
+  const [clinicValidation, setClinicValidation] = useState<{
+    isValid: boolean;
+    clinicName: string | null;
+    isChecking: boolean;
+  }>({ isValid: false, clinicName: null, isChecking: false });
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const theme = useTheme();
-
-  // #region agent log (debug-session)
-  const agentLog = (hypothesisId: string, location: string, message: string, data: Record<string, unknown>) => {
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: 'debug-session',
-        runId: 'campus001-run1',
-        hypothesisId,
-        location,
-        message,
-        data,
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  };
-  // #endregion agent log (debug-session)
 
   const heroRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
@@ -429,40 +432,70 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     try {
       // 1. Vérifier que le code clinique existe dans Supabase
       const clinicCodeUpper = credentials.clinicCode.toUpperCase().trim();
+      
       // #region agent log (debug-session)
-      agentLog('H4', 'Login.tsx:handleSubmit', 'login_start', {
-        clinicCodeUpper,
-        usernameHasAt: credentials.username.includes('@'),
-        passwordProvided: !!credentials.password,
-      });
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:434',message:'clinic_code_input',data:{original:credentials.clinicCode,transformed:clinicCodeUpper,length:clinicCodeUpper.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion agent log (debug-session)
       
       console.log('🔍 Recherche de la clinique avec le code:', clinicCodeUpper);
       
-      // D'abord, vérifier si la clinique existe (même inactive)
-      const { data: clinicCheck, error: clinicCheckError } = await supabase
-        .from('clinics')
-        .select('id, code, name, active, is_temporary_code, requires_code_change')
-        .eq('code', clinicCodeUpper)
-        .maybeSingle();
-
-      console.log('📊 Résultat de la recherche:', { clinicCheck, clinicCheckError });
       // #region agent log (debug-session)
-      agentLog('H1', 'Login.tsx:clinics_by_code', 'clinics_by_code_result', {
-        found: !!clinicCheck,
-        errorCode: (clinicCheckError as any)?.code ?? null,
-        errorMsg: (clinicCheckError as any)?.message ?? null,
-        clinicCode: clinicCodeUpper,
-      });
+      const supabaseUrl = (supabase as any).supabaseUrl || 'unknown';
+      const supabaseKey = (supabase as any).supabaseKey ? 'present' : 'missing';
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:440',message:'supabase_config_check',data:{supabaseUrl,hasKey:supabaseKey!=='missing'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion agent log (debug-session)
+      
+      // #region agent log (debug-session)
+      // Tester aussi la fonction RPC validate_clinic_code
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('validate_clinic_code', { p_clinic_code: clinicCodeUpper });
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:444',message:'rpc_validate_test',data:{hasRpcData:!!rpcResult,hasRpcError:!!rpcError,rpcErrorCode:rpcError?.code,rpcErrorMessage:rpcError?.message,rpcResult:rpcResult},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion agent log (debug-session)
+      
+      // Utiliser la fonction RPC si disponible (contourne RLS)
+      let clinicCheck = null;
+      let clinicCheckError = null;
+      
+      if (rpcResult && rpcResult.success && rpcResult.clinic) {
+        // Utiliser le résultat de la fonction RPC
+        clinicCheck = {
+          id: rpcResult.clinic.id,
+          code: rpcResult.clinic.code,
+          name: rpcResult.clinic.name,
+          active: rpcResult.clinic.active,
+          is_temporary_code: rpcResult.clinic.is_temporary_code,
+          requires_code_change: rpcResult.clinic.requires_code_change
+        };
+        // #region agent log (debug-session)
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:456',message:'using_rpc_result',data:{clinicFromRpc:clinicCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion agent log (debug-session)
+      } else {
+        // Fallback: requête directe
+        const directQuery = await supabase
+          .from('clinics')
+          .select('id, code, name, active, is_temporary_code, requires_code_change')
+          .eq('code', clinicCodeUpper)
+          .maybeSingle();
+        clinicCheck = directQuery.data;
+        clinicCheckError = directQuery.error;
+      }
+
+      // #region agent log (debug-session)
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:452',message:'clinic_query_result',data:{hasData:!!clinicCheck,hasError:!!clinicCheckError,errorCode:clinicCheckError?.code,errorMessage:clinicCheckError?.message,errorDetails:clinicCheckError?.details,errorHint:clinicCheckError?.hint,dataValue:clinicCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion agent log (debug-session)
 
+      console.log('📊 Résultat de la recherche:', { clinicCheck, clinicCheckError });
+
+      // #region agent log (debug-session)
       if (clinicCheckError) {
-        // #region agent log (debug-session)
-        agentLog('H1', 'Login.tsx:clinics_by_code_error', 'infinite_recursion_detected', {
-          error: clinicCheckError,
-          isRecursionError: clinicCheckError.message?.includes('infinite recursion'),
-        });
-        // #endregion agent log (debug-session)
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:451',message:'clinic_query_error',data:{errorCode:clinicCheckError.code,errorMessage:clinicCheckError.message,errorDetails:clinicCheckError.details,errorHint:clinicCheckError.hint,fullError:JSON.stringify(clinicCheckError)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      }
+      // #endregion agent log (debug-session)
+      
+      if (clinicCheckError) {
+        console.error('❌ Erreur Supabase lors de la recherche:', clinicCheckError);
+        setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
+        setIsLoading(false);
+        return;
       }
 
       // Si non trouvé, vérifier dans la table des codes temporaires
@@ -487,25 +520,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           .maybeSingle();
 
         console.log('📊 Résultat recherche code temporaire:', { tempCodeData, tempCodeError });
-        // #region agent log (debug-session)
-        agentLog('H1', 'Login.tsx:temp_code_lookup', 'temp_code_result', {
-          found: !!tempCodeData,
-          errorCode: (tempCodeError as any)?.code ?? null,
-          errorMsg: (tempCodeError as any)?.message ?? null,
-          tempClinicIdTail: tempCodeData?.clinic_id ? String(tempCodeData.clinic_id).slice(-6) : null,
-          isConverted: tempCodeData?.is_converted ?? null,
-          isUsed: tempCodeData?.is_used ?? null,
-        });
-        // #endregion agent log (debug-session)
-
-        if (tempCodeError) {
-          // #region agent log (debug-session)
-          agentLog('H1', 'Login.tsx:temp_code_lookup_error', 'infinite_recursion_detected_temp', {
-            error: tempCodeError,
-            isRecursionError: tempCodeError.message?.includes('infinite recursion'),
-          });
-          // #endregion agent log (debug-session)
-        }
 
         if (tempCodeData && !tempCodeError) {
           // Vérifier si le code temporaire a expiré
@@ -528,14 +542,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             .rpc('get_clinic_by_temp_code', { p_temp_code: clinicCodeUpper });
 
           console.log('📊 Données clinique via fonction RPC:', { clinicDataFromFunction, functionError });
-          // #region agent log (debug-session)
-          agentLog('H5', 'Login.tsx:rpc_get_clinic_by_temp_code', 'rpc_result', {
-            ok: !functionError,
-            rows: Array.isArray(clinicDataFromFunction) ? clinicDataFromFunction.length : null,
-            errorCode: (functionError as any)?.code ?? null,
-            errorMsg: (functionError as any)?.message ?? null,
-          });
-          // #endregion agent log (debug-session)
 
           if (clinicDataFromFunction && clinicDataFromFunction.length > 0 && !functionError) {
             const clinicInfo = clinicDataFromFunction[0];
@@ -559,14 +565,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               .maybeSingle();
 
             console.log('📊 Données clinique récupérées (fallback):', { clinicData, clinicDataError });
-            // #region agent log (debug-session)
-            agentLog('H2', 'Login.tsx:clinics_by_id_fallback', 'clinics_by_id_result', {
-              found: !!clinicData,
-              errorCode: (clinicDataError as any)?.code ?? null,
-              errorMsg: (clinicDataError as any)?.message ?? null,
-              clinicIdTail: tempCodeData?.clinic_id ? String(tempCodeData.clinic_id).slice(-6) : null,
-            });
-            // #endregion agent log (debug-session)
 
             if (clinicData && !clinicDataError) {
               tempClinic = {
@@ -606,6 +604,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         return;
       }
 
+      // #region agent log (debug-session)
+      if (!tempClinic) {
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:565',message:'clinic_not_found',data:{clinicCode:clinicCodeUpper,clinicCheckWasNull:!clinicCheck,clinicCheckErrorWasNull:!clinicCheckError,tempClinicWasNull:!tempClinic},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      }
+      // #endregion agent log (debug-session)
+      
       if (!tempClinic) {
         console.error('❌ Clinique non trouvée:', clinicCodeUpper);
         setError(`Code clinique "${clinicCodeUpper}" introuvable. Vérifiez que le code est correct.`);
@@ -621,15 +625,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
 
       const clinic = tempClinic;
-      const clinicRequiresCodeChange = isUsingTempCode || clinic.is_temporary_code || clinic.requires_code_change;
-      setIsTemporaryCode(clinicRequiresCodeChange);
-      console.log('✅ Clinique trouvée:', clinic, 'Code temporaire:', clinicRequiresCodeChange);
+      console.log('✅ Clinique trouvée:', clinic);
 
       // 2. Authentifier l'utilisateur via Supabase Auth
       // Le username peut être l'email ou un identifiant
-      const email = credentials.username.includes('@') 
-        ? credentials.username.toLowerCase()
-        : credentials.username;
+      // IMPORTANT: trim() pour supprimer les espaces avant/après
+      const email = (credentials.username.includes('@') 
+        ? credentials.username.trim().toLowerCase()
+        : credentials.username.trim()).trim();
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:563',message:'Auth attempt start',data:{email,clinicId:clinic.id,clinicCode:clinic.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       // Essayer d'abord avec Supabase Auth
       let authUser = null;
@@ -641,33 +648,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           password: credentials.password,
         });
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:577',message:'Supabase Auth result',data:{hasUser:!!authData?.user,hasError:!!authErr,errorMessage:authErr?.message,errorCode:authErr?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         if (authData?.user && !authErr) {
           authUser = authData.user;
           authSession = authData.session;
-          // #region agent log (debug-session)
-          agentLog('H3', 'Login.tsx:auth', 'supabase_auth_success', {
-            hasUser: true,
-            hasSession: !!authData.session,
-          });
-          // #endregion agent log (debug-session)
         } else {
           console.log('Supabase Auth échoué, recherche dans la table users');
-          // #region agent log (debug-session)
-          agentLog('H3', 'Login.tsx:auth', 'supabase_auth_failed', {
-            hasUser: !!authData?.user,
-            errorCode: (authErr as any)?.code ?? null,
-            errorMsg: (authErr as any)?.message ?? null,
-          });
-          // #endregion agent log (debug-session)
         }
-      } catch (err) {
+      } catch (err: any) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:585',message:'Supabase Auth exception',data:{errorMessage:err?.message,errorName:err?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         // Si Supabase Auth échoue, on essaiera avec la table users
         console.log('Tentative Supabase Auth échouée, utilisation de la table users');
-        // #region agent log (debug-session)
-        agentLog('H3', 'Login.tsx:auth', 'supabase_auth_exception', {
-          errorMsg: (err as any)?.message ?? String(err),
-        });
-        // #endregion agent log (debug-session)
       }
 
       // 3. Récupérer l'utilisateur dans la table users
@@ -696,93 +692,135 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         
         user = userData;
         userError = err;
-        // #region agent log (debug-session)
-        agentLog('H2', 'Login.tsx:users_by_auth_user_id', 'users_lookup_result', {
-          found: !!userData,
-          errorCode: (err as any)?.code ?? null,
-          errorMsg: (err as any)?.message ?? null,
-          authUserId: authUser.id,
-          clinicId: clinic.id,
-          clinicIdTail: clinic?.id ? String(clinic.id).slice(-6) : null,
-        });
-        // #endregion agent log (debug-session)
       }
 
       // Si pas trouvé avec auth_user_id, chercher par email et clinic_id
       if (!user) {
-        const { data: userData, error: err } = await supabase
-          .from('users')
-          .select(`
-            id,
-            auth_user_id,
-            nom,
-            prenom,
-            email,
-            role,
-            status,
-            clinic_id,
-            specialite,
-            actif,
-            password_hash
-          `)
-          .eq('email', email)
-          .eq('clinic_id', clinic.id)
-          .maybeSingle();
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:617',message:'Searching users table',data:{email,emailLength:email.length,clinicId:clinic.id,clinicCode:clinic.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
+        // Utiliser la fonction SQL qui contourne RLS pour les utilisateurs non authentifiés
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:635',message:'Calling RPC authenticate_user_by_email',data:{email,clinicId:clinic.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        
+        const { data: userDataFromRPC, error: rpcError } = await supabase
+          .rpc('authenticate_user_by_email', {
+            p_email: email,
+            p_clinic_id: clinic.id
+          });
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:642',message:'RPC authenticate_user_by_email result',data:{found:!!userDataFromRPC && userDataFromRPC.length > 0,hasError:!!rpcError,errorMessage:rpcError?.message,errorCode:rpcError?.code,errorDetails:rpcError?.details,dataLength:userDataFromRPC?.length,userData:userDataFromRPC?.[0]?{id:userDataFromRPC[0].id,email:userDataFromRPC[0].email,role:userDataFromRPC[0].role,status:userDataFromRPC[0].status,clinicId:userDataFromRPC[0].clinic_id}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'C,E'})}).catch(()=>{});
+        // #endregion
+        
+        let userData = null;
+        let err = rpcError;
+        
+        if (userDataFromRPC && userDataFromRPC.length > 0) {
+          userData = userDataFromRPC[0];
+        } else {
+          // Fallback: Essayer directement via la table (peut être bloqué par RLS)
+          const { data: userDataDirect, error: errDirect } = await supabase
+            .from('users')
+            .select(`
+              id,
+              auth_user_id,
+              nom,
+              prenom,
+              email,
+              role,
+              status,
+              clinic_id,
+              specialite,
+              actif,
+              password_hash
+            `)
+            .eq('email', email)
+            .eq('clinic_id', clinic.id)
+            .maybeSingle();
+          
+          userData = userDataDirect;
+          err = errDirect;
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:650',message:'User via direct query (fallback)',data:{found:!!userData,hasError:!!err,errorMessage:err?.message,errorCode:err?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:670',message:'Users table query result',data:{found:!!userData,hasError:!!err,errorMessage:err?.message,errorCode:err?.code,userData:userData?{id:userData.id,email:userData.email,role:userData.role,status:userData.status,clinicId:userData.clinic_id,actif:userData.actif,hasAuthUserId:!!userData?.auth_user_id,hasPasswordHash:!!userData?.password_hash}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'C,D,E'})}).catch(()=>{});
+        // #endregion
         
         user = userData;
         userError = err;
-        // #region agent log (debug-session)
-        agentLog('H2', 'Login.tsx:users_by_email', 'users_lookup_result', {
-          found: !!userData,
-          errorCode: (err as any)?.code ?? null,
-          errorMsg: (err as any)?.message ?? null,
-          email,
-          clinicId: clinic.id,
-          clinicIdTail: clinic?.id ? String(clinic.id).slice(-6) : null,
-        });
-        // #endregion agent log (debug-session)
 
         // Si l'utilisateur n'a pas d'auth_user_id, vérifier le password_hash
+        // C'est le cas pour les comptes démo (CLINIC-001)
         if (user && !user.auth_user_id && user.password_hash) {
-          // Note: Le hash devrait être vérifié côté serveur
-          // Pour l'instant, si Supabase Auth a échoué et qu'on a un password_hash,
-          // on accepte (le serveur devrait vérifier)
-          // En production, utiliser une API backend pour vérifier le mot de passe
+          console.log('🔐 Vérification du password_hash pour compte démo');
+          const inputHash = await hashPassword(credentials.password);
+          if (inputHash !== user.password_hash) {
+            console.log('❌ Password hash ne correspond pas');
+            setError('Mot de passe incorrect');
+            setIsLoading(false);
+            return;
+          }
+          console.log('✅ Password hash vérifié avec succès');
+        } else if (user && !user.auth_user_id && !user.password_hash) {
+          // Utilisateur sans auth_user_id et sans password_hash - impossible de vérifier
+          console.log('❌ Utilisateur sans moyen de vérification du mot de passe');
+          setError('Configuration du compte incorrecte. Contactez l\'administrateur.');
+          setIsLoading(false);
+          return;
         }
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:649',message:'User validation check',data:{hasUser:!!user,hasError:!!userError,errorMessage:userError?.message,errorCode:userError?.code,userStatus:user?.status,userActif:user?.actif,userClinicId:user?.clinic_id,expectedClinicId:clinic.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C,D'})}).catch(()=>{});
+      // #endregion
+
       if (userError || !user) {
-        // #region agent log (debug-session)
-        const { data: allUsersInClinic } = await supabase
-          .from('users')
-          .select('email, role, status')
-          .eq('clinic_id', clinic.id);
-          
-        agentLog('H2', 'Login.tsx:user_not_found_diagnostic', 'diagnostic_all_users_in_clinic', {
-          clinicId: clinic.id,
-          allUsers: allUsersInClinic,
-          searchedEmail: email,
-        });
-        // #endregion agent log (debug-session)
-        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:650',message:'User not found error',data:{hasError:!!userError,errorMessage:userError?.message,errorCode:userError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C,E'})}).catch(()=>{});
+        // #endregion
         setError('Email ou mot de passe incorrect, ou utilisateur non associé à cette clinique');
         setIsLoading(false);
         return;
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:715',message:'Before checking user active status',data:{userActif:user.actif},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
       // 4. Vérifier que l'utilisateur est actif
       if (!user.actif) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:718',message:'User inactive',data:{actif:user.actif},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         setError('Ce compte est désactivé. Contactez votre administrateur.');
         setIsLoading(false);
         return;
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:725',message:'Before checking user status',data:{userStatus:user.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
       // 5. Vérifier le status
       if (user.status === 'SUSPENDED' || user.status === 'REJECTED') {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:729',message:'User suspended/rejected',data:{status:user.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         setError('Ce compte est suspendu ou refusé. Contactez votre administrateur.');
         setIsLoading(false);
         return;
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:735',message:'Before mapping permissions',data:{userRole:user.role},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       // 6. Mapper les permissions selon le rôle
       const getPermissionsByRole = (role: string): User['permissions'] => {
@@ -869,48 +907,49 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       // 9. Générer un token (ou utiliser celui de Supabase Auth)
       const token = authSession?.access_token || `token-${user.id}-${Date.now()}`;
 
-      // 10. Mettre à jour last_login et marquer le code temporaire comme utilisé
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:818',message:'Building app user and token',data:{userId:user.id,userStatus:user.status,hasAuthSession:!!authSession,hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
+      // 10. Mettre à jour last_login
       await supabase
         .from('users')
         .update({ 
           last_login: new Date().toISOString(),
-          temp_code_used: clinicRequiresCodeChange ? true : undefined,
           first_login_at: !user.first_login_at ? new Date().toISOString() : undefined,
         })
         .eq('id', user.id);
 
-      // Marquer le code temporaire comme utilisé si nécessaire
-      if (clinicRequiresCodeChange) {
-        await supabase
-          .from('clinic_temporary_codes')
-          .update({ 
-            is_used: true, 
-            used_at: new Date().toISOString(),
-            used_by_user_id: user.id,
-          })
-          .eq('temporary_code', clinicCodeUpper);
-      }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:828',message:'After last_login update',data:{userStatus:user.status,willCheckPending:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
-      // 11. Vérifier si le code temporaire doit être converti
-      if (clinicRequiresCodeChange && user.status === 'PENDING') {
-        console.log('🔄 Code temporaire détecté, affichage du dialogue de conversion');
-        // #region agent log (debug-session)
-        agentLog('H2', 'Login.tsx:convert_dialog', 'show_convert_dialog', {
-          clinicRequiresCodeChange: true,
-          userStatus: user.status,
-        });
-        // #endregion agent log (debug-session)
-        setTempCodeInfo({
+      // 11. Vérifier si l'utilisateur doit changer son mot de passe (première connexion)
+      // NOTE: Le code clinique est TOUJOURS fixe et créé par le backend
+      // L'admin ne peut JAMAIS modifier le code clinique, seulement son mot de passe
+      if (user.status === 'PENDING') {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:832',message:'PENDING status detected, showing password dialog',data:{userStatus:user.status,clinicCode:clinic.code,userEmail:user.email},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        console.log('🔐 Première connexion détectée, affichage du dialogue de changement de mot de passe');
+        setPasswordDialogInfo({
           clinicName: clinic.name,
-          currentCode: clinic.code,
+          clinicCode: clinic.code,
+          clinicId: clinic.id,
           userEmail: user.email,
           pendingUser: appUser,
           pendingToken: token,
+          authUserId: authUser?.id || user.auth_user_id || undefined,
+          currentPassword: credentials.password,
         });
-        setShowConvertDialog(true);
+        setShowPasswordDialog(true);
         setIsLoading(false);
         return;
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:844',message:'User not PENDING, calling onLogin',data:{userStatus:user.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
 
       // 12. Connecter l'utilisateur
       onLogin(appUser, token);
@@ -951,10 +990,79 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
+  // Fonction pour valider le code clinique en temps réel
+  const validateClinicCode = async (code: string) => {
+    if (!code || code.trim().length < 3) {
+      setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
+      return;
+    }
+
+    setClinicValidation(prev => ({ ...prev, isChecking: true }));
+
+    try {
+      const clinicCodeUpper = code.toUpperCase().trim();
+      
+      // Vérifier d'abord dans la table clinics
+      const { data: clinic, error: clinicError } = await supabase
+        .from('clinics')
+        .select('id, name, active')
+        .eq('code', clinicCodeUpper)
+        .eq('active', true)
+        .maybeSingle();
+
+      if (clinic) {
+        setClinicValidation({ isValid: true, clinicName: clinic.name, isChecking: false });
+        return;
+      }
+
+      // Si non trouvé, chercher dans les codes temporaires
+      const { data: tempCode } = await supabase
+        .from('clinic_temporary_codes')
+        .select('clinic_id')
+        .eq('temporary_code', clinicCodeUpper)
+        .eq('is_converted', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+      if (tempCode) {
+        // Récupérer le nom de la clinique
+        const { data: linkedClinic } = await supabase
+          .from('clinics')
+          .select('name')
+          .eq('id', tempCode.clinic_id)
+          .single();
+        
+        setClinicValidation({ 
+          isValid: true, 
+          clinicName: linkedClinic?.name || 'Clinique (code temporaire)', 
+          isChecking: false 
+        });
+        return;
+      }
+
+      setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
+    } catch (err) {
+      setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
+    }
+  };
+
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignupLoading(true);
     setError('');
+
+    // Validation du code clinique
+    if (!signupForm.clinicCode || signupForm.clinicCode.trim() === '') {
+      setError('Le code clinique est requis pour l\'inscription');
+      setSignupLoading(false);
+      return;
+    }
+
+    if (!clinicValidation.isValid) {
+      setError('Le code clinique est invalide. Vérifiez le code auprès de votre administrateur.');
+      setSignupLoading(false);
+      return;
+    }
 
     // Validation
     if (signupForm.password !== signupForm.passwordConfirm) {
@@ -990,6 +1098,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          clinicCode: signupForm.clinicCode.toUpperCase().trim(),
           nom: signupForm.nom,
           prenom: signupForm.prenom,
           email: signupForm.email,
@@ -1026,6 +1135,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       setSignupSuccess(true);
       setSignupForm({
+        clinicCode: '',
         nom: '',
         prenom: '',
         email: '',
@@ -1041,6 +1151,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           question3: { question: '', answer: '' },
         },
       });
+      setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
     } catch (error: any) {
       console.error('Erreur lors de l\'inscription:', error);
       
@@ -1562,17 +1673,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   mt: 0.5
                 }}
               >
-                Code unique de votre clinique (ou code temporaire pour première connexion)
+                Code unique de votre clinique
               </Typography>
-              {isTemporaryCode && (
-                <Chip
-                  icon={<Warning fontSize="small" />}
-                  label="Code temporaire détecté"
-                  color="warning"
-                  size="small"
-                  sx={{ mt: 1 }}
-                />
-              )}
               </div>
 
               <div className="grid w-full items-center gap-2 mb-5">
@@ -1659,6 +1761,51 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             ) : (
             <Box component="form" onSubmit={handleSignupSubmit}>
               <Grid container spacing={2}>
+                {/* Code Clinique - Champ obligatoire en premier */}
+                <Grid item xs={12}>
+                  <TextField
+                    margin="normal"
+                    required
+                    fullWidth
+                    id="clinicCode"
+                    label="Code Clinique"
+                    name="clinicCode"
+                    value={signupForm.clinicCode}
+                    onChange={(e) => {
+                      const newCode = e.target.value.toUpperCase();
+                      setSignupForm({ ...signupForm, clinicCode: newCode });
+                      // Valider le code après un délai
+                      if (newCode.length >= 3) {
+                        validateClinicCode(newCode);
+                      } else {
+                        setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
+                      }
+                    }}
+                    disabled={signupLoading}
+                    placeholder="Ex: CLINIC001, CAMPUS-001"
+                    helperText={
+                      clinicValidation.isChecking ? 'Vérification du code...' :
+                      clinicValidation.isValid ? `✅ Clinique: ${clinicValidation.clinicName}` :
+                      signupForm.clinicCode.length >= 3 ? '❌ Code clinique invalide' :
+                      'Demandez le code à l\'administrateur de votre clinique'
+                    }
+                    error={signupForm.clinicCode.length >= 3 && !clinicValidation.isValid && !clinicValidation.isChecking}
+                    sx={{
+                      '& .MuiFormHelperText-root': {
+                        color: clinicValidation.isValid ? theme.palette.success.main : undefined,
+                      },
+                    }}
+                    InputProps={{
+                      endAdornment: clinicValidation.isChecking ? (
+                        <CircularProgress size={20} />
+                      ) : clinicValidation.isValid ? (
+                        <CheckCircle sx={{ color: theme.palette.success.main }} />
+                      ) : signupForm.clinicCode.length >= 3 ? (
+                        <Warning sx={{ color: theme.palette.error.main }} />
+                      ) : null,
+                    }}
+                  />
+                </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     margin="normal"
@@ -1942,7 +2089,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </Button>
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Votre demande sera examinée par un administrateur. Vous recevrez un email une fois votre compte validé.
+                  Votre demande sera examinée par l'administrateur de votre clinique. 
+                  Vous recevrez un email une fois votre compte validé.
+                </Typography>
+                <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.disabled' }}>
+                  💡 Le code clinique vous est fourni par l'administrateur de votre établissement.
                 </Typography>
               </Box>
             </Box>
@@ -1980,9 +2131,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     fontWeight: 500,
                   }}
                 >
-                  <strong>Clinique CAMPUS-001 (Code temporaire) :</strong>
+                  <strong>Clinique CAMPUS-001 :</strong>
                 </Typography>
-                <Box sx={{ mt: 1, p: 1.5, bgcolor: alpha(theme.palette.warning.main, 0.1), borderRadius: 1 }}>
+                <Box sx={{ mt: 1, p: 1.5, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1 }}>
                   <Typography variant="caption" display="block" sx={{ fontWeight: 600 }}>
                     Code clinique: CAMPUS-001
                   </Typography>
@@ -1993,9 +2144,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     Mot de passe: TempClinic2024!
                   </Typography>
                   <Chip 
-                    label="Première connexion requiert définition code permanent" 
+                    label="Première connexion: changement de mot de passe requis" 
                     size="small" 
-                    color="warning" 
+                    color="info" 
                     sx={{ mt: 1, fontSize: '0.65rem' }}
                   />
                 </Box>
@@ -2359,32 +2510,34 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </Container>
       </Box>
 
-      {/* Dialogue de conversion du code temporaire */}
-      {tempCodeInfo && (
-        <ConvertClinicCodeDialog
-          open={showConvertDialog}
+      {/* Dialogue de changement de mot de passe (première connexion) */}
+      {passwordDialogInfo && (
+        <ChangePasswordDialog
+          open={showPasswordDialog}
           onClose={() => {
-            setShowConvertDialog(false);
+            setShowPasswordDialog(false);
             // Connecter quand même l'utilisateur s'il ferme le dialogue
-            if (tempCodeInfo.pendingUser && tempCodeInfo.pendingToken) {
-              onLogin(tempCodeInfo.pendingUser, tempCodeInfo.pendingToken);
+            if (passwordDialogInfo.pendingUser && passwordDialogInfo.pendingToken) {
+              onLogin(passwordDialogInfo.pendingUser, passwordDialogInfo.pendingToken);
             }
           }}
-          onSuccess={(newCode) => {
-            setShowConvertDialog(false);
-            // Mettre à jour le code clinique dans l'utilisateur et connecter
-            if (tempCodeInfo.pendingUser && tempCodeInfo.pendingToken) {
+          onSuccess={() => {
+            setShowPasswordDialog(false);
+            // Connecter l'utilisateur après changement de mot de passe réussi
+            if (passwordDialogInfo.pendingUser && passwordDialogInfo.pendingToken) {
               const updatedUser = {
-                ...tempCodeInfo.pendingUser,
-                clinicCode: newCode,
+                ...passwordDialogInfo.pendingUser,
                 status: 'actif' as const,
               };
-              onLogin(updatedUser, tempCodeInfo.pendingToken);
+              onLogin(updatedUser, passwordDialogInfo.pendingToken);
             }
           }}
-          currentCode={tempCodeInfo.currentCode}
-          clinicName={tempCodeInfo.clinicName}
-          userEmail={tempCodeInfo.userEmail}
+          clinicName={passwordDialogInfo.clinicName}
+          clinicCode={passwordDialogInfo.clinicCode}
+          clinicId={passwordDialogInfo.clinicId}
+          userEmail={passwordDialogInfo.userEmail}
+          authUserId={passwordDialogInfo.authUserId}
+          currentPassword={passwordDialogInfo.currentPassword}
         />
       )}
 

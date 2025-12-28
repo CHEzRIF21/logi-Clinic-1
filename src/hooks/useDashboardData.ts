@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '../types/auth';
 import { PatientService } from '../services/patientService';
-import { ConsultationApiService } from '../services/consultationApiService';
 import { supabase } from '../services/supabase';
 import { apiGet } from '../services/apiClient';
 
@@ -100,24 +99,8 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
           }
         }
 
-        // Données pour consultations
-        if (user.role === 'admin' || user.role === 'medecin' || user.role === 'infirmier') {
-          try {
-            const consultationsToday = await ConsultationApiService.getConsultationsByStatus('EN_COURS', {
-              dateDebut: today.toISOString(),
-              dateFin: todayEnd.toISOString(),
-            });
-            const consultationsPending = await ConsultationApiService.getConsultationsByStatus('EN_COURS');
-
-            newStats.consultations = {
-              today: consultationsToday.length,
-              pending: consultationsPending.length,
-              completed: 0, // À implémenter si nécessaire
-            };
-          } catch (err) {
-            console.error('Erreur chargement consultations:', err);
-          }
-        }
+        // Données pour consultations - Module supprimé
+        // Les statistiques de consultation ne sont plus disponibles
 
         // Données pour rendez-vous
         if (user.role === 'admin' || user.role === 'medecin' || user.role === 'secretaire') {

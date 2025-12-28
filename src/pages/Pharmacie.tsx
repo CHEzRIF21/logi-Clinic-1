@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import {
   Container,
   Typography,
@@ -29,6 +29,9 @@ import {
   Tab,
   Tooltip,
   Paper,
+  Skeleton,
+  Pagination,
+  Stack,
 } from '@mui/material';
 import {
   Add,
@@ -61,9 +64,8 @@ import NouvelleDispensationWizard from '../components/pharmacy/NouvelleDispensat
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
-import { supabase } from '../services/supabase';
-import { StockService } from '../services/stockService';
-import { DispensationService } from '../services/dispensationService';
+import { useStockData } from '../hooks/useStockData';
+import { useDispensations } from '../hooks/useDispensations';
 
 // Types pour les données
 interface MedicamentDetail {
@@ -83,360 +85,108 @@ interface MedicamentDetail {
   observations?: string;
 }
 
-interface Dispensation {
-  id: string;
-  medicamentId: string;
-  patientId?: string;
-  patientNom?: string;
-  serviceId?: string;
-  serviceNom?: string;
-  quantite: number;
-  dateDispensation: Date;
-  motif: string;
-  prescripteur?: string;
-  consultationId?: string;
-  utilisateur: string;
-  statut: 'dispensé' | 'annulé' | 'retourné';
-}
-
-interface AlerteDetail {
-  id: string;
-  type: 'stock_bas' | 'perte_anormale' | 'retour_requis';
-  niveau: 'critique' | 'avertissement' | 'information';
-  message: string;
-  medicamentId: string;
-  dateCreation: Date;
-  statut: 'active' | 'resolue' | 'ignoree';
-}
-
-// Données de démonstration
-const medicamentsDetailDemo: MedicamentDetail[] = [
-  {
-    id: '1',
-    code: 'MED-001',
-    nom: 'Paracétamol 500mg',
-    dci: 'Paracétamol',
-    forme: 'Comprimé',
-    dosage: '500 mg',
-    unite: 'Boîte',
-    quantiteRecue: 200,
-    quantiteDispensée: 50,
-    quantiteRestante: 150,
-    seuilMinimum: 20,
-    prixUnitaire: 2500,
-    emplacement: 'Rayon A-1',
-    observations: 'Médicament essentiel'
-  },
-  {
-    id: '2',
-    code: 'MED-002',
-    nom: 'Amoxicilline 1g',
-    dci: 'Amoxicilline',
-    forme: 'Poudre injectable',
-    dosage: '1g',
-    unite: 'Flacon',
-    quantiteRecue: 50,
-    quantiteDispensée: 25,
-    quantiteRestante: 25,
-    seuilMinimum: 10,
-    prixUnitaire: 15000,
-    emplacement: 'Frigo B-2',
-    observations: 'Conservation réfrigérée'
-  },
-  {
-    id: '3',
-    code: 'MED-003',
-    nom: 'Ibuprofène 400mg',
-    dci: 'Ibuprofène',
-    forme: 'Comprimé',
-    dosage: '400 mg',
-    unite: 'Boîte',
-    quantiteRecue: 100,
-    quantiteDispensée: 80,
-    quantiteRestante: 20,
-    seuilMinimum: 15,
-    prixUnitaire: 3200,
-    emplacement: 'Rayon A-2',
-    observations: 'Stock faible'
-  }
-];
-
-const dispensationsDemo: Dispensation[] = [
-  {
-    id: '1',
-    medicamentId: '1',
-    patientId: 'PAT-001',
-    patientNom: 'Moussa Traoré',
-    quantite: 10,
-    dateDispensation: new Date('2024-07-15'),
-    motif: 'Prescription médicale - Fièvre',
-    prescripteur: 'Dr. Diallo',
-    consultationId: 'CONS-001',
-    utilisateur: 'Infirmier Pharmacie',
-    statut: 'dispensé'
-  },
-  {
-    id: '2',
-    medicamentId: '1',
-    serviceId: 'SERV-001',
-    serviceNom: 'Maternité',
-    quantite: 20,
-    dateDispensation: new Date('2024-07-16'),
-    motif: 'Service interne - Post-partum',
-    prescripteur: 'Dr. Keita',
-    utilisateur: 'Infirmier Pharmacie',
-    statut: 'dispensé'
-  },
-  {
-    id: '3',
-    medicamentId: '2',
-    patientId: 'PAT-002',
-    patientNom: 'Fatoumata Diarra',
-    quantite: 5,
-    dateDispensation: new Date('2024-07-17'),
-    motif: 'Prescription médicale - Infection',
-    prescripteur: 'Dr. Coulibaly',
-    consultationId: 'CONS-002',
-    utilisateur: 'Pharmacien',
-    statut: 'dispensé'
-  }
-];
-
-const alertesDetailDemo: AlerteDetail[] = [
-  {
-    id: '1',
-    type: 'stock_bas',
-    niveau: 'critique',
-    message: 'Stock Ibuprofène 400mg en dessous du seuil minimum',
-    medicamentId: '3',
-    dateCreation: new Date('2024-07-15'),
-    statut: 'active'
-  }
-];
+// Composant Skeleton pour le chargement
+const SkeletonTableRow = memo(() => (
+  <TableRow>
+    {[...Array(7)].map((_, i) => (
+      <TableCell key={i}>
+        <Skeleton variant="text" width="100%" />
+      </TableCell>
+    ))}
+  </TableRow>
+));
+SkeletonTableRow.displayName = 'SkeletonTableRow';
 
 const Pharmacie: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  const [medicaments, setMedicaments] = useState<MedicamentDetail[]>(medicamentsDetailDemo);
-  const [dispensations, setDispensations] = useState<Dispensation[]>(dispensationsDemo);
-  const [alertes, setAlertes] = useState<AlerteDetail[]>(alertesDetailDemo);
-  const [loading, setLoading] = useState(false);
-  const [dataLoaded, setDataLoaded] = useState(false);
   const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
     open: false, message: '', type: 'info'
   });
 
-  // Navigation vers le module Stock Médicaments
-  const goToStockMedicaments = () => navigate('/stock-medicaments');
-  const goToConsultations = () => navigate('/consultations');
-  const goToCaisse = () => navigate('/caisse');
+  // Utilisation des hooks optimisés
+  const { data: stockData, loading: stockLoading, stats: stockStats, refetch: refetchStock } = useStockData({
+    magasin: 'detail',
+    autoRefresh: true
+  });
+
+  const {
+    dispensations,
+    loading: dispensationsLoading,
+    stats: dispensationsStats,
+    pagination,
+    searchTerm,
+    setSearchTerm,
+    refetch: refetchDispensations,
+    goToPage,
+    nextPage,
+    previousPage
+  } = useDispensations({
+    pageSize: 20,
+    autoRefresh: true
+  });
+
+  // Navigation mémorisée
+  const goToStockMedicaments = useCallback(() => navigate('/stock-medicaments'), [navigate]);
+  const goToConsultations = useCallback(() => navigate('/consultations'), [navigate]);
+  const goToCaisse = useCallback(() => navigate('/caisse'), [navigate]);
 
   // Fonction utilitaire pour les notifications
-  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+  const showNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setNotification({ open: true, message, type });
-  };
+  }, []);
   
   // États pour les dialogs
   const [openDispensation, setOpenDispensation] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<MedicamentDetail | null>(null);
-  
-  // États pour les formulaires
-  const [dispensationForm, setDispensationForm] = useState({
-    medicamentId: '',
-    typeDestinataire: 'patient',
-    patientId: '',
-    patientNom: '',
-    serviceId: '',
-    serviceNom: '',
-    quantite: 0,
-    dateDispensation: new Date().toISOString().split('T')[0],
-    motif: '',
-    prescripteur: '',
-    consultationId: ''
-  });
 
-  // Chargement des données réelles depuis Supabase
-  const loadRealData = async () => {
-    try {
-      setLoading(true);
-      
-      // Charger les lots du magasin détail depuis Supabase
-      const { data: lotsDetail, error: lotsError } = await supabase
-        .from('lots')
-        .select(`
-          *,
-          medicaments (*)
-        `)
-        .eq('magasin', 'detail')
-        .eq('statut', 'actif');
-      
-      if (lotsError) throw lotsError;
-      
-      if (lotsDetail && lotsDetail.length > 0) {
-        // Agréger par médicament
-        const medicamentsMap = new Map<string, MedicamentDetail>();
-        
-        lotsDetail.forEach(lot => {
-          const med = lot.medicaments as any;
-          if (!med) return;
-          
-          const existingMed = medicamentsMap.get(lot.medicament_id);
-          if (existingMed) {
-            existingMed.quantiteRestante += lot.quantite_disponible;
-          } else {
-            medicamentsMap.set(lot.medicament_id, {
-              id: lot.medicament_id,
-              code: med.code || `MED-${lot.medicament_id.substring(0, 6)}`,
-              nom: med.nom || 'Inconnu',
-              dci: med.dci || '',
-              forme: med.forme || '',
-              dosage: med.dosage || '',
-              unite: med.unite || 'Unité',
-              quantiteRecue: lot.quantite_initiale,
-              quantiteDispensée: lot.quantite_initiale - lot.quantite_disponible,
-              quantiteRestante: lot.quantite_disponible,
-              seuilMinimum: med.seuil_alerte || 20,
-              prixUnitaire: med.prix_unitaire || 0,
-              emplacement: med.emplacement || '',
-              observations: med.observations || ''
-            });
-          }
-        });
-        
-        // Fusionner avec les données de démonstration
-        const medsFromSupabase = Array.from(medicamentsMap.values());
-        if (medsFromSupabase.length > 0) {
-          setMedicaments(prev => {
-            const combined = [...medsFromSupabase];
-            prev.forEach(demo => {
-              if (!combined.some(m => m.code === demo.code)) {
-                combined.push(demo);
-              }
-            });
-            return combined;
-          });
-        }
-        setDataLoaded(true);
-      }
-      
-      // Charger les dispensations récentes
-      const { data: dispensationsData, error: dispensationsError } = await supabase
-        .from('dispensations')
-        .select(`
-          *,
-          dispensations_lignes (
-            *,
-            medicaments (*)
-          )
-        `)
-        .order('date_dispensation', { ascending: false })
-        .limit(50);
-      
-      if (!dispensationsError && dispensationsData && dispensationsData.length > 0) {
-        const dispensationsConverties: Dispensation[] = dispensationsData.flatMap(disp => {
-          const lignes = disp.dispensations_lignes || [];
-          return lignes.map((ligne: any) => ({
-            id: `${disp.id}-${ligne.id}`,
-            medicamentId: ligne.medicament_id,
-            patientId: disp.patient_id,
-            patientNom: disp.patient_nom || 'Patient',
-            serviceId: disp.service_id,
-            serviceNom: disp.service_nom,
-            quantite: ligne.quantite,
-            dateDispensation: new Date(disp.date_dispensation),
-            motif: disp.observations || 'Dispensation',
-            prescripteur: disp.prescripteur || 'Médecin',
-            consultationId: disp.prescription_id,
-            utilisateur: disp.utilisateur_id,
-            statut: disp.statut === 'terminee' ? 'dispensé' : disp.statut as 'dispensé' | 'annulé' | 'retourné'
-          }));
-        });
-        
-        if (dispensationsConverties.length > 0) {
-          setDispensations(prev => {
-            const combined = [...dispensationsConverties];
-            prev.forEach(demo => {
-              if (!combined.some(d => d.id === demo.id)) {
-                combined.push(demo);
-              }
-            });
-            return combined;
-          });
-        }
-      }
-      
-      // Charger les alertes actives
-      const { data: alertesData, error: alertesError } = await supabase
-        .from('alertes_stock')
-        .select(`
-          *,
-          medicaments (*)
-        `)
-        .eq('statut', 'active');
-      
-      if (!alertesError && alertesData && alertesData.length > 0) {
-        const alertesConverties: AlerteDetail[] = alertesData.map(alerte => ({
-          id: alerte.id,
-          type: alerte.type as 'stock_bas' | 'perte_anormale' | 'retour_requis',
-          niveau: alerte.niveau as 'critique' | 'avertissement' | 'information',
-          message: alerte.message,
-          medicamentId: alerte.medicament_id,
-          dateCreation: new Date(alerte.date_creation),
-          statut: alerte.statut as 'active' | 'resolue' | 'ignoree'
-        }));
-        
-        setAlertes(prev => {
-          const combined = [...alertesConverties];
-          prev.forEach(demo => {
-            if (!combined.some(a => a.id === demo.id)) {
-              combined.push(demo);
-            }
-          });
-          return combined;
-        });
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des données Supabase:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Conversion des données du hook en format local
+  const medicaments = useMemo(() => {
+    if (!stockData?.medicaments) return [];
+    return stockData.medicaments.map(med => ({
+      id: med.id,
+      code: med.code,
+      nom: med.nom,
+      dci: med.dci || '',
+      forme: med.forme || '',
+      dosage: med.dosage || '',
+      unite: med.unite || 'Unité',
+      quantiteRecue: med.quantiteStock || 0,
+      quantiteDispensée: 0, // À calculer depuis les dispensations si nécessaire
+      quantiteRestante: med.quantiteStock || 0,
+      seuilMinimum: med.seuilMinimum || 20,
+      prixUnitaire: med.prixUnitaire || 0,
+      emplacement: med.emplacement || '',
+      observations: med.observations || ''
+    }));
+  }, [stockData]);
 
-  // Charger les données au montage du composant
-  React.useEffect(() => {
-    if (!dataLoaded) {
-      loadRealData();
-    }
-  }, [dataLoaded]);
+  // Statistiques mémorisées
+  const stats = useMemo(() => ({
+    totalMedicaments: stockStats.totalMedicaments,
+    totalStock: stockStats.totalStock,
+    valeurStock: stockStats.valeurStock,
+    stockFaible: stockStats.stockFaible,
+    dispensationsAujourdhui: dispensationsStats.aujourdhui,
+    alertesActives: stockStats.alertesActives
+  }), [stockStats, dispensationsStats]);
 
-  // Calcul des statistiques
-  const stats = {
-    totalMedicaments: medicaments.length,
-    totalStock: medicaments.reduce((sum, med) => sum + med.quantiteRestante, 0),
-    valeurStock: medicaments.reduce((sum, med) => sum + (med.quantiteRestante * med.prixUnitaire), 0),
-    stockFaible: medicaments.filter(med => med.quantiteRestante <= med.seuilMinimum).length,
-    dispensationsAujourdhui: dispensations.filter(disp => {
-      const today = new Date();
-      const dispDate = new Date(disp.dateDispensation);
-      return dispDate.toDateString() === today.toDateString();
-    }).length,
-    alertesActives: alertes.filter(alert => alert.statut === 'active').length
-  };
-
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = useCallback((event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
-  };
+  }, []);
 
-  const handleDispensationSuccess = () => {
+  const handleDispensationSuccess = useCallback(() => {
     showNotification('Dispensation enregistrée avec succès !', 'success');
-    // Recharger les données après la dispensation
-    loadRealData();
-  };
+    refetchStock();
+    refetchDispensations();
+  }, [showNotification, refetchStock, refetchDispensations]);
 
-  const getDispensationsByMedicament = (medicamentId: string) => {
+  const getDispensationsByMedicament = useCallback((medicamentId: string) => {
     return dispensations.filter(disp => disp.medicamentId === medicamentId);
-  };
+  }, [dispensations]);
+
+  const loading = stockLoading || dispensationsLoading;
 
   return (
     <Container maxWidth="xl">
@@ -584,7 +334,11 @@ const Pharmacie: React.FC = () => {
                         <Typography color="text.secondary" gutterBottom>
                           Dispensations Aujourd'hui
                         </Typography>
-                        <Typography variant="h4">{stats.dispensationsAujourdhui}</Typography>
+                        {loading ? (
+                          <Skeleton variant="text" width={60} height={40} />
+                        ) : (
+                          <Typography variant="h4">{stats.dispensationsAujourdhui}</Typography>
+                        )}
                       </Box>
                     </Box>
                   </CardContent>
@@ -618,7 +372,11 @@ const Pharmacie: React.FC = () => {
                         <Typography color="text.secondary" gutterBottom>
                           Dispensations Total
                         </Typography>
-                        <Typography variant="h4">{dispensations.length}</Typography>
+                        {loading ? (
+                          <Skeleton variant="text" width={60} height={40} />
+                        ) : (
+                          <Typography variant="h4">{pagination.total}</Typography>
+                        )}
                       </Box>
                     </Box>
                   </CardContent>
@@ -728,7 +486,10 @@ const Pharmacie: React.FC = () => {
                     <Button
                       variant="outlined"
                       startIcon={<Refresh />}
-                      onClick={loadRealData}
+                      onClick={() => {
+                        refetchStock();
+                        refetchDispensations();
+                      }}
                       disabled={loading}
                     >
                       {loading ? 'Chargement...' : 'Actualiser'}
@@ -736,106 +497,136 @@ const Pharmacie: React.FC = () => {
                   </Box>
                 </Box>
                 
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Médicament</TableCell>
-                        <TableCell>Stock Actuel</TableCell>
-                        <TableCell>Entrées (depuis Gros)</TableCell>
-                        <TableCell>Sorties (Patients)</TableCell>
-                        <TableCell>Seuil Min</TableCell>
-                        <TableCell>Statut</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {medicaments.map((medicament) => {
-                        const medicamentDispensations = getDispensationsByMedicament(medicament.id);
-                        const sorties = medicamentDispensations.reduce((sum, disp) => sum + disp.quantite, 0);
-                        const isStockFaible = medicament.quantiteRestante <= medicament.seuilMinimum;
-
-                        return (
-                          <TableRow key={medicament.id} sx={{ 
-                            backgroundColor: isStockFaible ? '#ffebee' : 'inherit' 
-                          }}>
-                            <TableCell>
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {medicament.nom}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {medicament.code} • {medicament.dci}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                  {medicament.forme} {medicament.dosage}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2" fontWeight="bold">
-                                {medicament.quantiteRestante} {medicament.unite}
+                {loading ? (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Médicament</TableCell>
+                          <TableCell>Stock Actuel</TableCell>
+                          <TableCell>Entrées (depuis Gros)</TableCell>
+                          <TableCell>Sorties (Patients)</TableCell>
+                          <TableCell>Seuil Min</TableCell>
+                          <TableCell>Statut</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {[...Array(5)].map((_, i) => (
+                          <SkeletonTableRow key={i} />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Médicament</TableCell>
+                          <TableCell>Stock Actuel</TableCell>
+                          <TableCell>Entrées (depuis Gros)</TableCell>
+                          <TableCell>Sorties (Patients)</TableCell>
+                          <TableCell>Seuil Min</TableCell>
+                          <TableCell>Statut</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {medicaments.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} align="center">
+                              <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
+                                Aucun médicament en stock
                               </Typography>
-                              {isStockFaible && (
-                                <Chip label="Stock faible" color="warning" size="small" />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {medicament.quantiteRecue} {medicament.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {sorties} {medicament.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {medicament.seuilMinimum} {medicament.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={isStockFaible ? 'Stock faible' : 'Normal'}
-                                color={isStockFaible ? 'warning' : 'success'}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Tooltip title="Voir détails">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => setSelectedMedicament(medicament)}
-                                  >
-                                    <Visibility />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Dispenser">
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => {
-                                      setDispensationForm(prev => ({ ...prev, medicamentId: medicament.id }));
-                                      setOpenDispensation(true);
-                                    }}
-                                  >
-                                    <MedicalServices />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Modifier">
-                                  <IconButton size="small">
-                                    <Edit />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
                             </TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                        ) : (
+                          medicaments.map((medicament) => {
+                            const medicamentDispensations = getDispensationsByMedicament(medicament.id);
+                            const sorties = medicamentDispensations.reduce((sum, disp) => sum + disp.quantite, 0);
+                            const isStockFaible = medicament.quantiteRestante <= medicament.seuilMinimum;
+
+                            return (
+                              <TableRow key={medicament.id} sx={{ 
+                                backgroundColor: isStockFaible ? '#ffebee' : 'inherit' 
+                              }}>
+                                <TableCell>
+                                  <Box>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {medicament.nom}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {medicament.code} • {medicament.dci}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                      {medicament.forme} {medicament.dosage}
+                                    </Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {medicament.quantiteRestante} {medicament.unite}
+                                  </Typography>
+                                  {isStockFaible && (
+                                    <Chip label="Stock faible" color="warning" size="small" />
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {medicament.quantiteRecue} {medicament.unite}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {sorties} {medicament.unite}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {medicament.seuilMinimum} {medicament.unite}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={isStockFaible ? 'Stock faible' : 'Normal'}
+                                    color={isStockFaible ? 'warning' : 'success'}
+                                    size="small"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <Tooltip title="Voir détails">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => setSelectedMedicament(medicament)}
+                                      >
+                                        <Visibility />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Dispenser">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => setOpenDispensation(true)}
+                                      >
+                                        <MedicalServices />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Modifier">
+                                      <IconButton size="small">
+                                        <Edit />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
               </CardContent>
             </Card>
           </Box>
@@ -850,99 +641,159 @@ const Pharmacie: React.FC = () => {
                   <Typography variant="h6">
                     Gestion des Dispensations
                   </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() => setOpenDispensation(true)}
-                  >
-                    Nouvelle Dispensation
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <TextField
+                      size="small"
+                      placeholder="Rechercher..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      sx={{ width: 250 }}
+                    />
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => setOpenDispensation(true)}
+                    >
+                      Nouvelle Dispensation
+                    </Button>
+                  </Box>
                 </Box>
                 
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Médicament</TableCell>
-                        <TableCell>Destinataire</TableCell>
-                        <TableCell>Quantité</TableCell>
-                        <TableCell>Motif</TableCell>
-                        <TableCell>Prescripteur</TableCell>
-                        <TableCell>Statut</TableCell>
-                        <TableCell>Actions</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {dispensations.map((dispensation) => {
-                        const medicament = medicaments.find(med => med.id === dispensation.medicamentId);
-                        return (
-                          <TableRow key={dispensation.id}>
-                            <TableCell>
-                              {new Date(dispensation.dateDispensation).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              <Box>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {medicament?.nom}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {medicament?.code}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Box>
-                                <Typography variant="body2">
-                                  {dispensation.patientNom || dispensation.serviceNom}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  {dispensation.patientId ? 'Patient' : 'Service'}
-                                </Typography>
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {dispensation.quantite} {medicament?.unite}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {dispensation.motif}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2">
-                                {dispensation.prescripteur}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Chip
-                                label={dispensation.statut}
-                                color={dispensation.statut === 'dispensé' ? 'success' : 'default'}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <Tooltip title="Voir détails">
-                                  <IconButton size="small">
-                                    <Visibility />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Modifier">
-                                  <IconButton size="small">
-                                    <Edit />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            </TableCell>
+                {dispensationsLoading ? (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Médicament</TableCell>
+                          <TableCell>Destinataire</TableCell>
+                          <TableCell>Quantité</TableCell>
+                          <TableCell>Motif</TableCell>
+                          <TableCell>Prescripteur</TableCell>
+                          <TableCell>Statut</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {[...Array(5)].map((_, i) => (
+                          <SkeletonTableRow key={i} />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : (
+                  <>
+                    <TableContainer>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Date</TableCell>
+                            <TableCell>Médicament</TableCell>
+                            <TableCell>Destinataire</TableCell>
+                            <TableCell>Quantité</TableCell>
+                            <TableCell>Motif</TableCell>
+                            <TableCell>Prescripteur</TableCell>
+                            <TableCell>Statut</TableCell>
+                            <TableCell>Actions</TableCell>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                          {dispensations.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={8} align="center">
+                                <Typography variant="body2" color="text.secondary" sx={{ py: 4 }}>
+                                  Aucune dispensation trouvée
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            dispensations.map((dispensation) => {
+                              const medicament = medicaments.find(med => med.id === dispensation.medicamentId);
+                              return (
+                                <TableRow key={dispensation.id}>
+                                  <TableCell>
+                                    {new Date(dispensation.dateDispensation).toLocaleDateString()}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Box>
+                                      <Typography variant="body2" fontWeight="bold">
+                                        {medicament?.nom || 'Médicament inconnu'}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {medicament?.code}
+                                      </Typography>
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Box>
+                                      <Typography variant="body2">
+                                        {dispensation.patientNom || dispensation.serviceNom || 'N/A'}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {dispensation.patientId ? 'Patient' : 'Service'}
+                                      </Typography>
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2">
+                                      {dispensation.quantite} {medicament?.unite || ''}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2">
+                                      {dispensation.motif}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Typography variant="body2">
+                                      {dispensation.prescripteur || 'N/A'}
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Chip
+                                      label={dispensation.statut}
+                                      color={dispensation.statut === 'dispensé' ? 'success' : 'default'}
+                                      size="small"
+                                    />
+                                  </TableCell>
+                                  <TableCell>
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                      <Tooltip title="Voir détails">
+                                        <IconButton size="small">
+                                          <Visibility />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Modifier">
+                                        <IconButton size="small">
+                                          <Edit />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Box>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    {pagination.totalPages > 1 && (
+                      <Stack spacing={2} sx={{ mt: 2, alignItems: 'center' }}>
+                        <Pagination
+                          count={pagination.totalPages}
+                          page={pagination.page}
+                          onChange={(_, page) => goToPage(page)}
+                          color="primary"
+                          showFirstButton
+                          showLastButton
+                        />
+                        <Typography variant="body2" color="text.secondary">
+                          Page {pagination.page} sur {pagination.totalPages} ({pagination.total} dispensations)
+                        </Typography>
+                      </Stack>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </Box>
@@ -1053,9 +904,13 @@ const Pharmacie: React.FC = () => {
                       </Grid>
                       <Grid item xs={12} md={4}>
                         <Paper sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="h4" color="success.main">
-                            {dispensations.length}
-                          </Typography>
+                          {loading ? (
+                            <Skeleton variant="text" width={60} height={40} sx={{ mx: 'auto' }} />
+                          ) : (
+                            <Typography variant="h4" color="success.main">
+                              {pagination.total}
+                            </Typography>
+                          )}
                           <Typography variant="body2" color="text.secondary">
                             Dispensations Total
                           </Typography>

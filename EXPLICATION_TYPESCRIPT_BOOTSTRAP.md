@@ -359,3 +359,5 @@ if (value) {
 
 **🎉 Vous comprenez maintenant les concepts TypeScript utilisés dans cette fonction !**
 
+
+

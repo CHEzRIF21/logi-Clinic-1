@@ -59,7 +59,7 @@ import { User, ModulePermission } from '../../types/auth';
 import { hasModuleAccess, canManageUsers } from '../../utils/permissions';
 import ThemeToggleButton from '../ui/ThemeToggleButton';
 import Logo from '../ui/Logo';
-import { PatientSearchAdvanced } from '../consultation/PatientSearchAdvanced';
+import PatientSelector from '../shared/PatientSelector';
 import { Patient } from '../../services/supabase';
 
 const drawerWidth = 280;
@@ -83,7 +83,6 @@ interface MenuItemConfig {
 const menuItemsConfig: MenuItemConfig[] = [
   { text: 'Tableau de bord', icon: <Dashboard />, path: '/', badge: null, module: null },
   { text: 'Consultations', icon: <MedicalServices />, path: '/consultations', badge: null, module: 'consultations' },
-  { text: 'Nouvelle Consultation', icon: <MedicalServices />, path: '/consultation-module', badge: null, module: 'consultations' },
   { text: 'Vaccination', icon: <Vaccines />, path: '/vaccination', badge: null, module: 'vaccination' },
   { text: 'Laboratoire', icon: <Science />, path: '/laboratoire', badge: null, module: 'laboratoire' },
   { text: 'Imagerie Médicale', icon: <ImageIcon />, path: '/imagerie', badge: null, module: 'imagerie' },
@@ -739,19 +738,13 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
             </Box>
           </Menu>
 
-          <Dialog open={searchDialogOpen} onClose={handleSearchDialogClose} fullWidth maxWidth="lg">
-            <DialogTitle>Recherche globale</DialogTitle>
-            <DialogContent dividers>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Recherchez rapidement un patient, un dossier ou un historique clinique sans quitter votre page
-                actuelle.
-              </Typography>
-              <PatientSearchAdvanced onPatientSelect={handlePatientSelect} selectedPatient={selectedPatient} />
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleSearchDialogClose}>Fermer</Button>
-            </DialogActions>
-          </Dialog>
+          <PatientSelector
+            open={searchDialogOpen}
+            onClose={handleSearchDialogClose}
+            onSelect={handlePatientSelect}
+            title="Recherche globale"
+            allowCreate={false}
+          />
 
           <Dialog open={profileDialogOpen} onClose={handleProfileClose} fullWidth maxWidth="sm">
             <DialogTitle>Mon profil</DialogTitle>

@@ -3,6 +3,7 @@ import { Box, Card, CardContent, Typography, Alert, Divider, Button } from '@mui
 import { Medication, PictureAsPdf } from '@mui/icons-material';
 import { PrescriptionFormModal } from '../PrescriptionFormModal';
 import { Patient } from '../../../services/supabase';
+import { ConsultationService } from '../../../services/consultationService';
 
 interface WorkflowStep10OrdonnanceProps {
   consultationId: string;
@@ -20,6 +21,21 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
   userId
 }) => {
   const [openPrescription, setOpenPrescription] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  const handleSavePrescription = async (lines: any[]) => {
+    setLoading(true);
+    try {
+      await ConsultationService.createPrescription(consultationId, patientId, userId, lines);
+      onPrescriptionComplete();
+      setOpenPrescription(false);
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de la prescription:', error);
+      alert('Erreur lors de la sauvegarde de la prescription');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Card>
@@ -44,6 +60,7 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
             startIcon={<Medication />}
             onClick={() => setOpenPrescription(true)}
             sx={{ alignSelf: 'flex-start' }}
+            disabled={loading}
           >
             Créer une ordonnance
           </Button>
@@ -61,10 +78,7 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
         <PrescriptionFormModal
           open={openPrescription}
           onClose={() => setOpenPrescription(false)}
-          onSave={async () => {
-            onPrescriptionComplete();
-            setOpenPrescription(false);
-          }}
+          onSave={handleSavePrescription}
           consultationId={consultationId}
           patientId={patientId}
           patient={patient}

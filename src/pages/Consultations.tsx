@@ -24,10 +24,13 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Tabs,
-  Tab,
   InputAdornment,
   Alert,
+  Snackbar,
+  Backdrop,
+  CircularProgress,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add,
@@ -39,197 +42,302 @@ import {
   Assignment,
   Search,
   Print,
+  Visibility,
+  Close,
 } from '@mui/icons-material';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatBadge } from '../components/ui/StatBadge';
-import jsPDF from 'jspdf';
 import { PatientService } from '../services/patientService';
 import { Patient } from '../services/supabase';
+import { Consultation, ConsultationService } from '../services/consultationService';
 import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';
-
-interface PrescriptionItem {
-  medicament: string;
-  dosage: string;
-  duree: string;
-  voie: string;
-}
-
-interface ExamenItem {
-  type: 'Laboratoire' | 'Imagerie';
-  nom: string;
-  notes?: string;
-}
-
-interface Consultation {
-  id: string;
-  patientId: string;
-  patient?: Patient;
-  medecin: string;
-  date: string;
-  heure: string;
-  typeConsultation: 'Première fois' | 'Contrôle' | 'Référence';
-  motif: string;
-  antecedentsAuto?: string;
-  allergiesAuto?: string;
-  notesAntecedents?: string;
-  temperature?: number;
-  tensionSystolique?: number;
-  tensionDiastolique?: number;
-  frequenceCardiaque?: number;
-  frequenceRespiratoire?: number;
-  poidsKg?: number;
-  tailleCm?: number;
-  imc?: number;
-  examenClinique?: string;
-  diagnostics?: string;
-  prescriptions?: PrescriptionItem[];
-  examens?: ExamenItem[];
-  statut: 'terminee' | 'en_cours' | 'annulee';
-}
+import { ConsultationStartDialog } from '../components/consultation/ConsultationStartDialog';
+import { ConsultationWorkflow } from '../components/consultation/ConsultationWorkflow';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../services/supabase';
 
 const Consultations: React.FC = () => {
+  const navigate = useNavigate();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [openDialog, setOpenDialog] = useState(false);
   const [openPatientSelector, setOpenPatientSelector] = useState(false);
+  const [openStartDialog, setOpenStartDialog] = useState(false);
+  const [currentConsultation, setCurrentConsultation] = useState<Consultation | null>(null);
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState<Partial<Consultation>>({
-    medecin: '',
-    date: new Date().toISOString().slice(0, 10),
-    heure: '08:00',
-    typeConsultation: 'Première fois',
-    motif: '',
-    statut: 'en_cours',
-    prescriptions: [],
-    examens: [],
+  const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string>('');
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
+    open: false,
+    message: '',
+    severity: 'success'
   });
 
-  // Charger les consultations depuis Supabase (à implémenter)
+  // Charger l'ID utilisateur au montage
   useEffect(() => {
+    loadUserId();
     loadConsultations();
   }, []);
 
+  const loadUserId = async () => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        if (user.auth_user_id) {
+          const { data } = await supabase
+            .from('users')
+            .select('id')
+            .eq('auth_user_id', user.auth_user_id)
+            .single();
+          if (data) {
+            setUserId(data.id);
+            return;
+          }
+        }
+        if (user.id) {
+          setUserId(user.id);
+        }
+      } catch (error) {
+        console.error('Erreur chargement userId:', error);
+      }
+    }
+  };
+
   const loadConsultations = async () => {
     try {
-      // TODO: Implémenter la récupération depuis Supabase
-      // Pour l'instant, utiliser localStorage comme fallback
-      const stored = localStorage.getItem('consultations');
-      if (stored) {
-        const parsed = JSON.parse(stored) as Consultation[];
-        // Charger les données patient pour chaque consultation
-        const consultationsWithPatients = await Promise.all(
-          parsed.map(async (c) => {
-            if (c.patientId) {
-              try {
-                const patient = await PatientService.getPatientById(c.patientId);
-                return { ...c, patient };
-              } catch {
-                return c;
-              }
-            }
+      setLoading(true);
+      const data = await ConsultationService.getAllConsultations();
+      
+      // Charger les informations patient pour chaque consultation
+      const consultationsWithPatients = await Promise.all(
+        (data || []).map(async (c) => {
+          try {
+            const patient = await PatientService.getPatientById(c.patient_id);
+            return { ...c, patient };
+          } catch {
             return c;
-          })
-        );
-        setConsultations(consultationsWithPatients);
-      }
+          }
+        })
+      );
+      
+      setConsultations(consultationsWithPatients as any);
     } catch (error) {
       console.error('Erreur lors du chargement des consultations:', error);
+      setSnackbar({
+        open: true,
+        message: 'Erreur lors du chargement des consultations',
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSelectPatient = (patient: Patient) => {
     setSelectedPatient(patient);
-    setForm({
-      ...form,
-      patientId: patient.id,
-      antecedentsAuto: patient.antecedents_medicaux || '',
-      allergiesAuto: patient.allergies || '',
-    });
+    setOpenPatientSelector(false);
+    setOpenStartDialog(true);
   };
 
-  const handleCreateConsultation = () => {
+  const handleStartConsultation = async (templateId: string, type: string) => {
     if (!selectedPatient) {
-      setOpenPatientSelector(true);
+      setSnackbar({
+        open: true,
+        message: 'Veuillez sélectionner un patient',
+        severity: 'error'
+      });
       return;
     }
-    setOpenDialog(true);
+
+    if (!userId) {
+      setSnackbar({
+        open: true,
+        message: 'Utilisateur non connecté',
+        severity: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const consultation = await ConsultationService.createConsultation(
+        selectedPatient.id,
+        userId
+      );
+
+      if (type) {
+        await ConsultationService.updateConsultation(
+          consultation.id,
+          { categorie_motif: type } as any,
+          userId,
+          'categorie_motif'
+        );
+      }
+
+      setCurrentConsultation(consultation);
+      setOpenStartDialog(false);
+      setSnackbar({
+        open: true,
+        message: 'Consultation créée avec succès',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Erreur lors de la création de la consultation:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Erreur lors de la création de la consultation',
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveConsultation = () => {
-    if (!selectedPatient) return;
+  const handleStepComplete = async (step: number, data: any) => {
+    // La sauvegarde est gérée dans ConsultationWorkflow
+    console.log(`Étape ${step} complétée`);
+  };
 
-    const newConsultation: Consultation = {
-      id: Date.now().toString(),
-      patientId: selectedPatient.id,
-      patient: selectedPatient,
-      ...form,
-    } as Consultation;
+  const handleCloseConsultation = async () => {
+    // Recharger la consultation pour avoir les dernières données
+    if (currentConsultation) {
+      try {
+        const updated = await ConsultationService.getConsultationById(currentConsultation.id);
+        if (updated) {
+          setCurrentConsultation(updated);
+        }
+      } catch (error) {
+        console.error('Erreur lors du rechargement:', error);
+      }
+    }
 
-    const updated = [...consultations, newConsultation];
-    setConsultations(updated);
-    localStorage.setItem('consultations', JSON.stringify(updated));
-    setOpenDialog(false);
-    setForm({
-      medecin: '',
-      date: new Date().toISOString().slice(0, 10),
-      heure: '08:00',
-      typeConsultation: 'Première fois',
-      motif: '',
-      statut: 'en_cours',
-      prescriptions: [],
-      examens: [],
-    });
+    // Recharger la liste des consultations
+    await loadConsultations();
+    
+    setCurrentConsultation(null);
     setSelectedPatient(null);
+    setSnackbar({
+      open: true,
+      message: 'Consultation fermée',
+      severity: 'info'
+    });
+  };
+
+  const handleNewConsultation = () => {
+    if (currentConsultation && currentConsultation.status !== 'CLOTURE') {
+      if (window.confirm('Une consultation est en cours. Voulez-vous vraiment en créer une nouvelle ?')) {
+        setCurrentConsultation(null);
+        setSelectedPatient(null);
+        setOpenPatientSelector(true);
+      } else {
+        return;
+      }
+    } else {
+      setOpenPatientSelector(true);
+    }
+  };
+
+  const handleResumeConsultation = async (consultation: Consultation) => {
+    try {
+      // Charger le patient
+      const patient = await PatientService.getPatientById(consultation.patient_id);
+      setSelectedPatient(patient);
+      setCurrentConsultation(consultation);
+    } catch (error) {
+      console.error('Erreur lors de la reprise:', error);
+      setSnackbar({
+        open: true,
+        message: 'Erreur lors de la reprise de la consultation',
+        severity: 'error'
+      });
+    }
   };
 
   const filteredConsultations = useMemo(() => {
     if (!search) return consultations;
     return consultations.filter(
-      (c) =>
-        c.patient?.nom.toLowerCase().includes(search.toLowerCase()) ||
-        c.patient?.prenom.toLowerCase().includes(search.toLowerCase()) ||
-        c.patient?.identifiant.toLowerCase().includes(search.toLowerCase()) ||
-        c.motif.toLowerCase().includes(search.toLowerCase())
+      (c) => {
+        const patient = (c as any).patient;
+        const patientMatch = patient
+          ? `${patient.prenom} ${patient.nom} ${patient.identifiant}`.toLowerCase().includes(search.toLowerCase())
+          : c.patient_id?.toLowerCase().includes(search.toLowerCase());
+        
+        const motifMatch = c.motifs?.some(m => m.toLowerCase().includes(search.toLowerCase()));
+        const diagnosticMatch = c.diagnostics?.some(d => d.toLowerCase().includes(search.toLowerCase()));
+        
+        return patientMatch || motifMatch || diagnosticMatch;
+      }
     );
   }, [consultations, search]);
 
   // Calcul des statistiques
   const stats = useMemo(() => {
     const total = consultations.length;
-    const terminees = consultations.filter(c => c.statut === 'terminee').length;
-    const enCours = consultations.filter(c => c.statut === 'en_cours').length;
-    const annulees = consultations.filter(c => c.statut === 'annulee').length;
+    const terminees = consultations.filter(c => c.status === 'CLOTURE').length;
+    const enCours = consultations.filter(c => c.status === 'EN_COURS').length;
+    const annulees = consultations.filter(c => c.status === 'ANNULEE').length;
     return { total, terminees, enCours, annulees };
   }, [consultations]);
 
+  // Si une consultation est en cours, afficher le workflow
+  if (currentConsultation && selectedPatient) {
+    return (
+      <Box sx={{ height: '100vh', overflow: 'hidden' }}>
+        <ConsultationWorkflow
+          consultation={currentConsultation}
+          patient={selectedPatient}
+          onStepComplete={handleStepComplete}
+          onClose={handleCloseConsultation}
+          userId={userId}
+        />
+        
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            onClose={() => setSnackbar({ ...snackbar, open: false })}
+            severity={snackbar.severity}
+            sx={{ width: '100%' }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Box>
+    );
+  }
+
+  // Page principale : Liste des consultations
   return (
     <Box sx={{ p: 3 }}>
-      {/* En-tête amélioré */}
+      {/* En-tête */}
       <ToolbarBits sx={{ mb: 3 }}>
         <Box display="flex" alignItems="center" gap={2}>
           <MedicalServices color="primary" sx={{ fontSize: 40 }} />
           <Box>
-            <GradientText variant="h4">Gestion des Consultations</GradientText>
+            <GradientText variant="h4">Consultations</GradientText>
             <Typography variant="body2" color="text.secondary">
-              Gérez les consultations médicales et leurs prescriptions
+              Gestion des consultations médicales et workflow complet
             </Typography>
           </Box>
         </Box>
         <Button
           variant="contained"
           startIcon={<Add />}
-          onClick={handleCreateConsultation}
+          onClick={handleNewConsultation}
           size="medium"
         >
           Nouvelle Consultation
         </Button>
       </ToolbarBits>
 
-      {/* Statistiques synthétiques */}
+      {/* Statistiques */}
       <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }} gap={2} mb={3}>
         <GlassCard sx={{ p: 2 }}>
           <StatBadge label="Total consultations" value={stats.total} icon={<Assignment />} color="primary" />
@@ -245,8 +353,8 @@ const Consultations: React.FC = () => {
         </GlassCard>
       </Box>
 
-      {/* Sélection de patient */}
-      {selectedPatient && (
+      {/* Patient sélectionné */}
+      {selectedPatient && !currentConsultation && (
         <Box sx={{ mb: 3 }}>
           <PatientCard patient={selectedPatient} compact />
         </Box>
@@ -256,7 +364,7 @@ const Consultations: React.FC = () => {
       <Box sx={{ mb: 3 }}>
         <TextField
           fullWidth
-          placeholder="Rechercher une consultation..."
+          placeholder="Rechercher une consultation par patient, motif ou diagnostic..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{
@@ -269,73 +377,128 @@ const Consultations: React.FC = () => {
         />
       </Box>
 
+      {/* Tabs pour filtrer */}
+      <Box sx={{ mb: 3 }}>
+        <Tabs value={tab} onChange={(_, newValue) => setTab(newValue)}>
+          <Tab label="Toutes" />
+          <Tab label="En cours" />
+          <Tab label="Terminées" />
+          <Tab label="Annulées" />
+        </Tabs>
+      </Box>
+
       {/* Liste des consultations */}
       <GlassCard sx={{ p: 2 }}>
         <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Date</TableCell>
-              <TableCell>Patient</TableCell>
-              <TableCell>Médecin</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Motif</TableCell>
-              <TableCell>Statut</TableCell>
-              <TableCell>Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredConsultations.length === 0 ? (
+          <Table>
+            <TableHead>
               <TableRow>
-                <TableCell colSpan={7} align="center">
-                  <Typography variant="body2" color="text.secondary">
-                    Aucune consultation trouvée
-                  </Typography>
-                </TableCell>
+                <TableCell>Date</TableCell>
+                <TableCell>Patient</TableCell>
+                <TableCell>Motif</TableCell>
+                <TableCell>Diagnostic</TableCell>
+                <TableCell>Statut</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
-            ) : (
-              filteredConsultations.map((consultation) => (
-                <TableRow key={consultation.id}>
-                  <TableCell>
-                    {new Date(consultation.date).toLocaleDateString('fr-FR')} {consultation.heure}
-                  </TableCell>
-                  <TableCell>
-                    {consultation.patient
-                      ? `${consultation.patient.prenom} ${consultation.patient.nom}`
-                      : consultation.patientId}
-                  </TableCell>
-                  <TableCell>{consultation.medecin}</TableCell>
-                  <TableCell>
-                    <Chip label={consultation.typeConsultation} size="small" />
-                  </TableCell>
-                  <TableCell>{consultation.motif}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={consultation.statut}
-                      color={
-                        consultation.statut === 'terminee'
-                          ? 'success'
-                          : consultation.statut === 'en_cours'
-                          ? 'warning'
-                          : 'error'
-                      }
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <IconButton size="small" color="primary">
-                      <Edit />
-                    </IconButton>
-                    <IconButton size="small" color="error">
-                      <Delete />
-                    </IconButton>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <CircularProgress />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : filteredConsultations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <Typography variant="body2" color="text.secondary">
+                      Aucune consultation trouvée
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredConsultations
+                  .filter(c => {
+                    if (tab === 1) return c.status === 'EN_COURS';
+                    if (tab === 2) return c.status === 'CLOTURE';
+                    if (tab === 3) return c.status === 'ANNULEE';
+                    return true;
+                  })
+                  .map((consultation) => (
+                    <TableRow key={consultation.id} hover>
+                      <TableCell>
+                        {new Date(consultation.created_at).toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        {(consultation as any).patient ? (
+                          <Box>
+                            <Typography variant="body2">
+                              {(consultation as any).patient.prenom} {(consultation as any).patient.nom}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {(consultation as any).patient.identifiant}
+                            </Typography>
+                          </Box>
+                        ) : consultation.patient_id ? (
+                          <Chip label={consultation.patient_id.substring(0, 8)} size="small" />
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {consultation.motifs && consultation.motifs.length > 0
+                          ? consultation.motifs[0]
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {consultation.diagnostics && consultation.diagnostics.length > 0
+                          ? consultation.diagnostics[0]
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={consultation.status}
+                          color={
+                            consultation.status === 'CLOTURE'
+                              ? 'success'
+                              : consultation.status === 'EN_COURS'
+                              ? 'warning'
+                              : 'error'
+                          }
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {consultation.status === 'EN_COURS' ? (
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleResumeConsultation(consultation)}
+                            title="Reprendre la consultation"
+                          >
+                            <Edit />
+                          </IconButton>
+                        ) : (
+                          <IconButton size="small" color="primary" title="Voir les détails">
+                            <Visibility />
+                          </IconButton>
+                        )}
+                        <IconButton size="small" color="default" title="Imprimer">
+                          <Print />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </GlassCard>
 
       {/* Dialog de sélection de patient */}
@@ -346,86 +509,43 @@ const Consultations: React.FC = () => {
         title="Sélectionner un patient pour la consultation"
         allowCreate={true}
         onCreateNew={() => {
-          window.location.href = '/patients?action=create&service=Médecine générale';
+          navigate('/patients?action=create&service=Médecine générale');
         }}
       />
 
-      {/* Dialog de création de consultation */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Nouvelle Consultation</DialogTitle>
-        <DialogContent>
-          {selectedPatient && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Patient: {selectedPatient.prenom} {selectedPatient.nom} ({selectedPatient.identifiant})
-            </Alert>
-          )}
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Médecin"
-                value={form.medecin}
-                onChange={(e) => setForm({ ...form, medecin: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Date"
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Heure"
-                type="time"
-                value={form.heure}
-                onChange={(e) => setForm({ ...form, heure: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Type de consultation</InputLabel>
-                <Select
-                  value={form.typeConsultation}
-                  onChange={(e) =>
-                    setForm({ ...form, typeConsultation: e.target.value as any })
-                  }
-                >
-                  <MenuItem value="Première fois">Première fois</MenuItem>
-                  <MenuItem value="Contrôle">Contrôle</MenuItem>
-                  <MenuItem value="Référence">Référence</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Motif"
-                multiline
-                rows={3}
-                value={form.motif}
-                onChange={(e) => setForm({ ...form, motif: e.target.value })}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Annuler</Button>
-          <Button
-            variant="contained"
-            onClick={handleSaveConsultation}
-            disabled={!selectedPatient || !form.medecin || !form.motif}
-          >
-            Enregistrer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Dialog de démarrage de consultation */}
+      <ConsultationStartDialog
+        open={openStartDialog}
+        onClose={() => {
+          setOpenStartDialog(false);
+          if (!currentConsultation) {
+            setSelectedPatient(null);
+          }
+        }}
+        onStart={handleStartConsultation}
+        patient={selectedPatient}
+      />
+
+      {/* Backdrop de chargement */}
+      <Backdrop open={loading} sx={{ zIndex: 9999 }}>
+        <CircularProgress color="primary" />
+      </Backdrop>
+
+      {/* Snackbar pour les notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

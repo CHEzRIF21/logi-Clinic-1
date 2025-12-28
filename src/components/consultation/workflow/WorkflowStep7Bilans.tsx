@@ -15,9 +15,11 @@ import {
   Alert,
   Divider
 } from '@mui/material';
-import { Description, History, Science } from '@mui/icons-material';
+import { Description, History, Science, Add } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
 import { ConsultationService, LabRequest } from '../../../services/consultationService';
+import { LabRequestWizard } from '../LabRequestWizard';
+import { LaboratoireIntegrationService } from '../../../services/laboratoireIntegrationService';
 
 interface WorkflowStep7BilansProps {
   patient: Patient;
@@ -30,6 +32,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
 }) => {
   const [labRequests, setLabRequests] = useState<LabRequest[]>([]);
   const [loading, setLoading] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   useEffect(() => {
     loadLabRequests();
@@ -44,6 +47,24 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
       console.error('Erreur lors du chargement des bilans:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateLabRequest = async (request: Partial<LabRequest>) => {
+    try {
+      // Utiliser le service d'intégration pour créer la prescription de labo
+      await LaboratoireIntegrationService.createPrescriptionFromConsultation(
+        consultationId,
+        patient.id,
+        request.type_examen || 'Analyse demandée',
+        request.details || ''
+      );
+      
+      await loadLabRequests();
+      setWizardOpen(false);
+    } catch (error) {
+      console.error('Erreur lors de la création de la demande:', error);
+      throw error;
     }
   };
 
@@ -67,16 +88,27 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
             <Typography variant="subtitle1" fontWeight="bold">
               Derniers résultats de laboratoire
             </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<History />}
-              onClick={() => {
-                // Ouvrir l'historique complet
-                window.open(`/patients/${patient.id}/bilans`, '_blank');
-              }}
-            >
-              Consulter l'historique
-            </Button>
+            <Box display="flex" gap={1}>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => setWizardOpen(true)}
+                size="small"
+              >
+                Créer une demande
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<History />}
+                onClick={() => {
+                  // Ouvrir l'historique complet
+                  window.open(`/patients/${patient.id}/bilans`, '_blank');
+                }}
+                size="small"
+              >
+                Consulter l'historique
+              </Button>
+            </Box>
           </Box>
 
           <TableContainer component={Paper} variant="outlined">
@@ -140,6 +172,14 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
             </Button>
           </Alert>
         </Box>
+
+        <LabRequestWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          onSave={handleCreateLabRequest}
+          consultationId={consultationId}
+          patientId={patient.id}
+        />
       </CardContent>
     </Card>
   );
