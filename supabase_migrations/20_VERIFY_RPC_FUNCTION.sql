@@ -76,3 +76,5 @@ LEFT JOIN clinics c ON u.clinic_id = c.id
 WHERE u.email = 'bagarayannick1@gmail.com';
 
 
+
+

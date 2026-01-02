@@ -74,6 +74,10 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
   };
 
   const handleStart = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ConsultationStartDialog.tsx:76',message:'handleStart entry',data:{hasPatient:!!patient,patientId:patient?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    
     if (!patient) {
       alert('Veuillez sélectionner un patient');
       return;
@@ -84,11 +88,31 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
     try {
       const templateId = selectedTemplate?.id || '';
       const type = selectedTemplate?.specialite || customType.trim() || 'Médecine générale';
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ConsultationStartDialog.tsx:86',message:'Before onStart call',data:{templateId,type},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
       await onStart(templateId, type);
-      handleClose();
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ConsultationStartDialog.tsx:88',message:'After onStart call - NOT closing dialog yet',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      // Ne PAS fermer le dialog ici - laisser le parent le fermer après avoir mis à jour le state
+      // Le parent fermera le dialog via setOpenStartDialog(false) dans handleStartConsultation
+      // Cela évite le race condition où onClose réinitialise selectedPatient avant que React ne mette à jour le state
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ConsultationStartDialog.tsx:90',message:'After handleClose',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ConsultationStartDialog.tsx:91',message:'Error in handleStart',data:{errorMessage:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       console.error('Erreur lors du démarrage:', error);
       alert('Erreur lors du démarrage de la consultation');
+      // Ne pas fermer le dialog en cas d'erreur
     } finally {
       setLoading(false);
     }

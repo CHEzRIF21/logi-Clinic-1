@@ -49,6 +49,7 @@ import FormulaireNouveauNe from '../components/maternite/FormulaireNouveauNe';
 import FormulaireSurveillancePostPartum from '../components/maternite/FormulaireSurveillancePostPartum';
 import { IntegrationService } from '../services/integrationService';
 import { MaterniteService, DossierObstetrical, DossierObstetricalFormData } from '../services/materniteService';
+import MaterniteApiService from '../services/materniteApiService';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';

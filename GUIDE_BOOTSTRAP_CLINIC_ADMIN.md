@@ -131,7 +131,7 @@ Ouvrez PowerShell dans le dossier du projet :
 cd "c:\Users\Mustafa\Desktop\logi Clinic 1"
 
 # Définir le token (remplacez YOUR_TOKEN par votre token)
-$env:SUPABASE_ACCESS_TOKEN='YOUR_TOKEN'
+$env:SUPABASE_ACCESS_TOKEN='sbp_5da8e97668cd218ba3095c6f1321603303f5aee3'
 
 # Lier le projet
 npx supabase link --project-ref bnfgemmlokvetmohiqch
@@ -194,7 +194,7 @@ console.log('Access Token:', session?.access_token);
 # Se connecter en tant que SUPER_ADMIN
 $body = @{
     email = "babocher21@gmail.com"
-    password = "VOTRE_MOT_DE_PASSE_SUPER_ADMIN"
+    password = "BABOni21"
 } | ConvertTo-Json
 
 $response = Invoke-RestMethod -Uri "https://bnfgemmlokvetmohiqch.supabase.co/auth/v1/token?grant_type=password" `

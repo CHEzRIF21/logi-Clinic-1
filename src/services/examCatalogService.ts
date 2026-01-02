@@ -53,7 +53,16 @@ const buildQuery = (filters?: ExamCatalogFilters) => {
 
 export const ExamCatalogService = {
   async list(filters?: ExamCatalogFilters): Promise<ExamCatalogEntry[]> {
-    return apiGet(`/exams${buildQuery(filters)}`);
+    try {
+      // apiClient gère déjà le préfixe /api si nécessaire
+      // Utiliser /exams car apiClient ajoute déjà API_BASE_URL qui peut contenir /api
+      return await apiGet(`/exams${buildQuery(filters)}`);
+    } catch (error: any) {
+      console.error('Erreur lors du chargement du catalogue d\'examens:', error);
+      // Si l'API n'est pas disponible, retourner un tableau vide plutôt que de planter
+      // Le composant utilisera alors la liste de fallback
+      return [];
+    }
   },
 
   async getById(id: string): Promise<ExamCatalogEntry> {

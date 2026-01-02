@@ -169,3 +169,5 @@ Si vous rencontrez des problèmes:
 3. Exécutez `.\verify_clinics.ps1` pour diagnostiquer
 4. Consultez `NETTOYAGE_COMPLET_RESUME.md` pour plus d'informations
 
+
+

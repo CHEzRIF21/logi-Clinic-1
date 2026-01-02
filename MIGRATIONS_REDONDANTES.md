@@ -134,3 +134,5 @@ Si vous avez supprimé des migrations par erreur, vous pouvez:
 1. Restaurer depuis votre sauvegarde Git
 2. Ou réappliquer les migrations nécessaires depuis l'historique Git
 
+
+

@@ -23,7 +23,9 @@ export class AnamneseTemplateService {
       throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
     }
     const token = localStorage.getItem('token');
-    const url = new URL(`${API_URL}/api/anamnese-templates`);
+    // `VITE_API_URL` pointe déjà sur la base API (souvent `http://localhost:3000/api`)
+    // donc on évite de rajouter un second `/api`.
+    const url = new URL(`${API_URL}/anamnese-templates`);
     
     if (categorie) {
       url.searchParams.append('categorie', categorie);
@@ -54,7 +56,7 @@ export class AnamneseTemplateService {
     }
     const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
+    const response = await fetch(`${API_URL}/anamnese-templates/${id}`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`
@@ -79,7 +81,7 @@ export class AnamneseTemplateService {
     }
     const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_URL}/api/anamnese-templates`, {
+    const response = await fetch(`${API_URL}/anamnese-templates`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -109,7 +111,7 @@ export class AnamneseTemplateService {
     }
     const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
+    const response = await fetch(`${API_URL}/anamnese-templates/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -136,7 +138,7 @@ export class AnamneseTemplateService {
     }
     const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_URL}/api/anamnese-templates/${id}`, {
+    const response = await fetch(`${API_URL}/anamnese-templates/${id}`, {
       method: 'DELETE',
       headers: {
         Authorization: `Bearer ${token}`

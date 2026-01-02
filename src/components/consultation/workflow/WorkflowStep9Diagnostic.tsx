@@ -100,7 +100,12 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
   };
 
   useEffect(() => {
-    updateDiagnostics();
+    // Utiliser un debounce pour éviter les mises à jour trop fréquentes
+    const timeoutId = setTimeout(() => {
+      updateDiagnostics();
+    }, 300);
+    
+    return () => clearTimeout(timeoutId);
   }, [principalCode, principalLibelle, principalType, secondaire]);
 
   return (

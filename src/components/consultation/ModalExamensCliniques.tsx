@@ -36,8 +36,16 @@ export const ModalExamensCliniques: React.FC<ModalExamensCliniquesProps> = ({
     onClose();
   };
 
+  const handleDialogClose = (event: any, reason?: string) => {
+    // Empêcher la fermeture par clic en dehors ou ESC
+    if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+      return;
+    }
+    handleClose();
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleDialogClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="h6">Examens cliniques</Typography>

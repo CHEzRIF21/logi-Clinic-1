@@ -149,3 +149,5 @@ Les advisors Supabase ont identifié plusieurs problèmes de performance non-cri
 
 **État Global:** ✅ Backend fonctionnel et prêt pour la production
 
+
+

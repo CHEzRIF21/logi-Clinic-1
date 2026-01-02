@@ -47,47 +47,70 @@ export const WorkflowStep3TraitementEnCours: React.FC<WorkflowStep3TraitementEnC
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState<Medicament>({ nom: '', dosage: '', frequence: '' });
 
+  const safeParseArray = (raw: string): Medicament[] | null => {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as Medicament[]) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const stableMedicamentsString = (list: Medicament[]) =>
+    JSON.stringify(
+      (list || []).map((m) => ({
+        id: m?.id,
+        nom: m?.nom || '',
+        dosage: m?.dosage || '',
+        frequence: m?.frequence || '',
+      }))
+    );
+
   useEffect(() => {
-    // Import automatique depuis le dossier patient
-    if (patient.medicaments_reguliers) {
-      try {
-        const parsed = JSON.parse(patient.medicaments_reguliers);
-        if (Array.isArray(parsed)) {
-          setMedicaments(parsed);
-        }
-      } catch {
+    // Source de vérité: si `traitementEnCours` est un JSON, il prime.
+    // Sinon on tente un import depuis `patient.medicaments_reguliers`.
+    const fromTraitement = traitementEnCours ? safeParseArray(traitementEnCours) : null;
+    let next: Medicament[] | null = fromTraitement;
+
+    if (!next && patient.medicaments_reguliers) {
+      const fromPatientJson = safeParseArray(patient.medicaments_reguliers);
+      if (fromPatientJson) {
+        next = fromPatientJson;
+      } else {
         // Si ce n'est pas du JSON, traiter comme texte
-        const lines = patient.medicaments_reguliers.split('\n').filter(l => l.trim());
-        const parsed = lines.map(line => {
+        const lines = patient.medicaments_reguliers.split('\n').filter((l) => l.trim());
+        next = lines.map((line) => {
           const parts = line.split(' - ');
           return {
             nom: parts[0] || '',
             dosage: parts[1] || '',
-            frequence: parts[2] || ''
+            frequence: parts[2] || '',
           };
         });
-        setMedicaments(parsed);
       }
     }
 
-    // Charger depuis traitement_en_cours si disponible
-    if (traitementEnCours) {
-      try {
-        const parsed = JSON.parse(traitementEnCours);
-        if (Array.isArray(parsed)) {
-          setMedicaments(parsed);
-        }
-      } catch {
-        // Traiter comme texte
+    if (next) {
+      const currentStr = stableMedicamentsString(medicaments);
+      const nextStr = stableMedicamentsString(next);
+      if (currentStr !== nextStr) {
+        setMedicaments(next);
       }
     }
-  }, [patient, traitementEnCours]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patient?.id, patient?.medicaments_reguliers, traitementEnCours]);
 
   useEffect(() => {
     // Sauvegarder les médicaments
-    const traitementText = JSON.stringify(medicaments);
-    onTraitementChange(traitementText);
-  }, [medicaments, onTraitementChange]);
+    const traitementText = stableMedicamentsString(medicaments);
+    // Guard anti-boucle: ne pas renvoyer la même valeur au parent
+    if (traitementText !== (traitementEnCours || '')) {
+      // #region agent log (debug-session)
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'post-fix',hypothesisId:'LOOP',location:'WorkflowStep3TraitementEnCours.tsx:save',message:'onTraitementChange emit',data:{len:medicaments.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion agent log (debug-session)
+      onTraitementChange(traitementText);
+    }
+  }, [medicaments, onTraitementChange, traitementEnCours]);
 
   const handleAdd = () => {
     setFormData({ nom: '', dosage: '', frequence: '' });

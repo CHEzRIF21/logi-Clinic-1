@@ -50,8 +50,25 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
   const [activeTab, setActiveTab] = useState(0);
   const [medicaux, setMedicaux] = useState<Antecedent[]>([]);
   const [chirurgicaux, setChirurgicaux] = useState<Antecedent[]>([]);
-  const [familiaux, setFamiliaux] = useState<string[]>([]);
+  const [familiaux, setFamiliaux] = useState<Array<{ id: string; value: string }>>([]);
   const [initialized, setInitialized] = useState(false);
+
+  const stableAntecedentsString = (a: any) => {
+    try {
+      const medicauxS = Array.isArray(a?.medicaux)
+        ? a.medicaux.map((x: any) => ({ nom: x?.nom || '', annee: x?.annee || '' }))
+        : [];
+      const chirurgS = Array.isArray(a?.chirurgicaux)
+        ? a.chirurgicaux.map((x: any) => ({ nom: x?.nom || '', annee: x?.annee || '' }))
+        : [];
+      const familS = Array.isArray(a?.familiaux)
+        ? a.familiaux.map((x: any) => (typeof x === 'string' ? x : x?.value || ''))
+        : [];
+      return JSON.stringify({ medicaux: medicauxS, chirurgicaux: chirurgS, familiaux: familS });
+    } catch {
+      return '';
+    }
+  };
 
   useEffect(() => {
     // Éviter les re-initialisations multiples
@@ -84,7 +101,11 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
         })));
       }
       if (antecedents.familiaux && Array.isArray(antecedents.familiaux) && antecedents.familiaux.length > 0) {
-        setFamiliaux(antecedents.familiaux);
+        // Convertir les strings en objets avec ID
+        setFamiliaux(antecedents.familiaux.map((f: string, idx: number) => ({
+          id: `familial-${idx}-${Date.now()}`,
+          value: f
+        })));
       }
     }
 
@@ -92,12 +113,22 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
   }, [patient, antecedents, initialized, medicaux.length]);
 
   useEffect(() => {
-    onAntecedentsChange({
+    const payload = {
       medicaux,
       chirurgicaux,
-      familiaux
-    });
-  }, [medicaux, chirurgicaux, familiaux, onAntecedentsChange]);
+      familiaux: familiaux.map((f) => f.value),
+    };
+
+    // Guard anti-boucle: ne pas renvoyer au parent si rien n'a changé sur le fond
+    const nextStr = stableAntecedentsString(payload);
+    const prevStr = stableAntecedentsString(antecedents);
+    if (nextStr !== prevStr) {
+      // #region agent log (debug-session)
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'post-fix',hypothesisId:'LOOP',location:'WorkflowStep4Antecedents.tsx:save',message:'onAntecedentsChange emit',data:{med:medicaux.length,chir:chirurgicaux.length,fam:familiaux.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion agent log (debug-session)
+      onAntecedentsChange(payload);
+    }
+  }, [medicaux, chirurgicaux, familiaux, onAntecedentsChange, antecedents]);
 
   const addAntecedent = (type: 'medicaux' | 'chirurgicaux') => {
     const newId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -129,12 +160,13 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
   };
 
   const addFamilial = () => {
-    setFamiliaux([...familiaux, '']);
+    const newId = `familial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setFamiliaux([...familiaux, { id: newId, value: '' }]);
   };
 
   const updateFamilial = (index: number, value: string) => {
     const updated = [...familiaux];
-    updated[index] = value;
+    updated[index] = { ...updated[index], value };
     setFamiliaux(updated);
   };
 
@@ -297,18 +329,16 @@ export const WorkflowStep4Antecedents: React.FC<WorkflowStep4AntecedentsProps> =
           </Typography>
           <Grid container spacing={2}>
             {familiaux.map((familial, index) => {
-              const uniqueKey = `familiaux-${index}-${familial.substring(0, 10)}`;
               return (
-                <Grid item xs={12} key={uniqueKey}>
+                <Grid item xs={12} key={familial.id}>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                     <SpeechTextField
                       fullWidth
                       label="Antécédent familial"
-                      value={familial || ''}
+                      value={familial.value || ''}
                       onChange={(value) => updateFamilial(index, value)}
                       placeholder="Ex: Père diabétique, Mère hypertendue"
                       enableSpeech={true}
-                      key={`${uniqueKey}-input`}
                     />
                     <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 40, justifyContent: 'center' }}>
                       <Button

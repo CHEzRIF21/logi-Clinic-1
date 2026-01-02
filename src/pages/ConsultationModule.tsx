@@ -53,7 +53,7 @@ const ConsultationModule: React.FC = () => {
             .from('users')
             .select('id')
             .eq('auth_user_id', user.auth_user_id)
-            .single();
+            .maybeSingle();
           if (data) {
             setUserId(data.id);
             return;

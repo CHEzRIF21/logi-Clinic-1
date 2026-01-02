@@ -20,6 +20,7 @@ import { Patient } from '../../../services/supabase';
 import { ConsultationService, LabRequest } from '../../../services/consultationService';
 import { LabRequestWizard } from '../LabRequestWizard';
 import { LaboratoireIntegrationService } from '../../../services/laboratoireIntegrationService';
+import { PatientBilansHistoryDialog } from './PatientBilansHistoryDialog';
 
 interface WorkflowStep7BilansProps {
   patient: Patient;
@@ -33,6 +34,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
   const [labRequests, setLabRequests] = useState<LabRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   useEffect(() => {
     loadLabRequests();
@@ -100,10 +102,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
               <Button
                 variant="outlined"
                 startIcon={<History />}
-                onClick={() => {
-                  // Ouvrir l'historique complet
-                  window.open(`/patients/${patient.id}/bilans`, '_blank');
-                }}
+                onClick={() => setHistoryDialogOpen(true)}
                 size="small"
               >
                 Consulter l'historique
@@ -179,6 +178,12 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
           onSave={handleCreateLabRequest}
           consultationId={consultationId}
           patientId={patient.id}
+        />
+
+        <PatientBilansHistoryDialog
+          open={historyDialogOpen}
+          onClose={() => setHistoryDialogOpen(false)}
+          patient={patient}
         />
       </CardContent>
     </Card>

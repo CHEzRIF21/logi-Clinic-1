@@ -115,3 +115,5 @@ En cas de problème de connexion :
 - L'authentification peut se faire via Supabase Auth ou via la table `users` directement
 
 
+
+

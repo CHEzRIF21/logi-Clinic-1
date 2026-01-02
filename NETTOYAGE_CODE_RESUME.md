@@ -108,3 +108,5 @@ Le fichier `server/prisma/seed.ts` semble être pour Prisma, mais le projet util
 - **Testez la migration consolidée** dans un environnement de développement d'abord
 - **Vérifiez les dépendances** avant de supprimer des fichiers
 
+
+

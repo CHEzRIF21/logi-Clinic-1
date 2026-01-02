@@ -156,3 +156,5 @@ Write-Host "1. Exécutez: .\verify_clinics.ps1" -ForegroundColor White
 Write-Host "2. Testez les connexions (voir GUIDE_TEST_CONNEXIONS.md)" -ForegroundColor White
 Write-Host ""
 
+
+

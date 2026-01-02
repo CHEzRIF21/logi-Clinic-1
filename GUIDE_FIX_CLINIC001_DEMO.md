@@ -118,3 +118,5 @@ WHERE tablename = 'clinics' AND policyname = 'clinics_public_read';
 2. Si la politique n'existe pas, exécutez `supabase_migrations/09_FIX_RLS_CLINICS_PUBLIC_READ.sql`
 
 
+
+

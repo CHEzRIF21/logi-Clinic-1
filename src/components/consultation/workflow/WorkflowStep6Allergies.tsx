@@ -8,9 +8,10 @@ import {
   Chip,
   Alert,
   Divider,
-  Button
+  Button,
+  Snackbar
 } from '@mui/material';
-import { Warning, Add } from '@mui/icons-material';
+import { Warning, Add, CheckCircle } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
 import { PatientService } from '../../../services/patientService';
 
@@ -25,6 +26,12 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
 }) => {
   const [allergies, setAllergies] = useState<string>(patient.allergies || '');
   const [newAllergy, setNewAllergy] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   useEffect(() => {
     onAllergiesChange(allergies);
@@ -48,9 +55,22 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
 
   const handleSave = async () => {
     try {
+      setSaving(true);
       await PatientService.updatePatient(patient.id, { allergies });
-    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: 'Allergies enregistrées avec succès',
+        severity: 'success'
+      });
+    } catch (error: any) {
       console.error('Erreur lors de la sauvegarde:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Erreur lors de l\'enregistrement des allergies',
+        severity: 'error'
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -158,12 +178,33 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
           />
 
           <Box sx={{ mt: 2 }}>
-            <Button variant="contained" color="error" onClick={handleSave}>
-              Enregistrer les allergies
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleSave}
+              disabled={saving}
+              startIcon={saving ? undefined : <CheckCircle />}
+            >
+              {saving ? 'Enregistrement...' : 'Enregistrer les allergies'}
             </Button>
           </Box>
         </CardContent>
       </Card>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 };

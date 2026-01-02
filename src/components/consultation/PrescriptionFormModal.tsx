@@ -128,10 +128,14 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
       }
     };
 
-    fetchMedicaments().catch(console.error);
+    // Debounce pour éviter trop de requêtes
+    const timeoutId = setTimeout(() => {
+      fetchMedicaments().catch(console.error);
+    }, 300);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
   }, [optionsQuery]);
 
@@ -192,18 +196,26 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
       const nextLine: PrescriptionLineDraft = {
         ...line,
         medicamentInput: value,
-        nom_medicament: value,
+        nom_medicament: value, // Mettre à jour le nom même si pas sélectionné du catalogue
+        alerts: [],
       };
 
+      // Si l'utilisateur efface la sélection, réinitialiser
       if (!value) {
         nextLine.selectedMedicament = null;
         nextLine.medicament_id = undefined;
-        nextLine.alerts = [];
       }
 
       return nextLine;
     });
-    setOptionsQuery(value);
+    
+    // Déclencher la recherche si au moins 2 caractères
+    if (value && value.length >= 2) {
+      setOptionsQuery(value);
+    } else {
+      setOptionsQuery('');
+      setMedicamentOptions([]);
+    }
   };
 
   const handleMedicamentSelect = (index: number, value: MedicamentSafetyInfo | string | null) => {
@@ -280,34 +292,40 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
       })),
     };
 
-    PrescriptionPrintService.printOrdonnance(ordonnanceData);
+    // Utiliser setTimeout pour éviter de bloquer l'interface
+    setTimeout(() => {
+      PrescriptionPrintService.printOrdonnance(ordonnanceData);
+    }, 100);
   };
 
   const handleSave = async () => {
+    // Validation assouplie : nom_medicament, posologie et quantite_totale sont obligatoires
+    // medicament_id est optionnel (permet la saisie libre)
     const invalidLines = lines.filter(
-      (line) => !line.nom_medicament || !line.posologie || !line.quantite_totale || !line.medicament_id
+      (line) => !line.nom_medicament || !line.posologie || !line.quantite_totale
     );
 
     if (invalidLines.length > 0) {
-      alert('Veuillez sélectionner un médicament du catalogue et remplir tous les champs obligatoires pour chaque ligne');
+      alert('Veuillez remplir tous les champs obligatoires (nom du médicament, posologie, quantité) pour chaque ligne');
       return;
     }
 
     try {
       await onSave(
         lines.map((line) => ({
-          medicament_id: line.medicament_id,
-          nom_medicament: line.nom_medicament,
-          posologie: line.posologie,
-          quantite_totale: line.quantite_totale,
+          medicament_id: line.medicament_id, // Peut être undefined si saisie libre
+          nom_medicament: line.nom_medicament || '',
+          posologie: line.posologie || '',
+          quantite_totale: line.quantite_totale || 1,
           duree_jours: line.duree_jours,
-          mode_administration: line.mode_administration,
-          instructions: line.instructions,
+          mode_administration: line.mode_administration || '',
+          instructions: line.instructions || '',
         }))
       );
       handleClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de la création de la prescription:', error);
+      alert(error.message || 'Erreur lors de la création de la prescription');
     }
   };
 
@@ -317,6 +335,14 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
     setOptionsQuery('');
     setIncompatibilityAlerts([]);
     onClose();
+  };
+
+  const handleDialogClose = (event: any, reason?: string) => {
+    // Empêcher la fermeture par clic en dehors ou ESC
+    if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+      return;
+    }
+    handleClose();
   };
 
   const getMedicamentName = (id: string) => {
@@ -337,7 +363,7 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleDialogClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box display="flex" alignItems="center" justifyContent="space-between">
           <Box display="flex" alignItems="center" gap={1}>
@@ -403,6 +429,16 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                         {...params}
                         label="Nom du médicament *"
                         required
+                        placeholder="Tapez au moins 2 caractères pour rechercher..."
+                        helperText={
+                          optionsLoading 
+                            ? 'Recherche en cours...' 
+                            : optionsQuery.length >= 2 && medicamentOptions.length === 0
+                            ? 'Aucun médicament trouvé. Vous pouvez continuer à taper librement.'
+                            : optionsQuery.length >= 2 && medicamentOptions.length > 0
+                            ? `${medicamentOptions.length} médicament(s) trouvé(s)`
+                            : 'Tapez au moins 2 caractères pour rechercher dans le catalogue'
+                        }
                         InputProps={{
                           ...params.InputProps,
                           endAdornment: (

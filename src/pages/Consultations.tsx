@@ -84,26 +84,65 @@ const Consultations: React.FC = () => {
 
   const loadUserId = async () => {
     const userData = localStorage.getItem('user');
+    
     if (userData) {
       try {
         const user = JSON.parse(userData);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:90',message:'loadUserId - parsed user',data:{hasAuthUserId:!!user.auth_user_id,hasUserId:!!user.id,authUserId:user.auth_user_id,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
+        // Vérifier que l'ID est un UUID valide
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
         if (user.auth_user_id) {
-          const { data } = await supabase
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:95',message:'loadUserId - querying by auth_user_id',data:{authUserId:user.auth_user_id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          
+          const { data, error } = await supabase
             .from('users')
             .select('id')
             .eq('auth_user_id', user.auth_user_id)
-            .single();
-          if (data) {
+            .maybeSingle();
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:100',message:'loadUserId - query result',data:{hasData:!!data,hasError:!!error,dataId:data?.id,errorMessage:error?.message,errorCode:error?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          
+          if (data && data.id && uuidRegex.test(data.id)) {
             setUserId(data.id);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:101',message:'loadUserId - setUserId from auth_user_id',data:{userId:data.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
             return;
+          } else if (error) {
+            console.error('Erreur récupération userId par auth_user_id:', error);
           }
         }
-        if (user.id) {
+        
+        // Vérifier que user.id est un UUID valide avant de l'utiliser
+        if (user.id && uuidRegex.test(user.id)) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:109',message:'loadUserId - setUserId from user.id',data:{userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
           setUserId(user.id);
+        } else if (user.id) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:112',message:'loadUserId - invalid user.id',data:{userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          console.warn('ID utilisateur invalide (pas un UUID):', user.id);
         }
       } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:114',message:'loadUserId - error',data:{errorMessage:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         console.error('Erreur chargement userId:', error);
       }
+    } else {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:117',message:'loadUserId - no userData in localStorage',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
     }
   };
 
@@ -144,7 +183,14 @@ const Consultations: React.FC = () => {
   };
 
   const handleStartConsultation = async (templateId: string, type: string) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:156',message:'handleStartConsultation entry',data:{selectedPatient:selectedPatient?.id,userId,hasSelectedPatient:!!selectedPatient},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B'})}).catch(()=>{});
+    // #endregion
+    
     if (!selectedPatient) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:158',message:'No selectedPatient - early return',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       setSnackbar({
         open: true,
         message: 'Veuillez sélectionner un patient',
@@ -153,10 +199,73 @@ const Consultations: React.FC = () => {
       return;
     }
 
-    if (!userId) {
+    // Si userId n'est pas chargé, essayer de le recharger avant de continuer
+    let currentUserId = userId;
+    if (!currentUserId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:166',message:'userId empty - attempting reload',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      // Récupérer directement depuis localStorage et Supabase (sans passer par le state)
+      const userData = localStorage.getItem('user');
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:170',message:'Direct userId fetch from localStorage',data:{hasUserData:!!userData},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:175',message:'Parsed user for direct fetch',data:{hasAuthUserId:!!user.auth_user_id,hasUserId:!!user.id,authUserId:user.auth_user_id,userId:user.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          
+          if (user.auth_user_id && uuidRegex.test(user.auth_user_id)) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:178',message:'Querying users by auth_user_id',data:{authUserId:user.auth_user_id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            
+            const { data, error } = await supabase
+              .from('users')
+              .select('id')
+              .eq('auth_user_id', user.auth_user_id)
+              .single();
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:183',message:'Query result for auth_user_id',data:{hasData:!!data,hasError:!!error,dataId:data?.id,errorMessage:error?.message,errorCode:error?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            
+            if (data?.id && uuidRegex.test(data.id)) {
+              currentUserId = data.id;
+              setUserId(data.id);
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:188',message:'Successfully set userId from auth_user_id',data:{currentUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+            }
+          } else if (user.id && uuidRegex.test(user.id)) {
+            currentUserId = user.id;
+            setUserId(user.id);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:193',message:'Successfully set userId from user.id',data:{currentUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+          }
+        } catch (err) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:196',message:'Error in direct userId fetch',data:{errorMessage:err?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+          console.error('Erreur récupération userId:', err);
+        }
+      }
+    }
+
+    if (!currentUserId) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:190',message:'No userId after reload - early return',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       setSnackbar({
         open: true,
-        message: 'Utilisateur non connecté',
+        message: 'Utilisateur non connecté. Veuillez vous reconnecter.',
         severity: 'error'
       });
       return;
@@ -164,28 +273,88 @@ const Consultations: React.FC = () => {
 
     setLoading(true);
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:195',message:'Before createConsultation',data:{patientId:selectedPatient.id,userId:currentUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
       const consultation = await ConsultationService.createConsultation(
         selectedPatient.id,
-        userId
+        currentUserId
       );
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:200',message:'After createConsultation',data:{consultationId:consultation?.id,hasConsultation:!!consultation},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
       if (type) {
         await ConsultationService.updateConsultation(
           consultation.id,
           { categorie_motif: type } as any,
-          userId,
+          currentUserId,
           'categorie_motif'
         );
       }
 
-      setCurrentConsultation(consultation);
-      setOpenStartDialog(false);
-      setSnackbar({
-        open: true,
-        message: 'Consultation créée avec succès',
-        severity: 'success'
-      });
+      // Recharger la consultation complète depuis la base de données
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:210',message:'Before getConsultationById',data:{consultationId:consultation.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      const fullConsultation = await ConsultationService.getConsultationById(consultation.id);
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:212',message:'After getConsultationById',data:{hasFullConsultation:!!fullConsultation,fullConsultationId:fullConsultation?.id,patientId:fullConsultation?.patient_id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      if (fullConsultation) {
+        // S'assurer que le patient est bien chargé
+        let patientToUse = selectedPatient;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:217',message:'Before patient check',data:{patientToUseId:patientToUse?.id,fullConsultationPatientId:fullConsultation.patient_id,needsReload:!patientToUse || patientToUse.id !== fullConsultation.patient_id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        
+        if (!patientToUse || patientToUse.id !== fullConsultation.patient_id) {
+          patientToUse = await PatientService.getPatientById(fullConsultation.patient_id);
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:219',message:'After reload patient',data:{hasPatientToUse:!!patientToUse,patientToUseId:patientToUse?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+          // #endregion
+        }
+        
+        // Définir le patient et la consultation pour afficher le workflow
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:222',message:'Before setState calls',data:{hasPatientToUse:!!patientToUse,hasFullConsultation:!!fullConsultation,patientToUseId:patientToUse?.id,fullConsultationId:fullConsultation?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E,F'})}).catch(()=>{});
+        // #endregion
+        
+        // Utiliser une fonction de callback pour s'assurer que les states sont mis à jour ensemble
+        // et fermer le dialog APRÈS la mise à jour du state
+        setSelectedPatient(patientToUse);
+        setCurrentConsultation(fullConsultation);
+        
+        // Utiliser setTimeout pour laisser React mettre à jour le state avant de fermer le dialog
+        // Cela évite le race condition où onClose réinitialise selectedPatient
+        setTimeout(() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:229',message:'Closing dialog after state update',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E,F'})}).catch(()=>{});
+          // #endregion
+          setOpenStartDialog(false);
+        }, 0);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:227',message:'After setState calls - dialog will close in next tick',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'E,F'})}).catch(()=>{});
+        // #endregion
+        
+        // Ne pas afficher le snackbar immédiatement car le workflow va s'afficher
+        // Le workflow sera visible automatiquement grâce à la condition if (currentConsultation && selectedPatient)
+      } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:231',message:'fullConsultation is null',data:{consultationId:consultation.id},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        throw new Error('Impossible de charger la consultation créée');
+      }
     } catch (error: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:234',message:'Error in handleStartConsultation',data:{errorMessage:error?.message,errorName:error?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+      // #endregion
       console.error('Erreur lors de la création de la consultation:', error);
       setSnackbar({
         open: true,
@@ -243,15 +412,99 @@ const Consultations: React.FC = () => {
 
   const handleResumeConsultation = async (consultation: Consultation) => {
     try {
+      setLoading(true);
+      // Charger le patient
+      const patient = await PatientService.getPatientById(consultation.patient_id);
+      
+      // Recharger la consultation complète depuis la base de données
+      const fullConsultation = await ConsultationService.getConsultationById(consultation.id);
+      
+      if (!fullConsultation) {
+        throw new Error('Consultation non trouvée');
+      }
+      
+      setSelectedPatient(patient);
+      setCurrentConsultation(fullConsultation);
+      
+      setSnackbar({
+        open: true,
+        message: 'Consultation reprise avec succès',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Erreur lors de la reprise:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Erreur lors de la reprise de la consultation',
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleViewConsultation = async (consultation: Consultation) => {
+    try {
       // Charger le patient
       const patient = await PatientService.getPatientById(consultation.patient_id);
       setSelectedPatient(patient);
       setCurrentConsultation(consultation);
     } catch (error) {
-      console.error('Erreur lors de la reprise:', error);
+      console.error('Erreur lors de l\'affichage:', error);
       setSnackbar({
         open: true,
-        message: 'Erreur lors de la reprise de la consultation',
+        message: 'Erreur lors du chargement de la consultation',
+        severity: 'error'
+      });
+    }
+  };
+
+  const handlePrintConsultation = async (consultation: Consultation) => {
+    try {
+      // Charger le patient pour l'impression
+      const patient = await PatientService.getPatientById(consultation.patient_id);
+      
+      // Charger les informations du médecin si disponible
+      let medecin;
+      if (consultation.medecin_id) {
+        try {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('nom, prenom, specialite, numero_ordre')
+            .eq('id', consultation.medecin_id)
+            .single();
+          
+          if (userData) {
+            medecin = {
+              nom: userData.nom || '',
+              prenom: userData.prenom || '',
+              specialite: userData.specialite || undefined,
+              numero_ordre: userData.numero_ordre || undefined,
+            };
+          }
+        } catch (err) {
+          console.warn('Impossible de charger les informations du médecin:', err);
+        }
+      }
+      
+      // Importer et utiliser le service d'impression
+      const { ConsultationPrintService } = await import('../services/consultationPrintService');
+      ConsultationPrintService.printConsultation({
+        consultation,
+        patient,
+        medecin,
+      });
+      
+      setSnackbar({
+        open: true,
+        message: 'Impression de la consultation lancée',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Erreur lors de l\'impression:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Erreur lors de l\'impression de la consultation',
         severity: 'error'
       });
     }
@@ -284,7 +537,16 @@ const Consultations: React.FC = () => {
   }, [consultations]);
 
   // Si une consultation est en cours, afficher le workflow
+  // #region agent log
+  if (typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:335',message:'Render check - workflow condition',data:{hasCurrentConsultation:!!currentConsultation,hasSelectedPatient:!!selectedPatient,currentConsultationId:currentConsultation?.id,selectedPatientId:selectedPatient?.id,willRenderWorkflow:!!(currentConsultation && selectedPatient)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  }
+  // #endregion
+  
   if (currentConsultation && selectedPatient) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:336',message:'Rendering ConsultationWorkflow',data:{consultationId:currentConsultation.id,patientId:selectedPatient.id,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
     return (
       <Box sx={{ height: '100vh', overflow: 'auto' }}>
         <ConsultationWorkflow
@@ -485,11 +747,21 @@ const Consultations: React.FC = () => {
                             <Edit />
                           </IconButton>
                         ) : (
-                          <IconButton size="small" color="primary" title="Voir les détails">
+                          <IconButton 
+                            size="small" 
+                            color="primary" 
+                            title="Voir les détails"
+                            onClick={() => handleViewConsultation(consultation)}
+                          >
                             <Visibility />
                           </IconButton>
                         )}
-                        <IconButton size="small" color="default" title="Imprimer">
+                        <IconButton 
+                          size="small" 
+                          color="default" 
+                          title="Imprimer"
+                          onClick={() => handlePrintConsultation(consultation)}
+                        >
                           <Print />
                         </IconButton>
                       </TableCell>
@@ -517,8 +789,17 @@ const Consultations: React.FC = () => {
       <ConsultationStartDialog
         open={openStartDialog}
         onClose={() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:577',message:'Dialog onClose called',data:{hasCurrentConsultation:!!currentConsultation,currentConsultationId:currentConsultation?.id,isLoading:loading,hasSelectedPatient:!!selectedPatient},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,F'})}).catch(()=>{});
+          // #endregion
           setOpenStartDialog(false);
-          if (!currentConsultation) {
+          // Ne réinitialiser le patient que si on ferme le dialog sans créer de consultation
+          // ET que la création n'est pas en cours
+          // ET qu'il n'y a pas de consultation en cours (pour éviter de réinitialiser pendant la création)
+          if (!currentConsultation && !loading && !selectedPatient) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:580',message:'Resetting selectedPatient to null',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,F'})}).catch(()=>{});
+            // #endregion
             setSelectedPatient(null);
           }
         }}

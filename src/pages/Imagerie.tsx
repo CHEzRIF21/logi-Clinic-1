@@ -5,6 +5,7 @@ import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { ImagerieService, ImagerieExamen, ImagerieImage, ImagerieAnnotation, ImagerieType } from '../services/imagerieService';
+import ImagerieApiService from '../services/imagerieApiService';
 import { Patient } from '../services/supabase';
 import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';

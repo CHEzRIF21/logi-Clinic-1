@@ -44,6 +44,7 @@ export async function getMyClinicId(): Promise<string | null> {
 
   try {
     // Méthode 1: Essayer la fonction RPC
+    // IMPORTANT: on utilise la version sans paramètre (utilisée par RLS).
     try {
       const { data, error } = await supabase.rpc('get_my_clinic_id');
       
@@ -51,6 +52,8 @@ export async function getMyClinicId(): Promise<string | null> {
         cachedClinicId = data;
         cacheTimestamp = Date.now();
         return data;
+      } else if (error) {
+        console.warn('RPC get_my_clinic_id échoué, utilisation du fallback:', error);
       }
     } catch (rpcError) {
       console.warn('RPC get_my_clinic_id échoué, utilisation du fallback:', rpcError);
@@ -83,7 +86,7 @@ export async function getMyClinicId(): Promise<string | null> {
             .from('users')
             .select('id, clinic_id')
             .eq('auth_user_id', user.auth_user_id)
-            .single();
+            .maybeSingle();
           
           if (!authError && userFromAuth?.clinic_id) {
             cachedClinicId = userFromAuth.clinic_id;
@@ -92,18 +95,26 @@ export async function getMyClinicId(): Promise<string | null> {
           }
         }
         
-        // Chercher par ID utilisateur
+        // Chercher par ID utilisateur (vérifier que c'est un UUID valide)
         if (user.id) {
-          const { data: userFromId, error: idError } = await supabase
-            .from('users')
-            .select('clinic_id')
-            .eq('id', user.id)
-            .single();
-          
-          if (!idError && userFromId?.clinic_id) {
-            cachedClinicId = userFromId.clinic_id;
-            cacheTimestamp = Date.now();
-            return userFromId.clinic_id;
+          // Vérifier que l'ID est un UUID valide (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidRegex.test(user.id)) {
+            const { data: userFromId, error: idError } = await supabase
+              .from('users')
+              .select('clinic_id')
+              .eq('id', user.id)
+              .maybeSingle();
+            
+            if (!idError && userFromId?.clinic_id) {
+              cachedClinicId = userFromId.clinic_id;
+              cacheTimestamp = Date.now();
+              return userFromId.clinic_id;
+            } else if (idError) {
+              console.error('Erreur récupération clinic_id par ID utilisateur:', idError);
+            }
+          } else {
+            console.warn('ID utilisateur invalide (pas un UUID):', user.id);
           }
         }
       } catch (localError) {
@@ -129,33 +140,102 @@ export async function getCurrentUserInfo(): Promise<UserClinicInfo | null> {
   }
 
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) return null;
+    // Méthode 1: Essayer avec Supabase Auth
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (!authError && user) {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('id, clinic_id, role')
+          .eq('auth_user_id', user.id)
+          .maybeSingle();
 
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('id, clinic_id, role')
-      .eq('auth_user_id', user.id)
-      .single();
-
-    if (error || !userData) {
-      console.error('Erreur récupération user info:', error);
-      return null;
+        if (!error && userData) {
+          cachedUserInfo = {
+            userId: userData.id,
+            clinicId: userData.clinic_id,
+            role: userData.role,
+            isClinicAdmin: ['CLINIC_ADMIN', 'ADMIN'].includes(userData.role),
+            isSuperAdmin: userData.role === 'SUPER_ADMIN',
+          };
+          
+          cachedClinicId = userData.clinic_id;
+          cacheTimestamp = Date.now();
+          
+          return cachedUserInfo;
+        }
+      }
+    } catch (authErr) {
+      console.warn('Auth non disponible, utilisation du fallback:', authErr);
     }
 
-    cachedUserInfo = {
-      userId: userData.id,
-      clinicId: userData.clinic_id,
-      role: userData.role,
-      isClinicAdmin: ['CLINIC_ADMIN', 'ADMIN'].includes(userData.role),
-      isSuperAdmin: userData.role === 'SUPER_ADMIN',
-    };
-    
-    cachedClinicId = userData.clinic_id;
-    cacheTimestamp = Date.now();
-    
-    return cachedUserInfo;
+    // Méthode 2: Fallback - Récupérer depuis localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        let userIdToQuery: string | null = null;
+        
+        // Essayer avec auth_user_id d'abord
+        if (user.auth_user_id && uuidRegex.test(user.auth_user_id)) {
+          const { data: userFromAuth, error: authError } = await supabase
+            .from('users')
+            .select('id, clinic_id, role')
+            .eq('auth_user_id', user.auth_user_id)
+            .maybeSingle();
+          
+          if (!authError && userFromAuth) {
+            cachedUserInfo = {
+              userId: userFromAuth.id,
+              clinicId: userFromAuth.clinic_id,
+              role: userFromAuth.role,
+              isClinicAdmin: ['CLINIC_ADMIN', 'ADMIN'].includes(userFromAuth.role),
+              isSuperAdmin: userFromAuth.role === 'SUPER_ADMIN',
+            };
+            
+            cachedClinicId = userFromAuth.clinic_id;
+            cacheTimestamp = Date.now();
+            
+            return cachedUserInfo;
+          }
+        }
+        
+        // Essayer avec id directement
+        if (user.id && uuidRegex.test(user.id)) {
+          userIdToQuery = user.id;
+        }
+        
+        if (userIdToQuery) {
+          const { data: userFromId, error: idError } = await supabase
+            .from('users')
+            .select('id, clinic_id, role')
+            .eq('id', userIdToQuery)
+            .maybeSingle();
+          
+          if (!idError && userFromId) {
+            cachedUserInfo = {
+              userId: userFromId.id,
+              clinicId: userFromId.clinic_id,
+              role: userFromId.role,
+              isClinicAdmin: ['CLINIC_ADMIN', 'ADMIN'].includes(userFromId.role),
+              isSuperAdmin: userFromId.role === 'SUPER_ADMIN',
+            };
+            
+            cachedClinicId = userFromId.clinic_id;
+            cacheTimestamp = Date.now();
+            
+            return cachedUserInfo;
+          }
+        }
+      } catch (localError) {
+        console.error('Erreur récupération depuis localStorage:', localError);
+      }
+    }
+
+    return null;
   } catch (err) {
     console.error('Erreur récupération user info:', err);
     return null;

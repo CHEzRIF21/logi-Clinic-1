@@ -24,6 +24,12 @@ import speechToTextRouter from './routes/speechToText';
 import clinicsRouter from './routes/clinics';
 import pricingRouter from './routes/pricing';
 import authRouter from './routes/auth';
+import anamneseTemplatesRouter from './routes/anamneseTemplates';
+import examsRouter from './routes/exams';
+import consultationsRouter from './routes/consultations';
+import laboratoireRouter from './routes/laboratoire';
+import imagerieRouter from './routes/imagerie';
+import materniteRouter from './routes/maternite';
 
 const app = express();
 
@@ -101,6 +107,12 @@ app.use('/api/pharmacy', pharmacyRouter);
 app.use('/api/speech-to-text', speechToTextRouter);
 app.use('/api/clinics', clinicsRouter);
 app.use('/api', pricingRouter);
+app.use('/api/anamnese-templates', anamneseTemplatesRouter);
+app.use('/api/exams', examsRouter);
+app.use('/api/consultations', consultationsRouter);
+app.use('/api/laboratoire', laboratoireRouter);
+app.use('/api/imagerie', imagerieRouter);
+app.use('/api/maternite', materniteRouter);
 
 // Error handler
 app.use(errorHandler);

@@ -24,6 +24,7 @@ import { Science, CheckCircle, ArrowForward, ArrowBack } from '@mui/icons-materi
 import { LabRequest } from '../../services/consultationApiService';
 import ExamCatalogService, { ExamCatalogEntry } from '../../services/examCatalogService';
 import Autocomplete from '@mui/material/Autocomplete';
+import { SpeechTextField } from '../common/SpeechTextField';
 
 interface LabRequestWizardProps {
   open: boolean;
@@ -174,16 +175,18 @@ export const LabRequestWizard: React.FC<LabRequestWizardProps> = ({
               </Select>
             </FormControl>
 
-            <TextField
+            <SpeechTextField
               fullWidth
               multiline
               rows={6}
               label="Renseignement clinique *"
               value={clinicalInfo}
-              onChange={(e) => setClinicalInfo(e.target.value)}
+              onChange={setClinicalInfo}
               placeholder="Décrire le contexte clinique, les symptômes, les antécédents pertinents..."
               required
               helperText="Ce champ est obligatoire pour toute demande d'analyse"
+              enableSpeech={true}
+              language="fr-FR"
             />
 
             {!clinicalInfo.trim() && (
@@ -281,7 +284,18 @@ export const LabRequestWizard: React.FC<LabRequestWizardProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={(event, reason) => {
+        // Empêcher la fermeture par clic en dehors ou ESC
+        if (reason === 'backdropClick' || reason === 'escapeKeyDown') {
+          return;
+        }
+        handleClose();
+      }}
+      maxWidth="md" 
+      fullWidth
+    >
       <DialogTitle>
         <Box display="flex" alignItems="center" gap={1}>
           <Science />

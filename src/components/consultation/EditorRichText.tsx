@@ -124,11 +124,29 @@ export const EditorRichText: React.FC<EditorRichTextProps> = ({
           variant="dense"
           sx={{
             minHeight: 40,
-            bgcolor: 'grey.50',
+            bgcolor: (theme) => theme.palette.mode === 'dark' 
+              ? theme.palette.grey[800] 
+              : theme.palette.grey[50],
             borderBottom: 1,
             borderColor: 'divider',
             gap: 0.5,
             flexWrap: 'wrap',
+            px: 1,
+            '& .MuiIconButton-root': {
+              color: (theme) => theme.palette.mode === 'dark' 
+                ? theme.palette.grey[300] 
+                : theme.palette.text.primary,
+              '&:hover': {
+                bgcolor: (theme) => theme.palette.mode === 'dark' 
+                  ? theme.palette.grey[700] 
+                  : theme.palette.action.hover,
+              },
+              '&.Mui-disabled': {
+                color: (theme) => theme.palette.mode === 'dark' 
+                  ? theme.palette.grey[600] 
+                  : theme.palette.action.disabled,
+              },
+            },
           }}
         >
           <IconButton
@@ -199,12 +217,25 @@ export const EditorRichText: React.FC<EditorRichTextProps> = ({
           {enableSpeech && isSupported && (
             <>
               <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-              <Tooltip title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée'}>
+              <Tooltip title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée vocale'}>
                 <IconButton
                   size="small"
                   onClick={handleMicClick}
-                  color={isListening ? 'error' : 'default'}
-                  title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée'}
+                  color={isListening ? 'error' : 'primary'}
+                  title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée vocale'}
+                  sx={{
+                    ...(isListening && {
+                      animation: 'pulse 2s infinite',
+                      '@keyframes pulse': {
+                        '0%, 100%': {
+                          opacity: 1,
+                        },
+                        '50%': {
+                          opacity: 0.6,
+                        },
+                      },
+                    }),
+                  }}
                 >
                   {isListening ? <Stop fontSize="small" /> : <Mic fontSize="small" />}
                 </IconButton>

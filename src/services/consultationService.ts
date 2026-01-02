@@ -78,14 +78,22 @@ export class ConsultationService {
     // Fallback: Si getMyClinicId() retourne null, récupérer depuis l'utilisateur
     if (!clinicId && userId) {
       try {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('clinic_id')
-          .eq('id', userId)
-          .single();
-        
-        if (!userError && userData?.clinic_id) {
-          clinicId = userData.clinic_id;
+        // Vérifier que userId est un UUID valide
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(userId)) {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('clinic_id')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          if (!userError && userData?.clinic_id) {
+            clinicId = userData.clinic_id;
+          } else if (userError) {
+            console.error('Erreur récupération clinic_id depuis userId:', userError);
+          }
+        } else {
+          console.warn('userId invalide (pas un UUID):', userId);
         }
       } catch (err) {
         console.error('Erreur récupération clinic_id depuis userId:', err);
