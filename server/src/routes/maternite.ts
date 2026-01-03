@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import MaterniteController from '../controllers/materniteController';
+import { requireAuth, requireClinicContext } from '../middleware/auth';
 
 const router = Router();
+
+// Authentification obligatoire pour toutes les routes
+router.use(requireAuth);
+router.use(requireClinicContext);
 
 // Statistiques
 router.get('/stats', MaterniteController.getStats);

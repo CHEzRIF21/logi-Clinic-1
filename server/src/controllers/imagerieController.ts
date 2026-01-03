@@ -8,8 +8,16 @@ export class ImagerieController {
    */
   static async getDemandes(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
-        clinic_id,
         patient_id,
         status,
         date_debut,
@@ -19,7 +27,7 @@ export class ImagerieController {
       } = req.query;
 
       const result = await ImagerieService.getDemandes({
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         patient_id: patient_id as string,
         status: status as string,
         date_debut: date_debut as string,
@@ -70,11 +78,19 @@ export class ImagerieController {
    */
   static async createDemande(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         patient_id,
         consultation_id,
         medecin_id,
-        clinic_id,
         type,
         examens,
         priorite,
@@ -82,10 +98,10 @@ export class ImagerieController {
         notes,
       } = req.body;
 
-      if (!patient_id || !medecin_id || !clinic_id || !examens || examens.length === 0) {
+      if (!patient_id || !medecin_id || !examens || examens.length === 0) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs patient_id, medecin_id, clinic_id et examens sont requis',
+          message: 'Les champs patient_id, medecin_id et examens sont requis',
         });
       }
 
@@ -93,7 +109,7 @@ export class ImagerieController {
         patient_id,
         consultation_id,
         medecin_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         type: type || 'INTERNE',
         examens,
         priorite,
@@ -151,11 +167,12 @@ export class ImagerieController {
    */
   static async getExamens(req: Request, res: Response) {
     try {
-      const { demande_id, clinic_id, status } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { demande_id, status } = req.query;
 
       const examens = await ImagerieService.getExamens({
         demande_id: demande_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         status: status as string,
       });
 
@@ -334,8 +351,8 @@ export class ImagerieController {
    */
   static async getCatalogue(req: Request, res: Response) {
     try {
-      const { clinic_id } = req.query;
-      const catalogue = await ImagerieService.getCatalogueExamens(clinic_id as string);
+      const clinicId = (req as any).user?.clinic_id;
+      const catalogue = await ImagerieService.getCatalogueExamens(clinicId);
 
       res.json({
         success: true,
@@ -355,16 +372,16 @@ export class ImagerieController {
    */
   static async getStats(req: Request, res: Response) {
     try {
-      const { clinic_id } = req.query;
-
-      if (!clinic_id) {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
         return res.status(400).json({
           success: false,
-          message: 'clinic_id est requis',
+          message: 'Contexte de clinique manquant',
         });
       }
 
-      const stats = await ImagerieService.getStats(clinic_id as string);
+      const stats = await ImagerieService.getStats(clinicId);
 
       res.json({
         success: true,

@@ -8,8 +8,17 @@ export class ConsultationController {
    */
   static async list(req: Request, res: Response) {
     try {
+      // Récupérer clinic_id depuis req.user (ajouté par middleware)
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
-        clinic_id,
         patient_id,
         medecin_id,
         status,
@@ -20,7 +29,7 @@ export class ConsultationController {
       } = req.query;
 
       const result = await ConsultationService.getConsultations({
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user pour sécurité multi-tenant
         patient_id: patient_id as string,
         medecin_id: medecin_id as string,
         status: status as string,
@@ -50,8 +59,18 @@ export class ConsultationController {
    */
   static async getById(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
+      
       const consultation = await ConsultationService.getConsultationById(id);
+      
+      // Vérifier que la consultation appartient à la clinique de l'utilisateur
+      if (consultation.clinic_id !== clinicId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès non autorisé à cette consultation',
+        });
+      }
 
       res.json({
         success: true,
@@ -72,27 +91,35 @@ export class ConsultationController {
    */
   static async create(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         patient_id,
         medecin_id,
-        clinic_id,
         motif,
         type_consultation,
         rendez_vous_id,
         urgence,
       } = req.body;
 
-      if (!patient_id || !medecin_id || !clinic_id) {
+      if (!patient_id || !medecin_id) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs patient_id, medecin_id et clinic_id sont requis',
+          message: 'Les champs patient_id et medecin_id sont requis',
         });
       }
 
       const consultation = await ConsultationService.createConsultation({
         patient_id,
         medecin_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user pour sécurité
         motif,
         type_consultation,
         rendez_vous_id,
@@ -118,7 +145,18 @@ export class ConsultationController {
    */
   static async update(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
+      
+      // Vérifier que la consultation appartient à la clinique
+      const existing = await ConsultationService.getConsultationById(id);
+      if (existing.clinic_id !== clinicId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès non autorisé à cette consultation',
+        });
+      }
+      
       const consultation = await ConsultationService.updateConsultation(id, req.body);
 
       res.json({
@@ -140,8 +178,18 @@ export class ConsultationController {
    */
   static async close(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
       const { conclusion } = req.body;
+      
+      // Vérifier que la consultation appartient à la clinique
+      const existing = await ConsultationService.getConsultationById(id);
+      if (existing.clinic_id !== clinicId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Accès non autorisé à cette consultation',
+        });
+      }
 
       const consultation = await ConsultationService.closeConsultation(id, conclusion);
 
@@ -319,12 +367,13 @@ export class ConsultationController {
    */
   static async getPrescriptions(req: Request, res: Response) {
     try {
-      const { consultation_id, patient_id, clinic_id } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { consultation_id, patient_id } = req.query;
 
       const prescriptions = await ConsultationService.getPrescriptions({
         consultation_id: consultation_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
       });
 
       res.json({
@@ -366,9 +415,12 @@ export class ConsultationController {
    */
   static async createPrescription(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
+      
       const prescription = await ConsultationService.createPrescription({
         consultation_id: id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         ...req.body,
       });
 
@@ -391,12 +443,13 @@ export class ConsultationController {
    */
   static async getLabRequests(req: Request, res: Response) {
     try {
-      const { consultation_id, patient_id, clinic_id } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { consultation_id, patient_id } = req.query;
 
       const requests = await ConsultationService.getLabRequests({
         consultation_id: consultation_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
       });
 
       res.json({
@@ -417,9 +470,12 @@ export class ConsultationController {
    */
   static async createLabRequest(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
+      
       const request = await ConsultationService.createLabRequest({
         consultation_id: id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         ...req.body,
       });
 
@@ -442,12 +498,13 @@ export class ConsultationController {
    */
   static async getImagingRequests(req: Request, res: Response) {
     try {
-      const { consultation_id, patient_id, clinic_id } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { consultation_id, patient_id } = req.query;
 
       const requests = await ConsultationService.getImagingRequests({
         consultation_id: consultation_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
       });
 
       res.json({
@@ -468,9 +525,12 @@ export class ConsultationController {
    */
   static async createImagingRequest(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const { id } = req.params;
+      
       const request = await ConsultationService.createImagingRequest({
         consultation_id: id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         ...req.body,
       });
 
@@ -493,17 +553,19 @@ export class ConsultationController {
    */
   static async getStats(req: Request, res: Response) {
     try {
-      const { clinic_id, date_debut, date_fin } = req.query;
-
-      if (!clinic_id) {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
         return res.status(400).json({
           success: false,
-          message: 'clinic_id est requis',
+          message: 'Contexte de clinique manquant',
         });
       }
 
+      const { date_debut, date_fin } = req.query;
+
       const stats = await ConsultationService.getStats(
-        clinic_id as string,
+        clinicId, // Utiliser depuis req.user
         date_debut as string,
         date_fin as string
       );

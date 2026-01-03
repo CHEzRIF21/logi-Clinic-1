@@ -8,8 +8,16 @@ export class LaboratoireController {
    */
   static async getPrescriptions(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
-        clinic_id,
         patient_id,
         status,
         date_debut,
@@ -19,7 +27,7 @@ export class LaboratoireController {
       } = req.query;
 
       const result = await LaboratoireService.getPrescriptions({
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         patient_id: patient_id as string,
         status: status as string,
         date_debut: date_debut as string,
@@ -70,20 +78,28 @@ export class LaboratoireController {
    */
   static async createPrescription(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         patient_id,
         consultation_id,
         medecin_id,
-        clinic_id,
         analyses,
         priorite,
         notes_cliniques,
       } = req.body;
 
-      if (!patient_id || !medecin_id || !clinic_id || !analyses || analyses.length === 0) {
+      if (!patient_id || !medecin_id || !analyses || analyses.length === 0) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs patient_id, medecin_id, clinic_id et analyses sont requis',
+          message: 'Les champs patient_id, medecin_id et analyses sont requis',
         });
       }
 
@@ -91,7 +107,7 @@ export class LaboratoireController {
         patient_id,
         consultation_id,
         medecin_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         analyses,
         priorite,
         notes_cliniques,
@@ -147,11 +163,12 @@ export class LaboratoireController {
    */
   static async getAnalyses(req: Request, res: Response) {
     try {
-      const { prescription_id, clinic_id, status } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { prescription_id, status } = req.query;
 
       const analyses = await LaboratoireService.getAnalyses({
         prescription_id: prescription_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         status: status as string,
       });
 
@@ -287,16 +304,16 @@ export class LaboratoireController {
    */
   static async getIntegrations(req: Request, res: Response) {
     try {
-      const { clinic_id } = req.query;
-
-      if (!clinic_id) {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
         return res.status(400).json({
           success: false,
-          message: 'clinic_id est requis',
+          message: 'Contexte de clinique manquant',
         });
       }
 
-      const integrations = await LaboratoireService.getIntegrations(clinic_id as string);
+      const integrations = await LaboratoireService.getIntegrations(clinicId);
 
       res.json({
         success: true,
@@ -316,8 +333,8 @@ export class LaboratoireController {
    */
   static async getCatalogue(req: Request, res: Response) {
     try {
-      const { clinic_id } = req.query;
-      const catalogue = await LaboratoireService.getCatalogueAnalyses(clinic_id as string);
+      const clinicId = (req as any).user?.clinic_id;
+      const catalogue = await LaboratoireService.getCatalogueAnalyses(clinicId);
 
       res.json({
         success: true,

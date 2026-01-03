@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import LaboratoireController from '../controllers/laboratoireController';
+import { requireAuth, requireClinicContext } from '../middleware/auth';
 
 const router = Router();
+
+// Authentification obligatoire pour toutes les routes
+router.use(requireAuth);
+router.use(requireClinicContext);
 
 // Catalogue des analyses
 router.get('/catalogue', LaboratoireController.getCatalogue);

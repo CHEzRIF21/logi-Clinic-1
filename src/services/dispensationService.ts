@@ -1,5 +1,13 @@
 import { supabase } from './supabase';
 import { FacturationService } from './facturationService';
+import { 
+  TransactionManager, 
+  withTransaction, 
+  validateData, 
+  verifyEntityExists, 
+  isValidUUID 
+} from './transactionUtils';
+import { logger } from '../utils/logger';
 
 // Types pour les dispensations
 export interface DispensationLigne {
@@ -312,29 +320,82 @@ export class DispensationService {
   }
 
   /**
-   * Crée une nouvelle dispensation
+   * Crée une nouvelle dispensation avec transaction et rollback
    */
   static async creerDispensation(
     data: DispensationFormData,
-    utilisateurId: string
+    utilisateurId: string,
+    clinicId?: string
   ): Promise<Dispensation> {
-    try {
-      // Valider les données
-      if (!data.patient_id && data.type_dispensation === 'patient') {
-        throw new Error('ID patient requis');
+    // Validation stricte des entrées
+    const validation = validateData(
+      { 
+        utilisateurId, 
+        type_dispensation: data.type_dispensation,
+        lignes: data.lignes,
+      },
+      ['utilisateurId', 'type_dispensation'],
+      {
+        utilisateurId: isValidUUID,
       }
-      if (data.lignes.length === 0) {
-        throw new Error('Au moins une ligne de dispensation est requise');
-      }
+    );
 
-      // Vérifier le stock pour chaque ligne
-      for (const ligne of data.lignes) {
+    if (!validation.valid) {
+      logger.warn('Validation échouée pour creerDispensation', { errors: validation.errors });
+      throw new Error(validation.errors.join(', '));
+    }
+
+    if (data.type_dispensation === 'patient') {
+      if (!data.patient_id || !isValidUUID(data.patient_id)) {
+        throw new Error('ID patient valide requis pour une dispensation patient');
+      }
+      // Vérifier que le patient existe
+      const patientCheck = await verifyEntityExists('patients', data.patient_id, clinicId);
+      if (!patientCheck.exists) {
+        throw new Error('Patient introuvable ou accès non autorisé');
+      }
+    }
+
+    if (!data.lignes || data.lignes.length === 0) {
+      throw new Error('Au moins une ligne de dispensation est requise');
+    }
+
+    // Vérifier que la prescription existe si fournie
+    if (data.prescription_id) {
+      const prescCheck = await verifyEntityExists('prescriptions', data.prescription_id, clinicId);
+      if (!prescCheck.exists) {
+        throw new Error('Prescription introuvable');
+      }
+      // Vérifier que la prescription est active
+      if (prescCheck.data?.statut === 'ANNULE') {
+        throw new Error('Cette prescription a été annulée');
+      }
+    }
+
+    // Vérifier le stock pour chaque ligne (en parallèle)
+    const stockChecks = await Promise.all(
+      data.lignes.map(async (ligne) => {
         const verification = await this.verifierStock(ligne.lot_id, ligne.quantite_delivree);
-        if (!verification.disponible) {
-          throw new Error(`Stock insuffisant pour ${ligne.medicament_nom}: ${verification.message}`);
-        }
-      }
+        return { ligne, verification };
+      })
+    );
 
+    const stockErrors = stockChecks
+      .filter((check) => !check.verification.disponible)
+      .map((check) => `Stock insuffisant pour ${check.ligne.medicament_nom}: ${check.verification.message}`);
+
+    if (stockErrors.length > 0) {
+      throw new Error(stockErrors.join('; '));
+    }
+
+    const traceId = `DISP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    logger.info('Démarrage création dispensation', { 
+      traceId, 
+      patientId: data.patient_id, 
+      lignesCount: data.lignes.length 
+    });
+
+    try {
       // Créer la dispensation
       const { data: dispensation, error: dispError } = await supabase
         .from('dispensations')
@@ -358,11 +419,17 @@ export class DispensationService {
           taux_couverture: data.assurance_id ? clamp(Number(data.taux_couverture || 0), 0, 100) : null,
           reference_prise_en_charge: data.reference_prise_en_charge || null,
           observations: data.observations,
+          clinic_id: clinicId,
         })
         .select()
         .single();
 
-      if (dispError) throw dispError;
+      if (dispError) {
+        logger.error('Échec création dispensation', { traceId, error: dispError });
+        throw dispError;
+      }
+
+      logger.info('Dispensation créée', { traceId, dispensationId: dispensation.id });
 
       // Créer les lignes de dispensation
       const lignesAInserer = data.lignes.map(ligne => ({
@@ -545,9 +612,18 @@ export class DispensationService {
       }
 
       // Récupérer la dispensation complète avec ses lignes
+      logger.info('Dispensation terminée avec succès', { 
+        traceId, 
+        dispensationId: dispensation.id,
+        montantTotal: data.lignes.reduce((sum, l) => sum + (l.prix_total || 0), 0),
+      });
+
       return await this.getDispensationById(dispensation.id);
     } catch (error) {
-      console.error('Erreur lors de la création de la dispensation:', error);
+      logger.error('Erreur lors de la création de la dispensation', { 
+        patientId: data.patient_id,
+        error: error instanceof Error ? error.message : 'Erreur inconnue',
+      });
       throw error;
     }
   }

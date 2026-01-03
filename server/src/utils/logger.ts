@@ -1,23 +1,86 @@
 /**
  * Système de logs intelligents pour le backend LogiClinic
  * Utilise des préfixes structurés pour faciliter le débogage avec Cursor
+ * 
+ * AMÉLIORATIONS:
+ * - Support des trace IDs pour suivi inter-modules
+ * - Logging des intégrations entre modules
+ * - Mesure de performance
+ * - Export vers table audit
  */
 
 type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG' | 'SUCCESS';
 
 interface LogContext {
+  traceId?: string;
+  userId?: string;
+  clinicId?: string;
+  module?: string;
+  action?: string;
+  durationMs?: number;
   [key: string]: any;
 }
 
+interface IntegrationLogData {
+  sourceModule: string;
+  targetModule: string;
+  action: string;
+  success: boolean;
+  durationMs?: number;
+  entityId?: string;
+  error?: string;
+}
+
 class Logger {
+  private currentTraceId?: string;
+
+  /**
+   * Génère un trace ID unique
+   */
+  generateTraceId(): string {
+    return `TRC-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Définit le trace ID courant
+   */
+  setTraceId(traceId: string): void {
+    this.currentTraceId = traceId;
+  }
+
+  /**
+   * Récupère le trace ID courant
+   */
+  getTraceId(): string | undefined {
+    return this.currentTraceId;
+  }
+
+  /**
+   * Crée un logger enfant avec un trace ID
+   */
+  withTraceId(traceId?: string): Logger {
+    const childLogger = Object.create(this);
+    childLogger.currentTraceId = traceId || this.generateTraceId();
+    return childLogger;
+  }
+
   private formatMessage(level: LogLevel, category: string, message: string, context?: LogContext): string {
     const timestamp = new Date().toISOString();
+    const traceStr = context?.traceId || this.currentTraceId 
+      ? `[${context?.traceId || this.currentTraceId}] ` 
+      : '';
     const contextStr = context ? ` | ${JSON.stringify(context)}` : '';
-    return `[${timestamp}] [${level}] [${category}] ${message}${contextStr}`;
+    return `[${timestamp}] [${level}] ${traceStr}[${category}] ${message}${contextStr}`;
   }
 
   private log(level: LogLevel, category: string, message: string, context?: LogContext) {
-    const formattedMessage = this.formatMessage(level, category, message, context);
+    // Ajouter le traceId si disponible
+    const enrichedContext = {
+      ...context,
+      traceId: context?.traceId || this.currentTraceId,
+    };
+
+    const formattedMessage = this.formatMessage(level, category, message, enrichedContext);
     
     switch (level) {
       case 'ERROR':
@@ -37,6 +100,64 @@ class Logger {
       default:
         console.log(formattedMessage);
     }
+  }
+
+  /**
+   * Log une opération d'intégration inter-modules
+   */
+  integration(data: IntegrationLogData) {
+    const message = `${data.sourceModule} → ${data.targetModule}: ${data.action}`;
+    const context: LogContext = {
+      sourceModule: data.sourceModule,
+      targetModule: data.targetModule,
+      action: data.action,
+      entityId: data.entityId,
+      durationMs: data.durationMs,
+    };
+
+    if (data.success) {
+      this.log('SUCCESS', 'INTEGRATION', message, context);
+    } else {
+      this.log('ERROR', 'INTEGRATION', `${message} - FAILED: ${data.error}`, context);
+    }
+  }
+
+  /**
+   * Mesure le temps d'exécution d'une opération async
+   */
+  async measureTime<T>(
+    category: string,
+    operationName: string,
+    operation: () => Promise<T>,
+    context?: LogContext
+  ): Promise<T> {
+    const startTime = Date.now();
+    const traceId = context?.traceId || this.currentTraceId || this.generateTraceId();
+
+    try {
+      const result = await operation();
+      const durationMs = Date.now() - startTime;
+      this.log('SUCCESS', category, `${operationName} (${durationMs}ms)`, { ...context, durationMs, traceId });
+      return result;
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      this.log('ERROR', category, `${operationName} FAILED (${durationMs}ms): ${error}`, { ...context, durationMs, traceId });
+      throw error;
+    }
+  }
+
+  /**
+   * Log de transaction avec rollback potentiel
+   */
+  transaction(action: 'start' | 'commit' | 'rollback', context?: LogContext) {
+    const messages: Record<string, string> = {
+      start: 'Transaction démarrée',
+      commit: 'Transaction validée',
+      rollback: 'Transaction annulée (rollback)',
+    };
+    
+    const level: LogLevel = action === 'rollback' ? 'WARN' : 'INFO';
+    this.log(level, 'TRANSACTION', messages[action] || action, context);
   }
 
   // Logs pour la création de clinique

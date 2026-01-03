@@ -1,6 +1,11 @@
 /**
  * Client API pour les appels au backend
  * Gère l'authentification et les erreurs de manière centralisée
+ * 
+ * AMÉLIORATIONS:
+ * - Retry logic avec backoff exponentiel
+ * - Gestion intelligente des erreurs 5xx
+ * - Pas de retry pour les erreurs 4xx (erreurs client)
  */
 
 // Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
@@ -13,6 +18,58 @@ if (!API_BASE_URL && typeof window !== 'undefined') {
   console.error('⚠️ VITE_API_URL non configuré !');
   console.error('Créez un fichier .env avec:');
   console.error('VITE_API_URL=http://localhost:3000/api');
+}
+
+/**
+ * Configuration du retry
+ */
+interface RetryConfig {
+  maxRetries: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+  retryableStatusCodes: number[];
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 10000,
+  // Retry uniquement sur les erreurs serveur temporaires et les timeouts
+  retryableStatusCodes: [408, 429, 500, 502, 503, 504],
+};
+
+/**
+ * Calcule le délai avec backoff exponentiel et jitter
+ */
+function calculateBackoffDelay(attempt: number, config: RetryConfig): number {
+  // Backoff exponentiel: baseDelay * 2^attempt
+  const exponentialDelay = config.baseDelayMs * Math.pow(2, attempt);
+  // Ajouter un jitter aléatoire (±25%)
+  const jitter = exponentialDelay * 0.25 * (Math.random() * 2 - 1);
+  const delay = Math.min(exponentialDelay + jitter, config.maxDelayMs);
+  return Math.round(delay);
+}
+
+/**
+ * Vérifie si l'erreur est retryable
+ */
+function isRetryableError(status: number, config: RetryConfig): boolean {
+  return config.retryableStatusCodes.includes(status);
+}
+
+/**
+ * Vérifie si c'est une erreur réseau
+ */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && 
+    (error.message.includes('fetch') || error.message.includes('network'));
+}
+
+/**
+ * Pause l'exécution pendant un certain temps
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -257,6 +314,112 @@ export async function apiUpload<T>(endpoint: string, formData: FormData): Promis
   }
 }
 
+/**
+ * Effectue une requête HTTP avec retry automatique
+ * 
+ * @param endpoint - L'endpoint de l'API
+ * @param options - Options de la requête fetch
+ * @param retryConfig - Configuration du retry (optionnel)
+ */
+export async function apiRequestWithRetry<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  retryConfig: Partial<RetryConfig> = {}
+): Promise<T> {
+  const config: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+    try {
+      // Tenter la requête
+      const result = await apiRequest<T>(endpoint, options);
+      
+      // Si on a réussi après des retries, logger
+      if (attempt > 0 && import.meta.env.DEV) {
+        console.log(`[API Retry] ${endpoint} - Succès après ${attempt} tentative(s)`);
+      }
+      
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // Extraire le status code de l'erreur si possible
+      const statusMatch = lastError.message.match(/HTTP (\d+)/);
+      const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+      
+      // Vérifier si on doit réessayer
+      const shouldRetry = 
+        attempt < config.maxRetries && 
+        (isNetworkError(error) || isRetryableError(statusCode, config));
+      
+      if (!shouldRetry) {
+        throw lastError;
+      }
+      
+      // Calculer et appliquer le délai
+      const delay = calculateBackoffDelay(attempt, config);
+      
+      if (import.meta.env.DEV) {
+        console.warn(
+          `[API Retry] ${endpoint} - Tentative ${attempt + 1}/${config.maxRetries} échouée. ` +
+          `Retry dans ${delay}ms... (${lastError.message})`
+        );
+      }
+      
+      await sleep(delay);
+    }
+  }
+  
+  // Si on arrive ici, toutes les tentatives ont échoué
+  throw lastError || new Error('Toutes les tentatives ont échoué');
+}
+
+/**
+ * GET request avec retry
+ */
+export async function apiGetWithRetry<T>(
+  endpoint: string, 
+  retryConfig?: Partial<RetryConfig>
+): Promise<T> {
+  return apiRequestWithRetry<T>(endpoint, { method: 'GET' }, retryConfig);
+}
+
+/**
+ * POST request avec retry
+ */
+export async function apiPostWithRetry<T>(
+  endpoint: string, 
+  body?: any,
+  retryConfig?: Partial<RetryConfig>
+): Promise<T> {
+  return apiRequestWithRetry<T>(
+    endpoint, 
+    {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    },
+    retryConfig
+  );
+}
+
+/**
+ * PUT request avec retry
+ */
+export async function apiPutWithRetry<T>(
+  endpoint: string, 
+  body?: any,
+  retryConfig?: Partial<RetryConfig>
+): Promise<T> {
+  return apiRequestWithRetry<T>(
+    endpoint,
+    {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    },
+    retryConfig
+  );
+}
+
 export default {
   get: apiGet,
   post: apiPost,
@@ -264,4 +427,9 @@ export default {
   delete: apiDelete,
   patch: apiPatch,
   upload: apiUpload,
+  // Versions avec retry
+  getWithRetry: apiGetWithRetry,
+  postWithRetry: apiPostWithRetry,
+  putWithRetry: apiPutWithRetry,
+  requestWithRetry: apiRequestWithRetry,
 };

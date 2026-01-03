@@ -8,8 +8,16 @@ export class MaterniteController {
    */
   static async getDossiers(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
-        clinic_id,
         patient_id,
         status,
         page,
@@ -17,7 +25,7 @@ export class MaterniteController {
       } = req.query;
 
       const result = await MaterniteService.getDossiers({
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         patient_id: patient_id as string,
         status: status as string,
         page: page ? parseInt(page as string) : undefined,
@@ -66,9 +74,17 @@ export class MaterniteController {
    */
   static async createDossier(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         patient_id,
-        clinic_id,
         date_derniere_regles,
         date_prevue_accouchement,
         gestite,
@@ -78,16 +94,16 @@ export class MaterniteController {
         sage_femme_id,
       } = req.body;
 
-      if (!patient_id || !clinic_id) {
+      if (!patient_id) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs patient_id et clinic_id sont requis',
+          message: 'Le champ patient_id est requis',
         });
       }
 
       const dossier = await MaterniteService.createDossier({
         patient_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         date_derniere_regles,
         date_prevue_accouchement,
         gestite,
@@ -138,10 +154,10 @@ export class MaterniteController {
    */
   static async getCPNs(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const {
         dossier_id,
         patient_id,
-        clinic_id,
         page,
         limit,
       } = req.query;
@@ -149,7 +165,7 @@ export class MaterniteController {
       const result = await MaterniteService.getCPNs({
         dossier_id: dossier_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         page: page ? parseInt(page as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
       });
@@ -194,10 +210,18 @@ export class MaterniteController {
    */
   static async createCPN(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         dossier_id,
         patient_id,
-        clinic_id,
         numero_cpn,
         trimestre,
         date_cpn,
@@ -215,17 +239,17 @@ export class MaterniteController {
         sage_femme_id,
       } = req.body;
 
-      if (!dossier_id || !patient_id || !clinic_id || !numero_cpn || !sage_femme_id) {
+      if (!dossier_id || !patient_id || !numero_cpn || !sage_femme_id) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs dossier_id, patient_id, clinic_id, numero_cpn et sage_femme_id sont requis',
+          message: 'Les champs dossier_id, patient_id, numero_cpn et sage_femme_id sont requis',
         });
       }
 
       const cpn = await MaterniteService.createCPN({
         dossier_id,
         patient_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         numero_cpn,
         trimestre: trimestre || Math.ceil(numero_cpn / 3),
         date_cpn: date_cpn || new Date().toISOString(),
@@ -284,10 +308,10 @@ export class MaterniteController {
    */
   static async getAccouchements(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
       const {
         dossier_id,
         patient_id,
-        clinic_id,
         date_debut,
         date_fin,
         page,
@@ -297,7 +321,7 @@ export class MaterniteController {
       const result = await MaterniteService.getAccouchements({
         dossier_id: dossier_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
         date_debut: date_debut as string,
         date_fin: date_fin as string,
         page: page ? parseInt(page as string) : undefined,
@@ -344,10 +368,18 @@ export class MaterniteController {
    */
   static async createAccouchement(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         dossier_id,
         patient_id,
-        clinic_id,
         date_accouchement,
         heure_accouchement,
         mode_accouchement,
@@ -360,17 +392,17 @@ export class MaterniteController {
         notes,
       } = req.body;
 
-      if (!dossier_id || !patient_id || !clinic_id || !date_accouchement || !mode_accouchement) {
+      if (!dossier_id || !patient_id || !date_accouchement || !mode_accouchement) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs dossier_id, patient_id, clinic_id, date_accouchement et mode_accouchement sont requis',
+          message: 'Les champs dossier_id, patient_id, date_accouchement et mode_accouchement sont requis',
         });
       }
 
       const accouchement = await MaterniteService.createAccouchement({
         dossier_id,
         patient_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         date_accouchement,
         heure_accouchement: heure_accouchement || new Date().toTimeString().slice(0, 5),
         mode_accouchement,
@@ -402,12 +434,13 @@ export class MaterniteController {
    */
   static async getSuiviPostPartum(req: Request, res: Response) {
     try {
-      const { accouchement_id, patient_id, clinic_id } = req.query;
+      const clinicId = (req as any).user?.clinic_id;
+      const { accouchement_id, patient_id } = req.query;
 
       const suivis = await MaterniteService.getSuiviPostPartum({
         accouchement_id: accouchement_id as string,
         patient_id: patient_id as string,
-        clinic_id: clinic_id as string,
+        clinic_id: clinicId, // Utiliser depuis req.user
       });
 
       res.json({
@@ -428,10 +461,18 @@ export class MaterniteController {
    */
   static async createSuiviPostPartum(req: Request, res: Response) {
     try {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant',
+        });
+      }
+
       const {
         accouchement_id,
         patient_id,
-        clinic_id,
         date_visite,
         jour_post_partum,
         etat_general,
@@ -448,17 +489,17 @@ export class MaterniteController {
         sage_femme_id,
       } = req.body;
 
-      if (!accouchement_id || !patient_id || !clinic_id || !sage_femme_id) {
+      if (!accouchement_id || !patient_id || !sage_femme_id) {
         return res.status(400).json({
           success: false,
-          message: 'Les champs accouchement_id, patient_id, clinic_id et sage_femme_id sont requis',
+          message: 'Les champs accouchement_id, patient_id et sage_femme_id sont requis',
         });
       }
 
       const suivi = await MaterniteService.createSuiviPostPartum({
         accouchement_id,
         patient_id,
-        clinic_id,
+        clinic_id: clinicId, // Utiliser depuis req.user
         date_visite: date_visite || new Date().toISOString(),
         jour_post_partum: jour_post_partum || 1,
         etat_general,
@@ -494,17 +535,19 @@ export class MaterniteController {
    */
   static async getStats(req: Request, res: Response) {
     try {
-      const { clinic_id, date_debut, date_fin } = req.query;
-
-      if (!clinic_id) {
+      const clinicId = (req as any).user?.clinic_id;
+      
+      if (!clinicId) {
         return res.status(400).json({
           success: false,
-          message: 'clinic_id est requis',
+          message: 'Contexte de clinique manquant',
         });
       }
 
+      const { date_debut, date_fin } = req.query;
+
       const stats = await MaterniteService.getStats(
-        clinic_id as string,
+        clinicId, // Utiliser depuis req.user
         date_debut as string,
         date_fin as string
       );

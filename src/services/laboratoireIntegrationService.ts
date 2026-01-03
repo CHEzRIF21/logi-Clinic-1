@@ -804,7 +804,7 @@ export class LaboratoireIntegrationService {
   // ============================================
 
   /**
-   * Récupère les KPI du laboratoire
+   * Récupère les KPI du laboratoire - OPTIMISÉ avec Promise.all
    */
   static async getLabKPI(): Promise<{
     examens_aujourd_hui: number;
@@ -829,49 +829,38 @@ export class LaboratoireIntegrationService {
       const debutSemaine = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const debutMois = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      // Compter les examens par période
-      const { count: examensAujourdhui } = await supabase
-        .from('lab_prescriptions')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', debutJour);
+      // OPTIMISATION: Exécuter toutes les requêtes en parallèle
+      const [
+        examensAujourdhuiResult,
+        examensSemaineResult,
+        examensMoisResult,
+        analysesTermineesResult,
+        analysesEnCoursResult,
+        analysesEnAttenteResult,
+        resultatsPathologiquesResult,
+        delaisResult,
+      ] = await Promise.all([
+        // Examens par période
+        supabase.from('lab_prescriptions').select('*', { count: 'exact', head: true }).gte('created_at', debutJour),
+        supabase.from('lab_prescriptions').select('*', { count: 'exact', head: true }).gte('created_at', debutSemaine),
+        supabase.from('lab_prescriptions').select('*', { count: 'exact', head: true }).gte('created_at', debutMois),
+        // Analyses par statut
+        supabase.from('lab_analyses').select('*', { count: 'exact', head: true }).eq('statut', 'termine'),
+        supabase.from('lab_analyses').select('*', { count: 'exact', head: true }).eq('statut', 'en_cours'),
+        supabase.from('lab_analyses').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
+        supabase.from('lab_analyses').select('*', { count: 'exact', head: true }).eq('est_pathologique', true),
+        // Délais
+        supabase.from('lab_analyses').select('date_validation, created_at').not('date_validation', 'is', null).gte('created_at', debutMois),
+      ]);
 
-      const { count: examensSemaine } = await supabase
-        .from('lab_prescriptions')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', debutSemaine);
-
-      const { count: examensMois } = await supabase
-        .from('lab_prescriptions')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', debutMois);
-
-      // Compter les analyses par statut
-      const { count: analysesTerminees } = await supabase
-        .from('lab_analyses')
-        .select('*', { count: 'exact', head: true })
-        .eq('statut', 'termine');
-
-      const { count: analysesEnCours } = await supabase
-        .from('lab_analyses')
-        .select('*', { count: 'exact', head: true })
-        .eq('statut', 'en_cours');
-
-      const { count: analysesEnAttente } = await supabase
-        .from('lab_analyses')
-        .select('*', { count: 'exact', head: true })
-        .eq('statut', 'en_attente');
-
-      const { count: resultatsPathologiques } = await supabase
-        .from('lab_analyses')
-        .select('*', { count: 'exact', head: true })
-        .eq('est_pathologique', true);
-
-      // Calculer le délai moyen
-      const { data: delais } = await supabase
-        .from('lab_analyses')
-        .select('date_validation, created_at')
-        .not('date_validation', 'is', null)
-        .gte('created_at', debutMois);
+      const examensAujourdhui = examensAujourdhuiResult.count;
+      const examensSemaine = examensSemaineResult.count;
+      const examensMois = examensMoisResult.count;
+      const analysesTerminees = analysesTermineesResult.count;
+      const analysesEnCours = analysesEnCoursResult.count;
+      const analysesEnAttente = analysesEnAttenteResult.count;
+      const resultatsPathologiques = resultatsPathologiquesResult.count;
+      const delais = delaisResult.data;
 
       let delaiMoyen = 0;
       if (delais && delais.length > 0) {
@@ -882,33 +871,29 @@ export class LaboratoireIntegrationService {
         delaiMoyen = totalHeures / delais.length;
       }
 
-      // Calculer les taux de positivité
+      // OPTIMISATION: Calculer les taux de positivité en parallèle
       const parametresCibles = ['Paludisme', 'VIH', 'Syphilis'];
-      const detailsPositivite: any[] = [];
+      
+      const positiviteResults = await Promise.all(
+        parametresCibles.map(async (parametre) => {
+          const [positifsResult, totalResult] = await Promise.all([
+            supabase.from('lab_analyses').select('*', { count: 'exact', head: true })
+              .eq('parametre', parametre).eq('est_pathologique', true).gte('created_at', debutMois),
+            supabase.from('lab_analyses').select('*', { count: 'exact', head: true })
+              .eq('parametre', parametre).gte('created_at', debutMois),
+          ]);
+          return { parametre, positifs: positifsResult.count || 0, total: totalResult.count || 0 };
+        })
+      );
 
-      for (const parametre of parametresCibles) {
-        const { count: positifs } = await supabase
-          .from('lab_analyses')
-          .select('*', { count: 'exact', head: true })
-          .eq('parametre', parametre)
-          .eq('est_pathologique', true)
-          .gte('created_at', debutMois);
-
-        const { count: total } = await supabase
-          .from('lab_analyses')
-          .select('*', { count: 'exact', head: true })
-          .eq('parametre', parametre)
-          .gte('created_at', debutMois);
-
-        if (total && total > 0) {
-          detailsPositivite.push({
-            parametre,
-            positifs: positifs || 0,
-            total: total,
-            taux: ((positifs || 0) / total) * 100
-          });
-        }
-      }
+      const detailsPositivite: any[] = positiviteResults
+        .filter(r => r.total > 0)
+        .map(r => ({
+          parametre: r.parametre,
+          positifs: r.positifs,
+          total: r.total,
+          taux: (r.positifs / r.total) * 100,
+        }));
 
       const tauxPositiviteMoyen = detailsPositivite.length > 0
         ? detailsPositivite.reduce((sum, d) => sum + d.taux, 0) / detailsPositivite.length

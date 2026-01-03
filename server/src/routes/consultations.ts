@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import ConsultationController from '../controllers/consultationController';
+import { requireAuth, requireClinicContext } from '../middleware/auth';
 
 const router = Router();
+
+// Authentification obligatoire pour toutes les routes
+router.use(requireAuth);
+router.use(requireClinicContext);
 
 // Liste des consultations avec filtres
 router.get('/', ConsultationController.list);

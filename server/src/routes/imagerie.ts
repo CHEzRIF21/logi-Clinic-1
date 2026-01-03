@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import ImagerieController from '../controllers/imagerieController';
+import { requireAuth, requireClinicContext } from '../middleware/auth';
 
 const router = Router();
+
+// Authentification obligatoire pour toutes les routes
+router.use(requireAuth);
+router.use(requireClinicContext);
 
 // Catalogue des examens
 router.get('/catalogue', ImagerieController.getCatalogue);
