@@ -136,7 +136,6 @@ const ConsultationModule: React.FC = () => {
     if (!currentConsultation) return;
     
     try {
-      const userId = getCurrentUserId();
       // La sauvegarde est déjà gérée dans ConsultationWorkflow
       // Cette fonction peut être utilisée pour des actions supplémentaires
       console.log(`Étape ${step} complétée:`, data);

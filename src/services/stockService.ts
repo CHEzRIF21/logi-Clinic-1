@@ -1065,6 +1065,8 @@ export class StockService {
           fournisseur,
           statut,
           magasin,
+          created_at,
+          updated_at,
           medicaments (
             id,
             code,

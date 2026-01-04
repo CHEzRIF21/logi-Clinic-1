@@ -59,11 +59,11 @@ export const ConsultationWorkflowStep2: React.FC<ConsultationWorkflowStep2Props>
         <FormControl fullWidth sx={{ mb: 2 }}>
           <InputLabel>Type de consultation / Fiche</InputLabel>
           <Select
-            value={consultation.type}
+            value={consultation.categorie_motif || ''}
             label="Type de consultation / Fiche"
             disabled
           >
-            <MenuItem value={consultation.type}>{consultation.type}</MenuItem>
+            <MenuItem value={consultation.categorie_motif || ''}>{consultation.categorie_motif || 'Non spécifié'}</MenuItem>
           </Select>
         </FormControl>
 

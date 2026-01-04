@@ -136,11 +136,11 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
                       <TableCell>
                         {new Date(request.created_at).toLocaleDateString('fr-FR')}
                       </TableCell>
-                      <TableCell>{request.type}</TableCell>
+                      <TableCell>{request.type_examen || '-'}</TableCell>
                       <TableCell>
                         {Array.isArray(request.tests) ? request.tests.length : 0} test(s)
                       </TableCell>
-                      <TableCell>{request.status}</TableCell>
+                      <TableCell>{request.statut || '-'}</TableCell>
                       <TableCell>
                         <Button size="small" startIcon={<Science />}>
                           Voir détails

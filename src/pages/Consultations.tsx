@@ -532,7 +532,7 @@ const Consultations: React.FC = () => {
     const total = consultations.length;
     const terminees = consultations.filter(c => c.status === 'CLOTURE').length;
     const enCours = consultations.filter(c => c.status === 'EN_COURS').length;
-    const annulees = consultations.filter(c => c.status === 'ANNULEE').length;
+    const annulees = consultations.filter(c => c.status === 'ANNULE').length;
     return { total, terminees, enCours, annulees };
   }, [consultations]);
 
@@ -683,7 +683,7 @@ const Consultations: React.FC = () => {
                   .filter(c => {
                     if (tab === 1) return c.status === 'EN_COURS';
                     if (tab === 2) return c.status === 'CLOTURE';
-                    if (tab === 3) return c.status === 'ANNULEE';
+                    if (tab === 3) return c.status === 'ANNULE';
                     return true;
                   })
                   .map((consultation) => (
