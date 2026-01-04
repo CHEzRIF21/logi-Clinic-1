@@ -110,8 +110,8 @@ export const IntegrationService = {
       const date = new Date();
       date.setDate(date.getDate() + (params.daysOffset ?? 7));
 
-      // Tente d'utiliser une table Supabase 'rendezvous' si disponible
-      const { error } = await supabase.from('rendezvous').insert({
+      // Utilise la table Supabase 'rendez_vous' (avec underscore)
+      const { error } = await supabase.from('rendez_vous').insert({
         patient_id: params.patientId,
         service: params.service,
         praticien: params.praticien || null,
@@ -125,7 +125,7 @@ export const IntegrationService = {
 
       if (error) {
         // Si la table n'existe pas, renvoie un message explicite (fallback possible côté backend)
-        throw new Error('Table rendezvous indisponible côté base. Configurez la migration Supabase.');
+        throw new Error('Table rendez_vous indisponible côté base. Configurez la migration Supabase.');
       }
 
       return { ok: true };
