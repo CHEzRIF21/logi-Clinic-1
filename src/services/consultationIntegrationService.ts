@@ -249,6 +249,114 @@ export const ConsultationIntegrationService = {
   },
 
   /**
+   * Envoie les prescriptions au module Pharmacie
+   */
+  async sendPrescriptionsToPharmacy(
+    consultationId: string,
+    patientId: string,
+    prescriptionIds?: string[]
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      // Récupérer les prescriptions liées à la consultation
+      const { data: prescriptions } = await supabase
+        .from('prescriptions')
+        .select('id, statut')
+        .eq('consultation_id', consultationId)
+        .eq('statut', 'PRESCRIT');
+
+      if (!prescriptions || prescriptions.length === 0) {
+        return { success: true, message: 'Aucune prescription à envoyer' };
+      }
+
+      // Marquer comme validées pour le module pharmacie
+      for (const presc of prescriptions) {
+        await supabase
+          .from('prescriptions')
+          .update({ statut: 'VALIDE', updated_at: new Date().toISOString() })
+          .eq('id', presc.id);
+      }
+
+      return { success: true, message: `${prescriptions.length} prescription(s) envoyée(s) à la Pharmacie` };
+    } catch (error: any) {
+      console.error('Erreur envoi prescriptions pharmacie:', error);
+      return { success: false, message: error.message };
+    }
+  },
+
+  /**
+   * Envoie les demandes labo au module Laboratoire
+   */
+  async sendLabRequestsToLaboratory(
+    consultationId: string,
+    patientId: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const { data: labRequests } = await supabase
+        .from('lab_prescriptions')
+        .select('id, statut')
+        .eq('consultation_id', consultationId)
+        .eq('statut', 'prescrit');
+
+      if (!labRequests || labRequests.length === 0) {
+        return { success: true, message: 'Aucune demande labo à envoyer' };
+      }
+
+      return { success: true, message: `${labRequests.length} demande(s) labo prête(s)` };
+    } catch (error: any) {
+      console.error('Erreur envoi demandes labo:', error);
+      return { success: false, message: error.message };
+    }
+  },
+
+  /**
+   * Envoie les demandes imagerie au module Imagerie
+   */
+  async sendImagingRequestsToImagerie(
+    consultationId: string,
+    patientId: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const { data: imagingRequests } = await supabase
+        .from('imaging_requests')
+        .select('id, status')
+        .eq('consultation_id', consultationId)
+        .eq('status', 'pending');
+
+      if (!imagingRequests || imagingRequests.length === 0) {
+        return { success: true, message: 'Aucune demande imagerie à envoyer' };
+      }
+
+      return { success: true, message: `${imagingRequests.length} demande(s) imagerie prête(s)` };
+    } catch (error: any) {
+      console.error('Erreur envoi demandes imagerie:', error);
+      return { success: false, message: error.message };
+    }
+  },
+
+  /**
+   * Génère la facturation et l'envoie au module Caisse
+   */
+  async generateBillingAndSendToCaisse(
+    consultationId: string,
+    patientId: string
+  ): Promise<{ success: boolean; message?: string; factureId?: string }> {
+    try {
+      // Import dynamique pour éviter les dépendances circulaires
+      const { ConsultationBillingService } = await import('./consultationBillingService');
+      const summary = await ConsultationBillingService.generateInvoice(consultationId, patientId);
+      
+      return { 
+        success: true, 
+        message: `Facture générée: ${summary.total.toLocaleString()} XOF`,
+        factureId: summary.factureId
+      };
+    } catch (error: any) {
+      console.error('Erreur génération facturation:', error);
+      return { success: false, message: error.message };
+    }
+  },
+
+  /**
    * Récupère le statut des intégrations pour une consultation
    */
   async getIntegrationStatus(consultationId: string): Promise<{

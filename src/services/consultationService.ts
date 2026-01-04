@@ -9,6 +9,8 @@ export interface Consultation {
   status: 'BROUILLON' | 'EN_COURS' | 'CLOTURE' | 'ANNULE';
   motifs: string[];
   categorie_motif?: string;
+  type?: string; // Type de consultation (Médecine générale, etc.)
+  template_id?: string; // ID du template utilisé
   anamnese?: string;
   traitement_en_cours?: string;
   examens_cliniques: any;
@@ -358,10 +360,10 @@ export class ConsultationService {
   /**
    * Dispenser une prescription (simulé via integrationService)
    */
-  static async dispenserPrescription(prescriptionId: string, items: any[]): Promise<void> {
+  static async dispenserPrescription(prescriptionId: string, items: any[], userId?: string): Promise<void> {
     // Cette méthode devrait appeler le service de dispensation/stock
     // Pour l'instant, on laisse le frontend appeler les services dédiés
-    console.log('Dispensation prescription:', prescriptionId, items);
+    console.log('Dispensation prescription:', prescriptionId, items, userId);
   }
 
   /**
