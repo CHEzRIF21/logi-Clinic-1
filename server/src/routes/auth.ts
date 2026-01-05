@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../config/supabase';
+import { supabase, supabaseAdmin } from '../config/supabase';
 import { logger } from '../utils/logger';
 import crypto from 'crypto';
 import { emailService } from '../services/emailService';
@@ -288,7 +288,40 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
       });
     }
 
-    // Créer l'utilisateur avec le clinic_id de la demande
+    // Vérifier que supabaseAdmin est disponible
+    if (!supabaseAdmin) {
+      return res.status(500).json({
+        success: false,
+        message: 'Service admin non disponible. Vérifiez SUPABASE_SERVICE_ROLE_KEY',
+      });
+    }
+
+    // Générer un mot de passe temporaire
+    const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
+
+    // Créer l'utilisateur dans Supabase Auth
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: request.email,
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: {
+        nom: request.nom,
+        prenom: request.prenom,
+        role: role || request.role_souhaite,
+        clinic_id: request.clinic_id,
+      },
+    });
+
+    if (authError || !authUser?.user) {
+      console.error('Erreur création utilisateur Auth:', authError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la création du compte utilisateur',
+        error: authError?.message,
+      });
+    }
+
+    // Créer l'utilisateur dans la table users avec auth_user_id
     const { error: userError } = await supabase
       .from('users')
       .insert({
@@ -303,15 +336,25 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
         actif: true,
         status: 'PENDING', // L'utilisateur devra changer son mot de passe à la première connexion
         clinic_id: request.clinic_id, // Association à la clinique
+        auth_user_id: authUser.user.id, // Lier au compte Auth
       });
 
     if (userError) {
+      // Rollback: supprimer l'utilisateur Auth créé
+      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
       console.error('Erreur création utilisateur:', userError);
       return res.status(500).json({
         success: false,
         message: 'Erreur lors de la création de l\'utilisateur',
+        error: userError.message,
       });
     }
+
+    // Générer un lien de réinitialisation de mot de passe
+    const { data: resetData } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: request.email,
+    });
 
     // Mettre à jour le statut de la demande
     const { error: updateError } = await supabase
@@ -319,6 +362,7 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
       .update({
         statut: 'approved',
         notes,
+        approuve_par: authUser.user.id, // ID de l'admin qui approuve
         date_approbation: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -328,9 +372,18 @@ router.post('/registration-requests/:id/approve', async (req: Request, res: Resp
       console.error('Erreur mise à jour demande:', updateError);
     }
 
+    // TODO: Envoyer un email avec le lien de réinitialisation
+    // await emailService.sendWelcomeEmail({
+    //   to: request.email,
+    //   resetLink: resetData?.properties?.action_link,
+    //   tempPassword: tempPassword
+    // });
+
     res.json({
       success: true,
       message: 'Demande approuvée avec succès',
+      recoveryLink: resetData?.properties?.action_link || null,
+      note: 'Un email avec le lien de réinitialisation sera envoyé au membre',
     });
   } catch (error: any) {
     console.error('Erreur:', error);

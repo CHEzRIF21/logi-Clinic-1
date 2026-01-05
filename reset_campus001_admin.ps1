@@ -44,16 +44,61 @@ try {
             "Content-Type" = "application/json"
             "apikey" = $supabaseAnonKey
         } `
-        -Body $loginBody
+        -Body $loginBody `
+        -ErrorAction Stop
 
     $superAdminToken = $loginResponse.access_token
     Write-Host "✅ Token SUPER_ADMIN obtenu avec succès" -ForegroundColor Green
     Write-Host ""
 } catch {
-    Write-Host "❌ Erreur lors de la connexion : $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Détails de l'erreur :" -ForegroundColor Yellow
-    $_.Exception.Response | Format-List
+    # Vérifier si c'est une erreur HTTP
+    $isHttpError = $false
+    $statusCode = $null
+    $errorContent = $null
+    
+    # Essayer de détecter une erreur HTTP de différentes manières (compatible toutes versions PowerShell)
+    if ($_.Exception.Response) {
+        $isHttpError = $true
+        try {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+        } catch {
+            try {
+                $statusCode = $_.Exception.Response.StatusCode
+            } catch {
+                $statusCode = "Unknown"
+            }
+        }
+        
+        # Essayer de récupérer le message d'erreur
+        if ($_.ErrorDetails) {
+            $errorContent = $_.ErrorDetails.Message
+        }
+    }
+    
+    if ($isHttpError -and $statusCode) {
+        Write-Host "❌ Erreur HTTP $statusCode lors de la connexion" -ForegroundColor Red
+        Write-Host ""
+        
+        if ($errorContent) {
+            try {
+                $errorJson = $errorContent | ConvertFrom-Json
+                Write-Host "Erreur: $($errorJson.error)" -ForegroundColor Red
+                if ($errorJson.message) {
+                    Write-Host "Message: $($errorJson.message)" -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "Réponse: $errorContent" -ForegroundColor Red
+            }
+        } else {
+            Write-Host "Message: $($_.Exception.Message)" -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "💡 Vérifiez votre email et mot de passe SUPER_ADMIN" -ForegroundColor Yellow
+    } else {
+        Write-Host "❌ Erreur lors de la connexion : $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "💡 Vérifiez votre connexion Internet" -ForegroundColor Yellow
+    }
     exit 1
 }
 
@@ -86,7 +131,8 @@ try {
             "Content-Type" = "application/json"
             "apikey" = $supabaseAnonKey
         } `
-        -Body $body
+        -Body $body `
+        -ErrorAction Stop
 
     Write-Host ""
     Write-Host "✅ Réinitialisation réussie !" -ForegroundColor Green
@@ -111,24 +157,73 @@ try {
     Write-Host ""
 
 } catch {
-    Write-Host ""
-    Write-Host "❌ Erreur lors de l'appel à bootstrap-clinic-admin-auth" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Détails de l'erreur :" -ForegroundColor Yellow
+    # Gestion des erreurs (compatible toutes versions PowerShell)
+    $isHttpError = $false
+    $statusCode = $null
+    $errorContent = $null
     
+    # Détecter si c'est une erreur HTTP
     if ($_.Exception.Response) {
-        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
-        $responseBody = $reader.ReadToEnd()
-        Write-Host $responseBody -ForegroundColor Red
-    } else {
-        Write-Host $_.Exception.Message -ForegroundColor Red
+        $isHttpError = $true
+        try {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+        } catch {
+            try {
+                $statusCode = $_.Exception.Response.StatusCode
+            } catch {
+                $statusCode = "Unknown"
+            }
+        }
+        
+        # Récupérer le message d'erreur
+        if ($_.ErrorDetails) {
+            $errorContent = $_.ErrorDetails.Message
+        }
     }
     
     Write-Host ""
-    Write-Host "💡 Solutions possibles :" -ForegroundColor Yellow
-    Write-Host "   1. Vérifiez que la migration 'reset_campus001_admin_password' a été appliquée" -ForegroundColor White
-    Write-Host "   2. Vérifiez que l'utilisateur Auth a été supprimé" -ForegroundColor White
-    Write-Host "   3. Vérifiez que le token SUPER_ADMIN est valide" -ForegroundColor White
+    
+    if ($isHttpError -and $statusCode) {
+        Write-Host "❌ Erreur HTTP $statusCode lors de l'appel à bootstrap-clinic-admin-auth" -ForegroundColor Red
+        Write-Host ""
+        
+        if ($errorContent) {
+            try {
+                # Essayer de parser le JSON d'erreur
+                $errorJson = $errorContent | ConvertFrom-Json
+                Write-Host "Erreur: $($errorJson.error)" -ForegroundColor Red
+                if ($errorJson.details) {
+                    Write-Host "Détails: $($errorJson.details)" -ForegroundColor Red
+                }
+                if ($errorJson.recoveryLink) {
+                    Write-Host ""
+                    Write-Host "🔗 Recovery Link: $($errorJson.recoveryLink)" -ForegroundColor Yellow
+                }
+            } catch {
+                # Si ce n'est pas du JSON, afficher tel quel
+                Write-Host "Réponse: $errorContent" -ForegroundColor Red
+            }
+        } else {
+            Write-Host "Message: $($_.Exception.Message)" -ForegroundColor Red
+        }
+        
+        Write-Host ""
+        Write-Host "💡 Solutions possibles :" -ForegroundColor Yellow
+        Write-Host "   1. Vérifiez que la migration 'reset_campus001_admin_password' a été appliquée" -ForegroundColor White
+        Write-Host "   2. Vérifiez que l'utilisateur Auth a été supprimé" -ForegroundColor White
+        Write-Host "   3. Vérifiez que le token SUPER_ADMIN est valide" -ForegroundColor White
+        Write-Host "   4. Vérifiez que la fonction bootstrap-clinic-admin-auth est déployée" -ForegroundColor White
+        Write-Host "   5. Vérifiez que la clinique CAMPUS-001 existe et est active" -ForegroundColor White
+    } else {
+        Write-Host "❌ Erreur inattendue lors de l'appel à bootstrap-clinic-admin-auth" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Message: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "💡 Vérifiez :" -ForegroundColor Yellow
+        Write-Host "   - La connexion Internet" -ForegroundColor White
+        Write-Host "   - L'URL de la fonction est correcte" -ForegroundColor White
+        Write-Host "   - La fonction est déployée" -ForegroundColor White
+    }
     exit 1
 }
 

@@ -72,10 +72,12 @@ $superAdminPasswordPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
 
 ```powershell
 try {
+
     $loginBody = @{
         email = $superAdminEmail
         password = $superAdminPasswordPlain
-    } | ConvertTo-Json
+    
+    
 
     $loginResponse = Invoke-RestMethod -Uri "$supabaseUrl/auth/v1/token?grant_type=password" `
         -Method Post `
