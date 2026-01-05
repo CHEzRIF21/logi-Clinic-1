@@ -1752,13 +1752,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <Box component="form" onSubmit={handleSignupSubmit}>
               <Grid container spacing={2}>
                 {/* Code Clinique - Champ obligatoire en premier */}
-                <Grid item xs={12}>
+                <Grid item xs={12} sx={{ mb: 1 }}>
                   <TextField
-                    margin="normal"
                     required
                     fullWidth
                     id="clinicCode"
-                    label="Code Clinique"
+                    label="Code Clinique *"
                     name="clinicCode"
                     value={signupForm.clinicCode}
                     onChange={(e) => {
@@ -1781,6 +1780,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     }
                     error={signupForm.clinicCode.length >= 3 && !clinicValidation.isValid && !clinicValidation.isChecking}
                     sx={{
+                      mt: 0,
+                      mb: 1,
                       '& .MuiFormHelperText-root': {
                         color: clinicValidation.isValid ? theme.palette.success.main : undefined,
                       },
