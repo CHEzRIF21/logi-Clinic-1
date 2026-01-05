@@ -15,7 +15,14 @@ export default defineConfig({
     open: true,
     host: true,
     strictPort: false, // Permet d'utiliser un autre port si 3001 est occupé
+    // Logs détaillés pour le débogage
+    hmr: {
+      overlay: true, // Afficher les erreurs dans le navigateur
+    },
   },
+  // Logs détaillés en mode développement
+  logLevel: process.env.NODE_ENV === 'development' ? 'info' : 'warn',
+  clearScreen: false, // Garder les logs visibles
   build: {
     outDir: 'build',
     sourcemap: process.env.NODE_ENV === 'development', // Sourcemaps seulement en dev
@@ -44,7 +51,20 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom'],
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@mui/material',
+      '@mui/icons-material',
+      '@mui/x-data-grid',
+      '@mui/x-date-pickers',
+      '@emotion/react',
+      '@emotion/styled',
+      '@supabase/supabase-js',
+      'gsap',
+    ],
+    exclude: [],
   },
 });
 
