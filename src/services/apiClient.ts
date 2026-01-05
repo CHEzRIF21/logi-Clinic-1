@@ -8,16 +8,18 @@
  * - Pas de retry pour les erreurs 4xx (erreurs client)
  */
 
+// URL de production par défaut (Supabase Edge Functions)
+const PRODUCTION_API_URL = 'https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api';
+
 // Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
+// En production, utilise l'URL Supabase Edge Functions par défaut
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  '';
+  PRODUCTION_API_URL;
 
-// Vérification de la configuration au chargement du module
-if (!API_BASE_URL && typeof window !== 'undefined') {
-  console.error('⚠️ VITE_API_URL non configuré !');
-  console.error('Créez un fichier .env avec:');
-  console.error('VITE_API_URL=http://localhost:3000/api');
+// Log pour debug (uniquement en développement)
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  console.log('🔗 API URL configurée:', API_BASE_URL);
 }
 
 /**
