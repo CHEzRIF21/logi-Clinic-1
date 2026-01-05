@@ -50,11 +50,14 @@ export interface LabRequest {
   id: string;
   consultation_id: string;
   patient_id: string;
-  type_examen: string;
+  type_examen?: string;
+  type?: 'INTERNE' | 'EXTERNE';
+  clinical_info?: string;
   details?: string;
-  statut: 'en_attente' | 'preleve' | 'termine' | 'annule';
+  statut?: 'en_attente' | 'preleve' | 'termine' | 'annule';
   tests?: any[];
-  created_at: string;
+  facturable?: boolean;
+  created_at?: string;
 }
 
 export class ConsultationService {

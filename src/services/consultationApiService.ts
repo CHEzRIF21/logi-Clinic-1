@@ -31,6 +31,7 @@ export interface Prescription {
   patient_id: string;
   clinic_id?: string;
   medecin_id?: string;
+  numero_prescription?: string;
   statut: 'PRESCRIT' | 'VALIDE' | 'DISPENSEE' | 'ANNULEE';
   lines?: PrescriptionLine[];
   created_at: string;
@@ -47,13 +48,18 @@ export interface ProtocolItem {
   frequence?: string;
   duree?: number;
   instructions?: string;
+  mode_administration?: string;
+  nombre_fois?: number;
 }
 
 export interface ProtocolSchedule {
   id?: string;
-  date_debut: string;
+  date_debut?: string;
   date_fin?: string;
-  heures: string[];
+  heures?: string[];
+  heure?: string;
+  dosage?: string;
+  repetition?: string;
   jours_semaine?: number[];
   observations?: string;
 }
@@ -62,16 +68,17 @@ export interface Protocol {
   id?: string;
   consultation_id: string;
   patient_id: string;
-  type_admission: 'SOINS_DOMICILE' | 'AMBULATOIRE' | 'OBSERVATION' | 'HOSPITALISATION';
+  type_admission?: 'SOINS_DOMICILE' | 'AMBULATOIRE' | 'OBSERVATION' | 'HOSPITALISATION';
+  admission_type?: string;
   items: ProtocolItem[];
-  schedules: ProtocolSchedule[];
+  schedules?: ProtocolSchedule[];
   instructions_generales?: string;
   created_at?: string;
   updated_at?: string;
 }
 
 // Re-export LabRequest
-export { LabRequest };
+export type { LabRequest };
 
 export const ConsultationApiService = {
   /**
@@ -185,6 +192,7 @@ export interface PrescriptionLine {
   nom_medicament: string;
   posologie: string;
   quantite_totale: number;
+  quantite_dispensee?: number;
   duree_jours?: number;
   mode_administration?: string;
   instructions?: string;
