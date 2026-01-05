@@ -5,6 +5,11 @@ import { errorHandler } from './middleware/errorHandler';
 import { licenseCheckMiddleware } from './middleware/licenseCheck';
 import { appSecurityMiddleware } from './middleware/appSecurity';
 import licenseService from './services/licenseService';
+// #region agent log
+import * as fs from 'fs';
+import * as path from 'path';
+const logPath = path.join(__dirname, '../../.cursor/debug.log');
+// #endregion
 
 // Routes
 import invoicesRouter from './routes/invoices';
@@ -89,6 +94,14 @@ app.get('/health', (req, res) => {
   });
 });
 
+// #region agent log
+app.use('/api/auth', (req, res, next) => {
+  try {
+    fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:93',message:'Requête reçue sur /api/auth',data:{method:req.method,path:req.path,originalUrl:req.originalUrl,ip:req.ip},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
+  } catch(e) {}
+  next();
+});
+// #endregion
 // API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/license', licenseRouter);
@@ -127,10 +140,21 @@ app.use((req, res) => {
 
 const PORT = config.port;
 
+// #region agent log
+try {
+  fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:128',message:'Démarrage serveur - avant app.listen',data:{port:PORT,configPort:config.port,nodeEnv:config.nodeEnv},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
+} catch(e) {}
+// #endregion
+
 app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur le port ${PORT}`);
   console.log(`📊 Environnement: ${config.nodeEnv}`);
   console.log(`🔗 API disponible sur http://localhost:${PORT}/api`);
+  // #region agent log
+  try {
+    fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:131',message:'Serveur démarré avec succès',data:{port:PORT,hostname:'localhost',apiUrl:`http://localhost:${PORT}/api`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
+  } catch(e) {}
+  // #endregion
 });
 
 export default app;

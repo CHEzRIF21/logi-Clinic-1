@@ -1084,15 +1084,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:1087',message:'Vérification VITE_API_URL',data:{viteApiUrl:import.meta.env.VITE_API_URL,reactAppApiUrl:typeof process !== 'undefined' ? process.env?.REACT_APP_API_URL : 'N/A'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const API_BASE_URL = import.meta.env.VITE_API_URL || 
         (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
         '';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:1090',message:'API_BASE_URL résolu',data:{apiBaseUrl:API_BASE_URL,isEmpty:!API_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       if (!API_BASE_URL) {
         setError('Configuration API manquante. Veuillez configurer VITE_API_URL.');
         setSignupLoading(false);
         return;
       }
-      const response = await fetch(`${API_BASE_URL}/auth/register-request`, {
+      const requestUrl = `${API_BASE_URL}/auth/register-request`;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:1095',message:'Tentative de connexion au backend',data:{requestUrl:requestUrl,method:'POST'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1126,6 +1136,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           },
         }),
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:1138',message:'Réponse fetch reçue',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
       const data = await response.json();
 
@@ -1154,6 +1167,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
     } catch (error: any) {
       console.error('Erreur lors de l\'inscription:', error);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:1165',message:'Erreur capturée dans catch',data:{errorName:error?.name,errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       
       // Gérer spécifiquement l'erreur "Failed to fetch"
       if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {

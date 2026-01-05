@@ -3,6 +3,11 @@ import { supabase, supabaseAdmin } from '../config/supabase';
 import { logger } from '../utils/logger';
 import crypto from 'crypto';
 import { emailService } from '../services/emailService';
+// #region agent log
+import * as fs from 'fs';
+import * as path from 'path';
+const logPath = path.join(__dirname, '../../../.cursor/debug.log');
+// #endregion
 
 const router = Router();
 
@@ -13,6 +18,11 @@ function hashPassword(password: string): string {
 
 // POST /api/auth/register-request - Créer une demande d'inscription
 router.post('/register-request', async (req: Request, res: Response) => {
+  // #region agent log
+  try {
+    fs.appendFileSync(logPath, JSON.stringify({location:'auth.ts:15',message:'Route register-request appelée',data:{method:req.method,bodyKeys:Object.keys(req.body || {}),hasClinicCode:!!req.body?.clinicCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
+  } catch(e) {}
+  // #endregion
   try {
     const {
       nom,
