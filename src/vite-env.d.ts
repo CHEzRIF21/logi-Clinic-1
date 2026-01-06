@@ -24,3 +24,8 @@ declare const process: {
   };
 } | undefined;
 
+// Déclaration pour window.__import (utilisé pour le debugging)
+interface Window {
+  __import?: () => void;
+}
+

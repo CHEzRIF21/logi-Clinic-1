@@ -76,13 +76,14 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
   
   // #region agent log (debug-session) - Hypothesis A: Recharts circular dependency
   // Log when recharts is being loaded
-  const originalImport = (window as any).__import || (() => {});
+  const originalImport = window.__import || (() => {});
   let rechartsLoadAttempted = false;
   const checkRechartsLoad = () => {
-    if (!rechartsLoadAttempted && typeof window !== 'undefined') {
-      const scripts = Array.from(document.querySelectorAll('script[src]')) as HTMLScriptElement[];
-      const rechartsScript = scripts.find(s => s.src.includes('vendor-charts'));
-      if (rechartsScript) {
+    if (!rechartsLoadAttempted && typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const scriptElements = document.querySelectorAll('script[src]');
+      const scripts: HTMLScriptElement[] = Array.from(scriptElements) as HTMLScriptElement[];
+      const rechartsScript = scripts.find((s: HTMLScriptElement) => s.src && s.src.includes('vendor-charts'));
+      if (rechartsScript && rechartsScript.src) {
         rechartsLoadAttempted = true;
         send('A', 'src/index.tsx:recharts_detection', 'recharts_script_detected', {
           src: rechartsScript.src,
@@ -140,7 +141,11 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
         lineno: (ev as any)?.lineno,
         colno: (ev as any)?.colno,
         error: err ? { name: err.name, message: err.message, stack: (err.stack || '').slice(0, 300) } : undefined,
-        loadedScripts: typeof document !== 'undefined' ? Array.from(document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>).map(s => s.src).slice(0, 10) : [],
+        loadedScripts: typeof document !== 'undefined' ? (() => {
+          const scriptElements = document.querySelectorAll('script[src]');
+          const scripts: HTMLScriptElement[] = Array.from(scriptElements) as HTMLScriptElement[];
+          return scripts.map((s: HTMLScriptElement) => s.src).slice(0, 10);
+        })() : [],
       });
     }
     // #endregion agent log (debug-session)
@@ -255,10 +260,11 @@ document.head.appendChild(link);
 // #region agent log (debug-session) - Hypothesis D, E: Chunk loading order
 const logChunkLoading = () => {
   if (typeof document !== 'undefined') {
-    const scripts = Array.from(document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>);
+    const scriptElements = document.querySelectorAll('script[src]');
+    const scripts: HTMLScriptElement[] = Array.from(scriptElements) as HTMLScriptElement[];
     const chunks = scripts
-      .map(s => s.src)
-      .filter(src => src.includes('vendor-') || src.includes('page-') || src.includes('assets/'))
+      .map((s: HTMLScriptElement) => s.src)
+      .filter((src: string) => src.includes('vendor-') || src.includes('page-') || src.includes('assets/'))
       .slice(0, 15);
     // send est défini dans la IIFE ci-dessus, on doit le déclarer ici aussi ou utiliser une fonction globale
     const sendChunkData = (hypothesisId: string, location: string, message: string, data: any) => {
@@ -282,8 +288,8 @@ const logChunkLoading = () => {
     };
     sendChunkData('D', 'src/index.tsx:chunk_loading', 'chunks_detected', {
       count: chunks.length,
-      chunks: chunks.map(c => c.split('/').pop()?.split('?')[0] || c),
-      vendorChartsIndex: chunks.findIndex(c => c.includes('vendor-charts')),
+      chunks: chunks.map((c: string) => c.split('/').pop()?.split('?')[0] || c),
+      vendorChartsIndex: chunks.findIndex((c: string) => c.includes('vendor-charts')),
     });
   }
 };

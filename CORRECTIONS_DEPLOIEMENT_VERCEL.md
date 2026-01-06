@@ -2,16 +2,28 @@
 
 ## 🔧 Erreurs TypeScript corrigées
 
-### Problèmes identifiés dans `src/index.tsx`
+### Problèmes identifiés et corrigés
 
 1. **Erreur ligne 79** : `Property '__import' does not exist on type 'Window'`
-   - **Correction** : Utilisation de `(window as any).__import` pour éviter l'erreur de type
+   - **Correction** : Ajout d'une déclaration de type dans `src/vite-env.d.ts` :
+     ```typescript
+     interface Window {
+       __import?: () => void;
+     }
+     ```
+   - Utilisation de `window.__import` au lieu de `(window as any).__import`
 
 2. **Erreur lignes 84, 88, 143, 260** : `Property 'src' does not exist on type 'Element'`
-   - **Correction** : Ajout de types explicites `HTMLScriptElement[]` et `NodeListOf<HTMLScriptElement>` pour que TypeScript reconnaisse la propriété `src`
+   - **Correction** : Utilisation de types explicites avec assertions de type :
+     ```typescript
+     const scriptElements = document.querySelectorAll('script[src]');
+     const scripts: HTMLScriptElement[] = Array.from(scriptElements) as HTMLScriptElement[];
+     ```
+   - Ajout de vérifications de type explicites pour chaque utilisation de `src`
 
 3. **Erreur ligne 263** : `Cannot find name 'send'`
    - **Correction** : Création d'une fonction locale `sendChunkData` dans `logChunkLoading` car `send` n'est pas accessible en dehors de la IIFE
+   - Tous les appels à `send` dans `logChunkLoading` ont été remplacés par `sendChunkData`
 
 ## ✅ Vérification
 
