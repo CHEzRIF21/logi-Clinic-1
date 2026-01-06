@@ -28,6 +28,8 @@ export default defineConfig({
     sourcemap: process.env.NODE_ENV === 'development', // Sourcemaps seulement en dev
     chunkSizeWarningLimit: 2000, // Augmente la limite d'avertissement à 2MB
     minify: 'esbuild', // Utilise esbuild pour un minification plus rapide
+    // Améliorer la gestion des assets statiques
+    assetsDir: 'assets',
     rollupOptions: {
       output: {
         // Stratégie de chunking simplifiée pour éviter les problèmes de dépendances circulaires
@@ -52,8 +54,12 @@ export default defineConfig({
           if (id.includes('node_modules/jspdf')) {
             return 'vendor-pdf';
           }
-          // Charts
+          // Charts - Isoler recharts pour éviter les dépendances circulaires
           if (id.includes('node_modules/recharts')) {
+            // Séparer recharts en chunks plus petits pour éviter les problèmes d'initialisation
+            if (id.includes('recharts/lib')) {
+              return 'vendor-charts-core';
+            }
             return 'vendor-charts';
           }
           // Dates
@@ -94,8 +100,13 @@ export default defineConfig({
       '@emotion/styled',
       '@supabase/supabase-js',
       'gsap',
+      'recharts',
     ],
     exclude: [],
+    // Forcer la résolution des dépendances pour éviter les problèmes circulaires
+    esbuildOptions: {
+      target: 'es2020',
+    },
   },
 });
 
