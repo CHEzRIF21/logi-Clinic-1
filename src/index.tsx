@@ -76,11 +76,11 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
   
   // #region agent log (debug-session) - Hypothesis A: Recharts circular dependency
   // Log when recharts is being loaded
-  const originalImport = window.__import || (() => {});
+  const originalImport = (window as any).__import || (() => {});
   let rechartsLoadAttempted = false;
   const checkRechartsLoad = () => {
     if (!rechartsLoadAttempted && typeof window !== 'undefined') {
-      const scripts = Array.from(document.querySelectorAll('script[src]'));
+      const scripts = Array.from(document.querySelectorAll('script[src]')) as HTMLScriptElement[];
       const rechartsScript = scripts.find(s => s.src.includes('vendor-charts'));
       if (rechartsScript) {
         rechartsLoadAttempted = true;
@@ -140,7 +140,7 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
         lineno: (ev as any)?.lineno,
         colno: (ev as any)?.colno,
         error: err ? { name: err.name, message: err.message, stack: (err.stack || '').slice(0, 300) } : undefined,
-        loadedScripts: typeof document !== 'undefined' ? Array.from(document.querySelectorAll('script[src]')).map(s => s.src).slice(0, 10) : [],
+        loadedScripts: typeof document !== 'undefined' ? Array.from(document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>).map(s => s.src).slice(0, 10) : [],
       });
     }
     // #endregion agent log (debug-session)
@@ -255,12 +255,32 @@ document.head.appendChild(link);
 // #region agent log (debug-session) - Hypothesis D, E: Chunk loading order
 const logChunkLoading = () => {
   if (typeof document !== 'undefined') {
-    const scripts = Array.from(document.querySelectorAll('script[src]'));
+    const scripts = Array.from(document.querySelectorAll('script[src]') as NodeListOf<HTMLScriptElement>);
     const chunks = scripts
       .map(s => s.src)
       .filter(src => src.includes('vendor-') || src.includes('page-') || src.includes('assets/'))
       .slice(0, 15);
-    send('D', 'src/index.tsx:chunk_loading', 'chunks_detected', {
+    // send est défini dans la IIFE ci-dessus, on doit le déclarer ici aussi ou utiliser une fonction globale
+    const sendChunkData = (hypothesisId: string, location: string, message: string, data: any) => {
+      try {
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: 'run1',
+            hypothesisId,
+            location,
+            message,
+            data,
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      } catch {
+        // ignore
+      }
+    };
+    sendChunkData('D', 'src/index.tsx:chunk_loading', 'chunks_detected', {
       count: chunks.length,
       chunks: chunks.map(c => c.split('/').pop()?.split('?')[0] || c),
       vendorChartsIndex: chunks.findIndex(c => c.includes('vendor-charts')),
