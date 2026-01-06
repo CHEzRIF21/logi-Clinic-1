@@ -415,12 +415,34 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                     />
                   </TableCell>
                   <TableCell>
-                    {new Date(request.createdAt).toLocaleDateString('fr-FR')}
+                    {request.createdAt 
+                      ? (() => {
+                          try {
+                            const date = new Date(request.createdAt);
+                            return isNaN(date.getTime()) 
+                              ? '-' 
+                              : date.toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric'
+                                });
+                          } catch {
+                            return '-';
+                          }
+                        })()
+                      : '-'
+                    }
                   </TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"
-                      onClick={(e) => handleMenuOpen(e, request._id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMenuOpen(e, request._id);
+                      }}
+                      aria-label="Actions"
+                      aria-haspopup="true"
+                      aria-expanded={Boolean(anchorEl && menuRequestId === request._id)}
                     >
                       <MoreVert />
                     </IconButton>

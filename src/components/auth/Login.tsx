@@ -1862,7 +1862,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   value={credentials.clinicCode}
                   onChange={(e) => setCredentials({ ...credentials, clinicCode: e.target.value.toUpperCase() })}
                   disabled={isLoading}
-                  placeholder="Ex: CLINIC001"
+                  placeholder=""
                 />
               <Typography 
                 variant="caption" 
@@ -1980,7 +1980,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       }
                     }}
                     disabled={signupLoading}
-                    placeholder="Ex: CLINIC001, CAMPUS-001"
+                    placeholder=""
                     helperText={
                       clinicValidation.isChecking ? 'Vérification du code...' :
                       clinicValidation.isValid ? `✅ Clinique: ${clinicValidation.clinicName}` :
@@ -2309,140 +2309,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   💡 Le code clinique vous est fourni par l'administrateur de votre établissement.
                 </Typography>
               </Box>
-            </Box>
-            )}
-            {loginTab === 'login' && (
-            <Box sx={{ 
-              mt: 4, 
-              p: 3, 
-              bgcolor: theme.palette.mode === 'dark' 
-                ? alpha(theme.palette.info.main, 0.2)
-                : alpha(theme.palette.info.main, 0.15), 
-              borderRadius: 2, 
-              border: `1px solid ${alpha(theme.palette.info.main, theme.palette.mode === 'dark' ? 0.4 : 0.3)}`,
-              backdropFilter: 'blur(8px)',
-            }}>
-              <Typography 
-                variant="subtitle2" 
-                sx={{ 
-                  fontWeight: 600, 
-                  mb: 1.5, 
-                  color: theme.palette.mode === 'dark' 
-                    ? theme.palette.info.light 
-                    : theme.palette.info.main,
-                  opacity: 1,
-                }}
-              >
-                Comptes de démonstration :
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.85)',
-                    opacity: 1,
-                    fontWeight: 500,
-                  }}
-                >
-                  <strong>Clinique CAMPUS-001 :</strong>
-                </Typography>
-                <Box sx={{ mt: 1, p: 1.5, bgcolor: alpha(theme.palette.info.main, 0.1), borderRadius: 1 }}>
-                  <Typography variant="caption" display="block" sx={{ fontWeight: 600 }}>
-                    Code clinique: CAMPUS-001
-                  </Typography>
-                  <Typography variant="caption" display="block">
-                    Email: bagarayannick1@gmail.com
-                  </Typography>
-                  <Typography variant="caption" display="block">
-                    Mot de passe: TempClinic2024!
-                  </Typography>
-                  <Chip 
-                    label="Première connexion: changement de mot de passe requis" 
-                    size="small" 
-                    color="info" 
-                    sx={{ mt: 1, fontSize: '0.65rem' }}
-                  />
-                </Box>
-              </Box>
-              <Typography 
-                variant="body2" 
-                sx={{ 
-                  mb: 2,
-                  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(15, 23, 42, 0.85)',
-                  opacity: 1,
-                  fontWeight: 500,
-                }}
-              >
-                <strong>Démonstration (CLINIC001) :</strong>
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontWeight: 500,
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : theme.palette.text.primary,
-                      opacity: 1,
-                    }}
-                  >
-                    Admin
-                  </Typography>
-                  <Typography 
-                    variant="caption"
-                    sx={{
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
-                      opacity: 1,
-                      display: 'block',
-                    }}
-                  >
-                    admin / admin123
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontWeight: 500,
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : theme.palette.text.primary,
-                      opacity: 1,
-                    }}
-                  >
-                    Médecin
-                  </Typography>
-                  <Typography 
-                    variant="caption"
-                    sx={{
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
-                      opacity: 1,
-                      display: 'block',
-                    }}
-                  >
-                    medecin / medecin123
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontWeight: 500,
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.95)' : theme.palette.text.primary,
-                      opacity: 1,
-                    }}
-                  >
-                    Pharmacien
-                  </Typography>
-                  <Typography 
-                    variant="caption"
-                    sx={{
-                      color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(15, 23, 42, 0.75)',
-                      opacity: 1,
-                      display: 'block',
-                    }}
-                  >
-                    pharmacien / pharma123
-                  </Typography>
-                </Grid>
-              </Grid>
             </Box>
             )}
           </Paper>
