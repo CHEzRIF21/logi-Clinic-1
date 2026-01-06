@@ -248,8 +248,32 @@ router.get('/registration-requests', async (req: Request, res: Response) => {
       });
     }
 
-    // Ne pas renvoyer les mots de passe hashés
-    const sanitizedData = (data || []).map(({ password_hash, ...rest }) => rest);
+    // Ne pas renvoyer les mots de passe hashés et mapper snake_case vers camelCase
+    const sanitizedData = (data || []).map(({ 
+      password_hash, 
+      role_souhaite,
+      created_at,
+      updated_at,
+      reviewed_by,
+      reviewed_at,
+      raison_rejet,
+      clinic_id,
+      clinic_code,
+      security_questions,
+      ...rest 
+    }) => ({
+      ...rest,
+      _id: rest.id, // Compatibilité avec l'interface frontend
+      roleSouhaite: role_souhaite || 'receptionniste',
+      createdAt: created_at,
+      updatedAt: updated_at,
+      reviewedBy: reviewed_by,
+      reviewedAt: reviewed_at,
+      raisonRejet: raison_rejet,
+      clinicId: clinic_id,
+      clinicCode: clinic_code,
+      securityQuestions: security_questions,
+    }));
 
     res.json({
       success: true,

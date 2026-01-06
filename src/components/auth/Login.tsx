@@ -1165,6 +1165,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
+    // Validation du rôle souhaité
+    if (!signupForm.roleSouhaite || signupForm.roleSouhaite.trim() === '') {
+      setError('Le rôle souhaité est requis pour l\'inscription');
+      setSignupLoading(false);
+      return;
+    }
+
     // Validation du format email
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(signupForm.email)) {
@@ -2127,10 +2134,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     margin="normal"
+                    required
                     fullWidth
                     select
                     id="roleSouhaite"
-                    label="Rôle souhaité"
+                    label="Rôle souhaité *"
                     name="roleSouhaite"
                     value={signupForm.roleSouhaite}
                     onChange={(e) => setSignupForm({ ...signupForm, roleSouhaite: e.target.value })}
@@ -2139,6 +2147,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       native: true,
                     }}
                   >
+                    <option value="">Sélectionnez un rôle</option>
                     <option value="receptionniste">Réceptionniste</option>
                     <option value="medecin">Médecin</option>
                     <option value="pharmacien">Pharmacien</option>

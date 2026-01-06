@@ -277,6 +277,21 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
     }
   };
 
+  const getRoleLabel = (role?: string) => {
+    if (!role || role.trim() === '') {
+      return 'Non spécifié';
+    }
+    const roleMap: Record<string, string> = {
+      'receptionniste': 'Réceptionniste',
+      'medecin': 'Médecin',
+      'pharmacien': 'Pharmacien',
+      'infirmier': 'Infirmier',
+      'admin': 'Administrateur',
+      'STAFF': 'Personnel',
+    };
+    return roleMap[role.toLowerCase()] || role;
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -406,7 +421,9 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                   <TableCell>{request.prenom} {request.nom}</TableCell>
                   <TableCell>{request.email}</TableCell>
                   <TableCell>{request.telephone}</TableCell>
-                  <TableCell>{request.roleSouhaite || 'Non spécifié'}</TableCell>
+                  <TableCell>
+                    {getRoleLabel(request.roleSouhaite)}
+                  </TableCell>
                   <TableCell>
                     <Chip
                       label={getStatusLabel(request.statut)}
@@ -539,7 +556,7 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2" color="textSecondary">Rôle souhaité</Typography>
-                  <Typography>{selectedRequest.roleSouhaite || 'Non spécifié'}</Typography>
+                  <Typography>{getRoleLabel(selectedRequest.roleSouhaite)}</Typography>
                 </Grid>
                 {selectedRequest.specialite && (
                   <Grid item xs={12} sm={6}>
