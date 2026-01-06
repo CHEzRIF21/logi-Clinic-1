@@ -70,7 +70,36 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
   // 1) Init
   send('A', 'src/index.tsx:init', 'global_console_capture_init', {
     online: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
+    origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+    href: typeof window !== 'undefined' ? window.location.href : undefined,
   });
+  
+  // #region agent log (debug-session) - Hypothesis A: Recharts circular dependency
+  // Log when recharts is being loaded
+  const originalImport = window.__import || (() => {});
+  let rechartsLoadAttempted = false;
+  const checkRechartsLoad = () => {
+    if (!rechartsLoadAttempted && typeof window !== 'undefined') {
+      const scripts = Array.from(document.querySelectorAll('script[src]'));
+      const rechartsScript = scripts.find(s => s.src.includes('vendor-charts'));
+      if (rechartsScript) {
+        rechartsLoadAttempted = true;
+        send('A', 'src/index.tsx:recharts_detection', 'recharts_script_detected', {
+          src: rechartsScript.src,
+          loaded: rechartsScript.getAttribute('data-loaded') === 'true',
+        });
+      }
+    }
+  };
+  // Check immediately and after DOM loads
+  if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', checkRechartsLoad);
+    } else {
+      checkRechartsLoad();
+    }
+  }
+  // #endregion agent log (debug-session)
 
   // 2) console.error interception (sans sérialiser les objets)
   const origConsoleError = console.error.bind(console);
@@ -78,6 +107,19 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
     const preview = args.slice(0, 3).map((a) => safeStr(a));
     const msg = preview.join(' | ');
     pushBuffer('console.error', msg);
+    // #region agent log (debug-session) - Hypothesis A: Recharts error detection
+    const isRechartsError = msg.includes('Cannot access') && msg.includes('before initialization');
+    const isLocalhostError = msg.includes('localhost:3000');
+    if (isRechartsError) {
+      send('A', 'src/index.tsx:console.error', 'recharts_init_error', { 
+        preview,
+        stack: args.find(a => a instanceof Error)?.stack?.slice(0, 300),
+      });
+    }
+    if (isLocalhostError) {
+      send('B', 'src/index.tsx:console.error', 'localhost_reference_error', { preview });
+    }
+    // #endregion agent log (debug-session)
     send('B', 'src/index.tsx:console.error', 'console_error', { preview });
     origConsoleError(...args);
   };
@@ -87,6 +129,21 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
     const err = (ev as any)?.error as Error | undefined;
     const msg = safeStr(err ?? (ev as any)?.message ?? 'window.error');
     pushBuffer('window.error', msg);
+    // #region agent log (debug-session) - Hypothesis A: Recharts error, D: Chunk loading order
+    const filename = (ev as any)?.filename || '';
+    const isRechartsFile = filename.includes('vendor-charts') || filename.includes('recharts');
+    const isInitError = msg.includes('Cannot access') && msg.includes('before initialization');
+    if (isRechartsFile || isInitError) {
+      send('A', 'src/index.tsx:window.error', 'recharts_runtime_error', {
+        message: (ev as any)?.message,
+        filename,
+        lineno: (ev as any)?.lineno,
+        colno: (ev as any)?.colno,
+        error: err ? { name: err.name, message: err.message, stack: (err.stack || '').slice(0, 300) } : undefined,
+        loadedScripts: typeof document !== 'undefined' ? Array.from(document.querySelectorAll('script[src]')).map(s => s.src).slice(0, 10) : [],
+      });
+    }
+    // #endregion agent log (debug-session)
     send('C', 'src/index.tsx:window.error', 'window_error', {
       message: (ev as any)?.message,
       filename: (ev as any)?.filename,
@@ -112,6 +169,15 @@ import { ThemeProvider } from './components/providers/ThemeProvider';
     globalThis.fetch = async (...args: any[]) => {
       const url = sanitizeUrl(args[0]);
       const t0 = Date.now();
+      // #region agent log (debug-session) - Hypothesis B, C: localhost:3000 references
+      const urlStr = typeof args[0] === 'string' ? args[0] : (args[0] as any)?.url || '';
+      if (urlStr.includes('localhost:3000') || urlStr.includes('127.0.0.1:3000')) {
+        send('B', 'src/index.tsx:fetch', 'localhost_fetch_detected', {
+          url: urlStr,
+          caller: new Error().stack?.split('\n')[2]?.slice(0, 200),
+        });
+      }
+      // #endregion agent log (debug-session)
       try {
         const res = await origFetch(...args);
         if (!res.ok) {
@@ -185,6 +251,30 @@ const link = document.createElement('link');
 link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap';
 link.rel = 'stylesheet';
 document.head.appendChild(link);
+
+// #region agent log (debug-session) - Hypothesis D, E: Chunk loading order
+const logChunkLoading = () => {
+  if (typeof document !== 'undefined') {
+    const scripts = Array.from(document.querySelectorAll('script[src]'));
+    const chunks = scripts
+      .map(s => s.src)
+      .filter(src => src.includes('vendor-') || src.includes('page-') || src.includes('assets/'))
+      .slice(0, 15);
+    send('D', 'src/index.tsx:chunk_loading', 'chunks_detected', {
+      count: chunks.length,
+      chunks: chunks.map(c => c.split('/').pop()?.split('?')[0] || c),
+      vendorChartsIndex: chunks.findIndex(c => c.includes('vendor-charts')),
+    });
+  }
+};
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', logChunkLoading);
+  } else {
+    setTimeout(logChunkLoading, 100);
+  }
+}
+// #endregion agent log (debug-session)
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement

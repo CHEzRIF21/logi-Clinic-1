@@ -4,6 +4,28 @@
 import React, { useMemo } from 'react';
 import { RelevéTemperature, Refrigerateur } from '../../types/vaccination';
 import { TemperatureBadge } from './VaccineBadge';
+
+// #region agent log (debug-session) - Hypothesis A: Recharts import timing
+const logRechartsImport = () => {
+  try {
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'src/components/vaccination/TemperatureChart.tsx:before_recharts_import',
+        message: 'about_to_import_recharts',
+        data: { timestamp: Date.now() },
+        sessionId: 'debug-session',
+        runId: 'run1',
+        hypothesisId: 'A',
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {}
+};
+logRechartsImport();
+// #endregion agent log (debug-session)
+
 import {
   XAxis,
   YAxis,
@@ -16,6 +38,30 @@ import {
   Area,
   ComposedChart
 } from 'recharts';
+
+// #region agent log (debug-session) - Hypothesis A: Recharts import success
+(() => {
+  try {
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'src/components/vaccination/TemperatureChart.tsx:after_recharts_import',
+        message: 'recharts_imported_successfully',
+        data: { 
+          timestamp: Date.now(),
+          hasXAxis: typeof XAxis !== 'undefined',
+          hasComposedChart: typeof ComposedChart !== 'undefined',
+        },
+        sessionId: 'debug-session',
+        runId: 'run1',
+        hypothesisId: 'A',
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {}
+})();
+// #endregion agent log (debug-session)
 
 interface TemperatureChartProps {
   releves: RelevéTemperature[];
