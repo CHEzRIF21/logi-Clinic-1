@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Système de gestion de clinique médicale",
   "private": true,
+  "type": "module",
   "dependencies": {
     "@emotion/react": "^11.10.0",
     "@emotion/styled": "^11.10.0",

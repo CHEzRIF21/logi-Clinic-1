@@ -1521,7 +1521,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   Inscrivez-vous pour créer votre compte et obtenir votre espace de travail après validation
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Box sx={{ 
+                display: 'flex', 
+                gap: { xs: 1.5, sm: 2 }, 
+                justifyContent: 'center', 
+                flexWrap: 'wrap',
+                flexDirection: { xs: 'column', sm: 'row' },
+                width: { xs: '100%', sm: 'auto' },
+                px: { xs: 2, sm: 0 },
+              }}>
                 <Button
                   className="hero-button"
                   variant="contained"
@@ -1532,22 +1540,30 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   }}
                   aria-label="Se connecter maintenant - Aller à la section de connexion"
                   sx={{
-                    py: 1.5,
-                    px: 4,
-                    fontSize: '1.1rem',
+                    py: { xs: 1.25, sm: 1.5 },
+                    px: { xs: 3, sm: 4 },
+                    fontSize: { xs: '1rem', sm: '1.1rem' },
                     fontWeight: 600,
+                    width: { xs: '100%', sm: 'auto' },
+                    minHeight: { xs: '48px', sm: 'auto' }, // Taille tactile minimale pour mobile
                     background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                     boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.4)}`,
                     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                     willChange: 'transform, box-shadow',
                     '&:hover': {
                       background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
-                      transform: 'translateY(-2px)',
+                      transform: { xs: 'none', sm: 'translateY(-2px)' }, // Pas de transform sur mobile
                       boxShadow: `0 12px 32px ${alpha(theme.palette.primary.main, 0.5)}`,
                     },
                     '&:active': {
-                      transform: 'translateY(0px)',
+                      transform: 'scale(0.98)', // Feedback tactile sur mobile
                       transition: 'transform 0.1s ease',
+                    },
+                    // Amélioration pour le touch sur mobile
+                    '@media (hover: none) and (pointer: coarse)': {
+                      '&:hover': {
+                        transform: 'none',
+                      },
                     },
                   }}
                 >
@@ -1566,10 +1582,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   }}
                   aria-label="S'inscrire - Aller à la section d'inscription"
                   sx={{
-                    py: 1.5,
-                    px: 4,
-                    fontSize: '1.1rem',
+                    py: { xs: 1.25, sm: 1.5 },
+                    px: { xs: 3, sm: 4 },
+                    fontSize: { xs: '1rem', sm: '1.1rem' },
                     fontWeight: 600,
+                    width: { xs: '100%', sm: 'auto' },
+                    minHeight: { xs: '48px', sm: 'auto' }, // Taille tactile minimale pour mobile
                     background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.success.main || theme.palette.secondary.main} 100%)`,
                     color: 'white',
                     boxShadow: `0 8px 24px ${alpha(theme.palette.secondary.main, 0.4)}`,
@@ -1577,12 +1595,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     willChange: 'transform, box-shadow',
                     '&:hover': {
                       background: `linear-gradient(135deg, ${theme.palette.secondary.dark} 0%, ${theme.palette.success.dark || theme.palette.secondary.dark} 100%)`,
-                      transform: 'translateY(-2px)',
+                      transform: { xs: 'none', sm: 'translateY(-2px)' }, // Pas de transform sur mobile
                       boxShadow: `0 12px 32px ${alpha(theme.palette.secondary.main, 0.5)}`,
                     },
                     '&:active': {
-                      transform: 'translateY(0px)',
+                      transform: 'scale(0.98)', // Feedback tactile sur mobile
                       transition: 'transform 0.1s ease',
+                    },
+                    // Amélioration pour le touch sur mobile
+                    '@media (hover: none) and (pointer: coarse)': {
+                      '&:hover': {
+                        transform: 'none',
+                      },
                     },
                   }}
                 >
@@ -1616,9 +1640,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           >
             Fonctionnalités Principales
           </Typography>
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 2, sm: 3, md: 4 }}>
             {features.map((feature, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
                 <Card
                   className="feature-card"
                   sx={{
@@ -1640,11 +1664,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       transition: 'left 0.5s ease',
                     },
                     '&:hover': {
-                      transform: 'translateY(-12px) scale(1.02)',
+                      transform: { xs: 'translateY(-4px) scale(1.01)', sm: 'translateY(-8px) scale(1.02)', md: 'translateY(-12px) scale(1.02)' },
                       boxShadow: `0 20px 40px ${alpha(feature.color, 0.3)}`,
                       borderColor: feature.color,
                       '&::before': {
                         left: '100%',
+                      },
+                    },
+                    // Amélioration pour le touch sur mobile
+                    '@media (hover: none) and (pointer: coarse)': {
+                      '&:hover': {
+                        transform: 'translateY(-4px) scale(1.01)',
                       },
                     },
                   }}
@@ -1764,14 +1794,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 setSignupSuccess(false);
               }}
               sx={{
-                mb: 3,
+                mb: { xs: 2, sm: 3 },
                 borderBottom: 1,
                 borderColor: 'divider',
                 '& .MuiTab-root': {
-                  fontSize: '1rem',
+                  fontSize: { xs: '0.9rem', sm: '1rem' },
                   fontWeight: 600,
                   textTransform: 'none',
-                  minHeight: 48,
+                  minHeight: { xs: 44, sm: 48 }, // Taille tactile optimale
+                  px: { xs: 1.5, sm: 3 },
+                  minWidth: { xs: 'auto', sm: 160 },
                 },
                 '& .Mui-selected': {
                   color: theme.palette.primary.main,
@@ -1779,6 +1811,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               }}
               indicatorColor="primary"
               textColor="primary"
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
             >
               <Tab 
                 label="Connexion" 
