@@ -1,0 +1,62 @@
+# ============================================
+# VARIABLES D'ENVIRONNEMENT EXACTES POUR VERCEL
+# ============================================
+# 
+# ⚠️ IMPORTANT : Copier-coller EXACTEMENT ces valeurs dans Vercel
+# Settings → Environment Variables → Add New
+#
+# Pour chaque variable :
+# 1. Cocher ✅ Production
+# 2. Cocher ✅ Preview  
+# 3. Cocher ✅ Development
+# 4. Cliquer sur Save
+#
+# ============================================
+
+# ============================================
+# VARIABLE 1 : VITE_API_URL
+# ============================================
+Nom : VITE_API_URL
+Valeur : https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api
+Environnements : ✅ Production, ✅ Preview, ✅ Development
+
+# ============================================
+# VARIABLE 2 : VITE_SUPABASE_URL
+# ============================================
+Nom : VITE_SUPABASE_URL
+Valeur : https://bnfgemmlokvetmohiqch.supabase.co
+Environnements : ✅ Production, ✅ Preview, ✅ Development
+
+# ============================================
+# VARIABLE 3 : VITE_SUPABASE_ANON_KEY
+# ============================================
+Nom : VITE_SUPABASE_ANON_KEY
+Valeur : eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJuZmdlbW1sb2t2ZXRtb2hpcWNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NzI1MTksImV4cCI6MjA3ODQ0ODUxOX0.53UOzq6eeZRqG8dk6lTGMVZsoK4aiZGU5I1q-JIUMd8
+Environnements : ✅ Production, ✅ Preview, ✅ Development
+
+# ============================================
+# FORMAT POUR COPIER-COLLER DANS VERCEL
+# ============================================
+#
+# Dans Vercel Dashboard :
+# 1. Aller dans Settings → Environment Variables
+# 2. Cliquer sur "Add New"
+# 3. Pour chaque variable ci-dessus :
+#    - Copier le "Nom" dans le champ "Name"
+#    - Copier la "Valeur" dans le champ "Value"
+#    - Cocher Production, Preview, et Development
+#    - Cliquer sur "Save"
+#
+# ============================================
+# VÉRIFICATION
+# ============================================
+#
+# Après avoir ajouté les 3 variables, vous devriez voir :
+# ✅ VITE_API_URL (Production, Preview, Development)
+# ✅ VITE_SUPABASE_URL (Production, Preview, Development)
+# ✅ VITE_SUPABASE_ANON_KEY (Production, Preview, Development)
+#
+# ⚠️ IMPORTANT : Redéployer après avoir ajouté/modifié des variables !
+#
+# ============================================
+
