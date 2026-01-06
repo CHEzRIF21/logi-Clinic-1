@@ -1,33 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box } from '@mui/material';
+import { Box, CircularProgress } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
-// Composants d'authentification
+// Composants d'authentification (chargés immédiatement car critiques)
 import Login from './components/auth/Login';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProtectedModuleRoute from './components/auth/ProtectedModuleRoute';
 
-// Composants de navigation
+// Composants de navigation (chargés immédiatement)
 import Layout from './components/layout/Layout';
 
-// Pages des modules
-import Dashboard from './pages/Dashboard';
-import Pharmacie from './pages/Pharmacie';
-import Maternite from './pages/Maternite';
-import StockMedicaments from './pages/StockMedicaments';
-import Bilan from './pages/Bilan';
-import Caisse from './pages/Caisse';
-import RendezVous from './pages/RendezVous';
-import GestionPatients from './pages/GestionPatients';
-import Consultations from './pages/Consultations';
-import UtilisateursPermissions from './pages/UtilisateursPermissions';
-import Vaccination from './pages/Vaccination';
-import Laboratoire from './pages/Laboratoire';
-import Imagerie from './pages/Imagerie';
-import AccountRecoveryManagement from './pages/AccountRecoveryManagement';
-import RegistrationRequests from './pages/RegistrationRequests';
-import StaffManagementPage from './pages/StaffManagementPage';
+// Pages des modules - Lazy loading pour améliorer les performances
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Pharmacie = lazy(() => import('./pages/Pharmacie'));
+const Maternite = lazy(() => import('./pages/Maternite'));
+const StockMedicaments = lazy(() => import('./pages/StockMedicaments'));
+const Bilan = lazy(() => import('./pages/Bilan'));
+const Caisse = lazy(() => import('./pages/Caisse'));
+const RendezVous = lazy(() => import('./pages/RendezVous'));
+const GestionPatients = lazy(() => import('./pages/GestionPatients'));
+const Consultations = lazy(() => import('./pages/Consultations'));
+const UtilisateursPermissions = lazy(() => import('./pages/UtilisateursPermissions'));
+const Vaccination = lazy(() => import('./pages/Vaccination'));
+const Laboratoire = lazy(() => import('./pages/Laboratoire'));
+const Imagerie = lazy(() => import('./pages/Imagerie'));
+const AccountRecoveryManagement = lazy(() => import('./pages/AccountRecoveryManagement'));
+const RegistrationRequests = lazy(() => import('./pages/RegistrationRequests'));
+const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
+
+// Composant de chargement pour Suspense
+const LoadingFallback = () => (
+  <Box
+    display="flex"
+    justifyContent="center"
+    alignItems="center"
+    minHeight="100vh"
+    sx={{
+      bgcolor: 'background.default',
+    }}
+  >
+    <CircularProgress size={48} />
+  </Box>
+);
 
 // Types
 import { User } from './types/auth';
@@ -84,6 +99,7 @@ function App() {
   }
 
   return (
+    <Suspense fallback={<LoadingFallback />}>
     <Routes>
       <Route
         path="/login"
@@ -100,7 +116,9 @@ function App() {
         element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
+                <Suspense fallback={<LoadingFallback />}>
               <Dashboard user={user} />
+                </Suspense>
             </Layout>
           </ProtectedRoute>
         }
@@ -110,7 +128,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="consultations">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Consultations />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -120,7 +140,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="pharmacie">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Pharmacie />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -130,7 +152,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="maternite">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Maternite />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -140,7 +164,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="stock">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <StockMedicaments />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -151,7 +177,9 @@ function App() {
           <ProtectedRoute user={user}>
             {canManageUsers(user) ? (
               <Layout user={user} onLogout={handleLogout}>
+                <Suspense fallback={<LoadingFallback />}>
                 <UtilisateursPermissions user={user} />
+                </Suspense>
               </Layout>
             ) : (
               <Navigate to="/" replace />
@@ -165,7 +193,9 @@ function App() {
           <ProtectedRoute user={user}>
             {canManageUsers(user) ? (
               <Layout user={user} onLogout={handleLogout}>
+                <Suspense fallback={<LoadingFallback />}>
                 <AccountRecoveryManagement user={user} />
+                </Suspense>
               </Layout>
             ) : (
               <Navigate to="/" replace />
@@ -179,7 +209,9 @@ function App() {
           <ProtectedRoute user={user}>
             {canManageUsers(user) ? (
               <Layout user={user} onLogout={handleLogout}>
+                <Suspense fallback={<LoadingFallback />}>
                 <RegistrationRequests user={user} />
+                </Suspense>
               </Layout>
             ) : (
               <Navigate to="/" replace />
@@ -193,7 +225,9 @@ function App() {
           <ProtectedRoute user={user}>
             {canManageUsers(user) ? (
               <Layout user={user} onLogout={handleLogout}>
+                <Suspense fallback={<LoadingFallback />}>
                 <StaffManagementPage user={user} />
+                </Suspense>
               </Layout>
             ) : (
               <Navigate to="/" replace />
@@ -206,7 +240,9 @@ function App() {
         element={
           <ProtectedRoute user={user}>
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Bilan />
+              </Suspense>
             </Layout>
           </ProtectedRoute>
         }
@@ -216,7 +252,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="caisse">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Caisse />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -226,7 +264,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="rendezvous">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <RendezVous />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -236,7 +276,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="patients">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <GestionPatients />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -246,7 +288,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="vaccination">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Vaccination />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -256,7 +300,9 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="laboratoire">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Laboratoire />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
@@ -266,13 +312,16 @@ function App() {
         element={
           <ProtectedModuleRoute user={user} requiredModule="imagerie">
             <Layout user={user} onLogout={handleLogout}>
+              <Suspense fallback={<LoadingFallback />}>
               <Imagerie />
+              </Suspense>
             </Layout>
           </ProtectedModuleRoute>
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }
 

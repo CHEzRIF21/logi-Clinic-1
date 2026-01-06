@@ -121,3 +121,4 @@ WHERE tablename = 'clinics' AND policyname = 'clinics_public_read';
 
 
 
+

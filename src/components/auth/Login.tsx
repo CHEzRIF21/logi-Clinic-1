@@ -129,7 +129,61 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   }>({ isValid: false, clinicName: null, isChecking: false });
   const [signupSuccess, setSignupSuccess] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const theme = useTheme();
+
+  // Gestion du chargement progressif de la page
+  useEffect(() => {
+    const handleLoad = () => {
+      // Simuler un chargement progressif
+      const interval = setInterval(() => {
+        setLoadingProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setIsPageLoading(false);
+            return 100;
+          }
+          return prev + 10;
+        });
+      }, 100);
+
+      // Forcer la fin du chargement après 1 seconde max
+      setTimeout(() => {
+        clearInterval(interval);
+        setLoadingProgress(100);
+        setIsPageLoading(false);
+      }, 1000);
+    };
+
+    if (document.readyState === 'complete') {
+      handleLoad();
+    } else {
+      window.addEventListener('load', handleLoad);
+      return () => window.removeEventListener('load', handleLoad);
+    }
+  }, []);
+
+  // Amélioration de la navigation au clavier
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Navigation entre les sections avec Tab
+      if (e.key === 'Escape') {
+        // Fermer les modales ou réinitialiser les erreurs
+        setError('');
+        setSignupSuccess(false);
+      }
+      
+      // Navigation rapide avec Ctrl/Cmd + K (recherche)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        loginRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const heroRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
@@ -166,12 +220,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting && entry.target instanceof HTMLElement) {
           try {
+            // Optimisation: utiliser will-change et force3D
+            if (entry.target instanceof HTMLElement) {
+              entry.target.style.willChange = 'transform, opacity';
+            }
+            
             gsap.to(entry.target, {
               opacity: 1,
               y: 0,
               scale: 1,
               duration: 0.8,
               ease: 'power3.out',
+              force3D: true, // Utiliser l'accélération GPU
+              onComplete: () => {
+                // Nettoyer will-change après l'animation
+                if (entry.target instanceof HTMLElement) {
+                  entry.target.style.willChange = 'auto';
+                }
+              },
             });
             observer.unobserve(entry.target);
           } catch (err) {
@@ -206,10 +272,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             ease: 'power2.out',
           });
           
-          // Animation continue des particules
+          // Animation continue des particules - Optimisée pour performance
           const particles = heroBackground.querySelectorAll('.particle');
           particles.forEach((particle, index) => {
             if (particle instanceof HTMLElement) {
+              // Utiliser will-change pour optimiser les performances
+              particle.style.willChange = 'transform';
+              
               const randomY = (Math.random() - 0.5) * 200;
               const randomX = (Math.random() - 0.5) * 200;
               const randomRotation = (Math.random() - 0.5) * 360;
@@ -224,6 +293,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 yoyo: true,
                 ease: 'sine.inOut',
                 delay: index * 0.2,
+                force3D: true, // Utiliser l'accélération GPU
               });
             }
           });
@@ -282,22 +352,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           }, heroDescription ? '-=0.3' : 0);
         }
 
-        // Animation continue du logo (rotation subtile et pulsation)
+        // Animation continue du logo (rotation subtile et pulsation) - Optimisé
         if (heroIcon) {
-          // Rotation continue très lente
+          // Utiliser will-change pour optimiser les performances
+          if (heroIcon instanceof HTMLElement) {
+            heroIcon.style.willChange = 'transform';
+          }
+          
+          // Rotation continue très lente - Optimisée avec force3D
           gsap.to(heroIcon, {
             rotation: 360,
             duration: 30,
             repeat: -1,
             ease: 'none',
+            force3D: true, // Utiliser l'accélération GPU
           });
           
-          // Pulsation subtile
+          // Pulsation subtile - Optimisée
           gsap.to(heroIcon, {
             scale: 1.1,
             duration: 2,
             repeat: -1,
             yoyo: true,
+            force3D: true, // Utiliser l'accélération GPU
             ease: 'sine.inOut',
           });
         }
@@ -997,11 +1074,22 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
+    const clinicCodeUpper = code.toUpperCase().trim();
+    
+    // Validation côté client : format de base
+    const codePattern = /^[A-Z0-9\-_]{3,20}$/;
+    if (!codePattern.test(clinicCodeUpper)) {
+      setClinicValidation({ 
+        isValid: false, 
+        clinicName: null, 
+        isChecking: false 
+      });
+      return;
+    }
+
     setClinicValidation(prev => ({ ...prev, isChecking: true }));
 
     try {
-      const clinicCodeUpper = code.toUpperCase().trim();
-      
       // Vérifier d'abord dans la table clinics
       const { data: clinic, error: clinicError } = await supabase
         .from('clinics')
@@ -1041,8 +1129,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
 
       setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Erreur lors de la validation du code clinique:', err);
+      
+      // Fallback : si Supabase n'est pas accessible, on accepte le format valide
+      // La validation finale se fera côté serveur
+      if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError') || !navigator.onLine) {
+        // Format valide mais validation serveur différée
+        setClinicValidation({ 
+          isValid: true, 
+          clinicName: 'Validation différée (hors ligne)', 
+          isChecking: false 
+        });
+      } else {
       setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
+      }
     }
   };
 
@@ -1064,11 +1165,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    // Validation
-    if (signupForm.password !== signupForm.passwordConfirm) {
-      setError('Les mots de passe ne correspondent pas');
+    // Validation du format email
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(signupForm.email)) {
+      setError('Veuillez entrer une adresse email valide');
       setSignupLoading(false);
       return;
+    }
+
+    // Validation du mot de passe
+    if (signupForm.password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères');
+      setSignupLoading(false);
+      return;
+    }
+
+    if (signupForm.password !== signupForm.passwordConfirm) {
+      setError('Les mots de passe ne correspondent pas. Veuillez vérifier votre saisie.');
+      setSignupLoading(false);
+      return;
+    }
+
+    // Validation du format téléphone (optionnel mais si fourni, doit être valide)
+    if (signupForm.telephone && signupForm.telephone.trim() !== '') {
+      const phonePattern = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/;
+      if (!phonePattern.test(signupForm.telephone.replace(/\s/g, ''))) {
+        setError('Veuillez entrer un numéro de téléphone valide (ex: +229 XX XX XX XX)');
+        setSignupLoading(false);
+        return;
+      }
     }
 
     if (!signupForm.securityQuestions.question1.question || !signupForm.securityQuestions.question1.answer) {
@@ -1152,13 +1277,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     } catch (error: any) {
       console.error('Erreur lors de l\'inscription:', error);
       
-      // Gérer spécifiquement l'erreur "Failed to fetch"
-      if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError') {
-        setError('Impossible de se connecter au serveur. Vérifiez votre connexion Internet et réessayez.');
+      // Gérer spécifiquement les erreurs réseau
+      if (error?.message?.includes('Failed to fetch') || error?.name === 'TypeError' || !navigator.onLine) {
+        setError('❌ Impossible de se connecter au serveur. Vérifiez votre connexion Internet et réessayez.');
+      } else if (error?.message?.includes('timeout') || error?.message?.includes('Timeout')) {
+        setError('⏱️ La requête a expiré. Le serveur met trop de temps à répondre. Veuillez réessayer.');
+      } else if (error?.message?.includes('400') || error?.message?.includes('Bad Request')) {
+        setError('⚠️ Les données saisies sont invalides. Veuillez vérifier tous les champs et réessayer.');
+      } else if (error?.message?.includes('409') || error?.message?.includes('Conflict')) {
+        setError('⚠️ Cette adresse email est déjà utilisée pour cette clinique. Utilisez une autre adresse ou connectez-vous.');
+      } else if (error?.message?.includes('500') || error?.message?.includes('Internal Server Error')) {
+        setError('🔧 Une erreur serveur s\'est produite. Veuillez réessayer dans quelques instants ou contacter le support.');
       } else if (error?.message) {
-        setError(error.message);
+        setError(`⚠️ ${error.message}`);
       } else {
-        setError('Erreur lors de la soumission de la demande d\'inscription. Veuillez réessayer.');
+        setError('❌ Erreur lors de la soumission de la demande d\'inscription. Veuillez réessayer ou contacter le support si le problème persiste.');
       }
     } finally {
       setSignupLoading(false);
@@ -1230,6 +1363,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       width: '100%',
       position: 'relative',
     }}>
+      {/* Indicateur de chargement progressif */}
+      {isPageLoading && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '4px',
+            zIndex: 9999,
+            bgcolor: 'background.paper',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              height: '100%',
+              width: `${loadingProgress}%`,
+              bgcolor: theme.palette.primary.main,
+              transition: 'width 0.3s ease',
+            },
+          }}
+          aria-label="Chargement de la page"
+          role="progressbar"
+          aria-valuenow={loadingProgress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        />
+      )}
       {/* Section Hero */}
       <Box
         ref={heroRef}
@@ -1368,6 +1530,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     setLoginTab('login');
                     loginRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }}
+                  aria-label="Se connecter maintenant - Aller à la section de connexion"
                   sx={{
                     py: 1.5,
                     px: 4,
@@ -1375,11 +1538,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     fontWeight: 600,
                     background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                     boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.4)}`,
-                    transition: 'all 0.3s ease',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    willChange: 'transform, box-shadow',
                     '&:hover': {
                       background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
                       transform: 'translateY(-2px)',
                       boxShadow: `0 12px 32px ${alpha(theme.palette.primary.main, 0.5)}`,
+                    },
+                    '&:active': {
+                      transform: 'translateY(0px)',
+                      transition: 'transform 0.1s ease',
                     },
                   }}
                 >
@@ -1389,13 +1557,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   className="hero-button-signup"
                   variant="contained"
                   size="large"
-                  startIcon={<PersonAdd />}
+                  startIcon={<PersonAdd aria-hidden="true" />}
                   onClick={() => {
                     setLoginTab('signup');
                     setTimeout(() => {
                       loginRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     }, 100);
                   }}
+                  aria-label="S'inscrire - Aller à la section d'inscription"
                   sx={{
                     py: 1.5,
                     px: 4,
@@ -1404,11 +1573,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.success.main || theme.palette.secondary.main} 100%)`,
                     color: 'white',
                     boxShadow: `0 8px 24px ${alpha(theme.palette.secondary.main, 0.4)}`,
-                    transition: 'all 0.3s ease',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    willChange: 'transform, box-shadow',
                     '&:hover': {
                       background: `linear-gradient(135deg, ${theme.palette.secondary.dark} 0%, ${theme.palette.success.dark || theme.palette.secondary.dark} 100%)`,
                       transform: 'translateY(-2px)',
                       boxShadow: `0 12px 32px ${alpha(theme.palette.secondary.main, 0.5)}`,
+                    },
+                    '&:active': {
+                      transform: 'translateY(0px)',
+                      transition: 'transform 0.1s ease',
                     },
                   }}
                 >
@@ -1648,7 +1822,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   required
                   id="clinicCode"
                   name="clinicCode"
-                  autoComplete="organization"
+                  autoComplete="off"
                   autoFocus
                   value={credentials.clinicCode}
                   onChange={(e) => setCredentials({ ...credentials, clinicCode: e.target.value.toUpperCase() })}
@@ -1779,20 +1953,30 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       'Demandez le code à l\'administrateur de votre clinique'
                     }
                     error={signupForm.clinicCode.length >= 3 && !clinicValidation.isValid && !clinicValidation.isChecking}
+                    aria-label="Code clinique - Champ obligatoire"
+                    aria-required="true"
+                    aria-invalid={signupForm.clinicCode.length >= 3 && !clinicValidation.isValid && !clinicValidation.isChecking}
+                    aria-describedby={signupForm.clinicCode.length >= 3 ? "clinicCode-helper-text" : undefined}
+                    inputProps={{
+                      autoComplete: 'off',
+                      'aria-label': 'Code clinique',
+                      'aria-describedby': 'clinicCode-helper-text',
+                    }}
                     sx={{
                       mt: 0,
                       mb: 1,
                       '& .MuiFormHelperText-root': {
                         color: clinicValidation.isValid ? theme.palette.success.main : undefined,
+                        id: 'clinicCode-helper-text',
                       },
                     }}
                     InputProps={{
                       endAdornment: clinicValidation.isChecking ? (
-                        <CircularProgress size={20} />
+                        <CircularProgress size={20} aria-label="Vérification en cours" />
                       ) : clinicValidation.isValid ? (
-                        <CheckCircle sx={{ color: theme.palette.success.main }} />
+                        <CheckCircle sx={{ color: theme.palette.success.main }} aria-label="Code valide" />
                       ) : signupForm.clinicCode.length >= 3 ? (
-                        <Warning sx={{ color: theme.palette.error.main }} />
+                        <Warning sx={{ color: theme.palette.error.main }} aria-label="Code invalide" />
                       ) : null,
                     }}
                   />
@@ -1834,10 +2018,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     label="Email"
                     name="email"
                     type="email"
-                    autoComplete="email"
+                    autoComplete="off"
                     value={signupForm.email}
                     onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
                     disabled={signupLoading}
+                    inputProps={{
+                      autoComplete: 'off',
+                    }}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>

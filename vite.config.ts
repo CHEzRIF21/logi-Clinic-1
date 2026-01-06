@@ -31,21 +31,52 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Stratégie de chunking simplifiée pour éviter les problèmes de dépendances circulaires
-        manualChunks: {
+        manualChunks: (id) => {
           // React core - doit être chargé en premier
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) {
+            return 'vendor-react';
+          }
           // Material-UI
-          'vendor-mui': ['@mui/material', '@mui/icons-material', '@mui/x-data-grid', '@mui/x-date-pickers', '@emotion/react', '@emotion/styled'],
+          if (id.includes('node_modules/@mui')) {
+            return 'vendor-mui';
+          }
           // Supabase
-          'vendor-supabase': ['@supabase/supabase-js'],
+          if (id.includes('node_modules/@supabase')) {
+            return 'vendor-supabase';
+          }
+          // GSAP (animations)
+          if (id.includes('node_modules/gsap')) {
+            return 'vendor-gsap';
+          }
           // PDF
-          'vendor-pdf': ['jspdf', 'jspdf-autotable'],
+          if (id.includes('node_modules/jspdf')) {
+            return 'vendor-pdf';
+          }
           // Charts
-          'vendor-charts': ['recharts'],
+          if (id.includes('node_modules/recharts')) {
+            return 'vendor-charts';
+          }
           // Dates
-          'vendor-dates': ['date-fns'],
+          if (id.includes('node_modules/date-fns')) {
+            return 'vendor-dates';
+          }
           // Utils
-          'vendor-utils': ['axios', 'jwt-decode', 'clsx', 'class-variance-authority', 'tailwind-merge'],
+          if (id.includes('node_modules/axios') || id.includes('node_modules/jwt-decode') || 
+              id.includes('node_modules/clsx') || id.includes('node_modules/class-variance-authority') ||
+              id.includes('node_modules/tailwind-merge')) {
+            return 'vendor-utils';
+          }
+          // Pages (code splitting par route)
+          if (id.includes('/pages/')) {
+            const pageName = id.split('/pages/')[1]?.split('/')[0];
+            if (pageName) {
+              return `page-${pageName.toLowerCase()}`;
+            }
+          }
+          // Composants lourds
+          if (id.includes('/components/consultation/') || id.includes('/components/maternite/')) {
+            return 'components-heavy';
+          }
         },
       },
     },

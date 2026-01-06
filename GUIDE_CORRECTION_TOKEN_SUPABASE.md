@@ -198,3 +198,4 @@ npx supabase projects list
 **🎉 Une fois configuré, vous pourrez utiliser toutes les commandes Supabase CLI !**
 
 
+
