@@ -1,67 +1,10 @@
 /**
  * Graphique de suivi des températures de la chaîne de froid
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { RelevéTemperature, Refrigerateur } from '../../types/vaccination';
 import { TemperatureBadge } from './VaccineBadge';
-
-// #region agent log (debug-session) - Hypothesis A: Recharts import timing
-const logRechartsImport = () => {
-  try {
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'src/components/vaccination/TemperatureChart.tsx:before_recharts_import',
-        message: 'about_to_import_recharts',
-        data: { timestamp: Date.now() },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'A',
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch {}
-};
-logRechartsImport();
-// #endregion agent log (debug-session)
-
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  ReferenceArea,
-  Legend,
-  Area,
-  ComposedChart
-} from 'recharts';
-
-// #region agent log (debug-session) - Hypothesis A: Recharts import success
-(() => {
-  try {
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'src/components/vaccination/TemperatureChart.tsx:after_recharts_import',
-        message: 'recharts_imported_successfully',
-        data: { 
-          timestamp: Date.now(),
-          hasXAxis: typeof XAxis !== 'undefined',
-          hasComposedChart: typeof ComposedChart !== 'undefined',
-        },
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'A',
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch {}
-})();
-// #endregion agent log (debug-session)
+import { CircularProgress } from '@mui/material';
 
 interface TemperatureChartProps {
   releves: RelevéTemperature[];
@@ -80,6 +23,22 @@ export const TemperatureChart: React.FC<TemperatureChartProps> = ({
   jours = 7,
   showAlerts = true
 }) => {
+  const [Recharts, setRecharts] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Chargement dynamique de recharts pour éviter les dépendances circulaires
+  useEffect(() => {
+    import('recharts')
+      .then((recharts) => {
+        setRecharts(recharts);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Erreur lors du chargement de recharts:', error);
+        setLoading(false);
+      });
+  }, []);
+
   const chartData = useMemo(() => {
     const grouped: Record<string, { date: string; matin?: number; soir?: number }> = {};
     
@@ -128,6 +87,28 @@ export const TemperatureChart: React.FC<TemperatureChartProps> = ({
       </div>
     );
   };
+
+  // Afficher un loader pendant le chargement
+  if (loading || !Recharts) {
+    return (
+      <div className="w-full h-[280px] flex items-center justify-center">
+        <CircularProgress size={40} />
+      </div>
+    );
+  }
+
+  const {
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    ReferenceLine,
+    ReferenceArea,
+    Legend,
+    Area,
+    ComposedChart
+  } = Recharts;
   
   return (
     <div className="w-full space-y-4">

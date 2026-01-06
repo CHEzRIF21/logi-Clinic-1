@@ -238,3 +238,4 @@ Utilisez cette checklist pour suivre chaque étape du déploiement.
 **Projet :** Logi Clinic  
 **Domaine :** logiclinic.org
 
+

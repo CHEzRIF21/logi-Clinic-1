@@ -802,3 +802,4 @@ Avant de commiter du code, vérifier :
 **Projet :** Logi Clinic  
 **Usage :** Règles pour Cursor AI et développement continu
 
+

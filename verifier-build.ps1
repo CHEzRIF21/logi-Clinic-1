@@ -74,3 +74,4 @@ Write-Host "3. Déployer sur Vercel"
 Write-Host ""
 Write-Host "📚 Voir REINITIALISATION_VERCEL_COMPLETE.md pour le guide complet" -ForegroundColor Yellow
 
+

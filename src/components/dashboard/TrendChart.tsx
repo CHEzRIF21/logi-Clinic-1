@@ -1,15 +1,15 @@
 import React, { useMemo } from 'react';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { Box, Typography, useTheme } from '@mui/material';
-import { formatCurrency } from '../../utils/currency';
+// 👇 On importe directement maintenant
+import { 
+  Area, 
+  AreaChart, 
+  CartesianGrid, 
+  ResponsiveContainer, 
+  Tooltip, 
+  XAxis, 
+  YAxis 
+} from 'recharts';
 
 interface TrendChartProps {
   data: Array<{
@@ -32,6 +32,8 @@ export const TrendChart: React.FC<TrendChartProps> = ({
 }) => {
   const theme = useTheme();
   const chartColor = color || theme.palette.primary.main;
+
+  // 🗑️ SUPPRIMÉ : Le useState, le useEffect et le loading pour Recharts ne sont plus nécessaires
 
   const formattedData = useMemo(() => {
     return data.map((item) => ({
@@ -112,4 +114,3 @@ export const TrendChart: React.FC<TrendChartProps> = ({
     </Box>
   );
 };
-
