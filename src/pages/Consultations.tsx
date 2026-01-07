@@ -56,6 +56,7 @@ import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';
 import { ConsultationStartDialog } from '../components/consultation/ConsultationStartDialog';
 import { ConsultationWorkflow } from '../components/consultation/ConsultationWorkflow';
+import { ConsultationPaymentGate } from '../components/consultation/ConsultationPaymentGate';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 
@@ -68,6 +69,7 @@ const Consultations: React.FC = () => {
   const [currentConsultation, setCurrentConsultation] = useState<Consultation | null>(null);
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
+  const [paymentAuthorized, setPaymentAuthorized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
@@ -387,13 +389,14 @@ const Consultations: React.FC = () => {
     // Recharger la liste des consultations
     await loadConsultations();
     
-    setCurrentConsultation(null);
-    setSelectedPatient(null);
-    setSnackbar({
-      open: true,
-      message: 'Consultation fermée',
-      severity: 'info'
-    });
+        setCurrentConsultation(null);
+        setSelectedPatient(null);
+        setPaymentAuthorized(false);
+        setSnackbar({
+          open: true,
+          message: 'Consultation fermée',
+          severity: 'info'
+        });
   };
 
   const handleNewConsultation = () => {
@@ -547,15 +550,23 @@ const Consultations: React.FC = () => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Consultations.tsx:336',message:'Rendering ConsultationWorkflow',data:{consultationId:currentConsultation.id,patientId:selectedPatient.id,userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
+    
     return (
       <Box sx={{ height: '100vh', overflow: 'auto' }}>
-        <ConsultationWorkflow
-          consultation={currentConsultation}
-          patient={selectedPatient}
-          onStepComplete={handleStepComplete}
-          onClose={handleCloseConsultation}
-          userId={userId}
+        <ConsultationPaymentGate
+          consultationId={currentConsultation.id}
+          onAuthorized={() => setPaymentAuthorized(true)}
+          onBlocked={() => setPaymentAuthorized(false)}
         />
+        {paymentAuthorized && (
+          <ConsultationWorkflow
+            consultation={currentConsultation}
+            patient={selectedPatient}
+            onStepComplete={handleStepComplete}
+            onClose={handleCloseConsultation}
+            userId={userId}
+          />
+        )}
         
         <Snackbar
           open={snackbar.open}

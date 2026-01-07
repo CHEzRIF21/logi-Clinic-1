@@ -443,10 +443,10 @@ export class LaboratoireIntegrationService {
     message: string;
   }> {
     try {
-      // Récupérer la prescription
+      // Récupérer la prescription avec consultation_id
       const { data: prescription } = await supabase
         .from('lab_prescriptions')
-        .select('statut_paiement')
+        .select('statut_paiement, consultation_id')
         .eq('id', prescriptionId)
         .single();
 
@@ -483,7 +483,24 @@ export class LaboratoireIntegrationService {
       // Vérifier le statut de paiement
       const statutPaiement = prescription.statut_paiement || 'non_facture';
 
-      if (statutPaiement === 'paye' || statutPaiement === 'exonere') {
+      // Vérifier aussi les factures complémentaires si la prescription est liée à une consultation
+      let facturesComplementairesPayees = true;
+      if (prescription.consultation_id) {
+        const { data: facturesNonPayees } = await supabase
+          .from('factures')
+          .select('id')
+          .eq('consultation_id', prescription.consultation_id)
+          .eq('type_facture_detail', 'complementaire')
+          .in('statut', ['en_attente', 'partiellement_payee'])
+          .gt('montant_restant', 0)
+          .limit(1);
+
+        if (facturesNonPayees && facturesNonPayees.length > 0) {
+          facturesComplementairesPayees = false;
+        }
+      }
+
+      if ((statutPaiement === 'paye' || statutPaiement === 'exonere') && facturesComplementairesPayees) {
         return {
           est_paye: true,
           peut_prelever: true,
@@ -491,7 +508,7 @@ export class LaboratoireIntegrationService {
           peut_imprimer: true,
           message: 'Paiement effectué'
         };
-      } else if (statutPaiement === 'en_attente') {
+      } else if (statutPaiement === 'en_attente' && facturesComplementairesPayees) {
         return {
           est_paye: false,
           peut_prelever: true,
@@ -505,7 +522,9 @@ export class LaboratoireIntegrationService {
           peut_prelever: true,
           peut_valider: false,
           peut_imprimer: false,
-          message: 'Paiement requis avant validation'
+          message: facturesComplementairesPayees 
+            ? 'Paiement requis avant validation'
+            : 'Facture complémentaire non payée - Paiement requis'
         };
       }
     } catch (error) {

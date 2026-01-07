@@ -1369,7 +1369,7 @@ export default class PharmacyController {
             productLabel: product.label,
             quantity: 0,
           });
-        } else if (totalQty <= (product.minStock || 0) * Number(settings.minStockAlertRatio || 1.2)) {
+        } else if (totalQty <= (product.minStock || 0) * Number((settings as any).minStockAlertRatio || 1.2)) {
           nearOutOfStockProducts.push({
             productId: product.id,
             productCode: product.code,
@@ -1563,6 +1563,33 @@ export default class PharmacyController {
           success: false,
           message: 'Prescription non trouvée',
         });
+      }
+
+      // Vérifier le paiement si la prescription est liée à une consultation
+      if (prescription.consultationId) {
+        // Vérifier s'il y a des factures complémentaires non payées pour cette consultation
+        const { supabaseAdmin } = await import('../config/supabase');
+        if (supabaseAdmin) {
+          const { data: facturesNonPayees } = await supabaseAdmin
+            .from('factures')
+            .select('id, numero_facture, montant_restant')
+            .eq('consultation_id', prescription.consultationId)
+            .eq('type_facture_detail', 'complementaire')
+            .in('statut', ['en_attente', 'partiellement_payee'])
+            .gt('montant_restant', 0);
+
+          if (facturesNonPayees && facturesNonPayees.length > 0) {
+            return res.status(403).json({
+              success: false,
+              message: 'Le paiement de la facture complémentaire est requis avant la dispensation',
+              facturesNonPayees: facturesNonPayees.map((f: any) => ({
+                id: f.id,
+                numero_facture: f.numero_facture,
+                montant_restant: parseFloat(f.montant_restant),
+              })),
+            });
+          }
+        }
       }
 
       const items = prescription.items as any[];

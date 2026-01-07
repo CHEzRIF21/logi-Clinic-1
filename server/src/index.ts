@@ -35,6 +35,7 @@ import consultationsRouter from './routes/consultations';
 import laboratoireRouter from './routes/laboratoire';
 import imagerieRouter from './routes/imagerie';
 import materniteRouter from './routes/maternite';
+import configurationsRouter from './routes/configurations';
 
 const app = express();
 
@@ -87,7 +88,7 @@ if (process.env.NODE_ENV === 'production' || process.env.ENFORCE_APP_SECURITY ==
 }
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -95,7 +96,7 @@ app.get('/health', (req, res) => {
 });
 
 // #region agent log
-app.use('/api/auth', (req, res, next) => {
+app.use('/api/auth', (req, _res, next) => {
   try {
     fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:93',message:'Requête reçue sur /api/auth',data:{method:req.method,path:req.path,originalUrl:req.originalUrl,ip:req.ip},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
   } catch(e) {}
@@ -126,12 +127,13 @@ app.use('/api/consultations', consultationsRouter);
 app.use('/api/laboratoire', laboratoireRouter);
 app.use('/api/imagerie', imagerieRouter);
 app.use('/api/maternite', materniteRouter);
+app.use('/api/configurations', configurationsRouter);
 
 // Error handler
 app.use(errorHandler);
 
 // 404 handler
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({
     success: false,
     message: 'Route non trouvée',

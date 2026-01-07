@@ -33,6 +33,7 @@ import { Consultation } from '../../../services/consultationApiService';
 import { ConsultationBillingService } from '../../../services/consultationBillingService';
 import { ConsultationIntegrationService } from '../../../services/consultationIntegrationService';
 import { FacturationService, Paiement } from '../../../services/facturationService';
+import { supabase } from '../../../services/supabase';
 import { PAYMENT_METHODS, getPaymentMethodConfig } from '../../../constants/paymentMethods';
 
 interface ConsultationWorkflowStep11Props {
@@ -129,20 +130,38 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
         setMessages((prev) => [...prev, imagingResult.message || 'Demandes imagerie envoyées au module Imagerie']);
       }
 
-      // 4. Générer la facturation et l'envoyer au module Caisse
-      const billingResult = await ConsultationIntegrationService.generateBillingAndSendToCaisse(
-        consultation.id,
-        patientId
-      );
-      if (billingResult.success) {
-        setFactureId(billingResult.factureId || null);
-        setMessages((prev) => [...prev, billingResult.message || `Facture générée: ${billingResult.factureId}`]);
+      // 4. Générer la facture complémentaire pour les actes prescrits
+      const billingSummary = await ConsultationBillingService.buildBillingSummary(consultation.id);
+      
+      if (billingSummary.lines.length > 0) {
+        // Préparer les actes pour la facture complémentaire
+        const acts = billingSummary.lines.map((line: any) => ({
+          code: line.type === 'labo' ? 'LAB-' + line.label.substring(0, 10).toUpperCase().replace(/\s/g, '-') :
+                line.type === 'imagerie' ? 'IMG-' + line.label.substring(0, 10).toUpperCase().replace(/\s/g, '-') :
+                line.type === 'medicament' ? 'PHAR-MED' : 'ACTE',
+          libelle: line.label,
+          quantite: line.quantity || 1,
+          prix_unitaire: line.unitPrice || 0,
+        }));
+
+        // Créer la facture complémentaire
+        const factureComplementaireId = await ConsultationBillingService.createComplementaryInvoice(
+          consultation.id,
+          patientId,
+          acts
+        );
+
+        if (factureComplementaireId) {
+          setFactureId(factureComplementaireId);
+          setMessages((prev) => [...prev, `Facture complémentaire générée: ${factureComplementaireId}`]);
+          
+          // Afficher une notification
+          alert('Facture complémentaire générée avec succès. Le patient doit effectuer le paiement pour débloquer les modules (laboratoire, imagerie, pharmacie).');
+        }
       }
 
       // Recharger le résumé
       await loadBillingSummary();
-
-      alert('Facturation générée et envoyée au module Caisse avec succès');
     } catch (error) {
       console.error('Erreur lors de la génération de la facturation:', error);
       alert('Erreur lors de la génération de la facturation');
@@ -320,8 +339,11 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
 
                 {factureId && (
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2">
-                      Facture générée : <strong>{factureId}</strong>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Facture complémentaire générée : <strong>{factureId}</strong>
+                    </Typography>
+                    <Typography variant="body2">
+                      Le patient doit effectuer le paiement pour débloquer les modules (laboratoire, imagerie, pharmacie).
                     </Typography>
                   </Alert>
                 )}

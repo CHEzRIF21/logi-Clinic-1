@@ -41,6 +41,7 @@ import {
   Block,
 } from '@mui/icons-material';
 import { User } from '../types/auth';
+import { ALL_ROLES } from '../config/roles';
 
 interface RegistrationRequest {
   _id: string;
@@ -764,11 +765,11 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                 label="Rôle"
                 onChange={(e) => setApproveForm({ ...approveForm, role: e.target.value })}
               >
-                <MenuItem value="receptionniste">Réceptionniste</MenuItem>
-                <MenuItem value="medecin">Médecin</MenuItem>
-                <MenuItem value="pharmacien">Pharmacien</MenuItem>
-                <MenuItem value="infirmier">Infirmier</MenuItem>
-                <MenuItem value="admin">Administrateur</MenuItem>
+                {ALL_ROLES.map((role) => (
+                  <MenuItem key={role.value} value={role.value}>
+                    {role.label}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
             <TextField

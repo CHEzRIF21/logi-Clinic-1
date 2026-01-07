@@ -35,7 +35,7 @@ export class CaisseController {
    * GET /api/caisse/statistics
    * Récupère les statistiques de caisse
    */
-  static async getStatistics(req: Request, res: Response): Promise<void> {
+  static async getStatistics(req: Request, res: Response): Promise<Response | void> {
     try {
       const { startDate, endDate } = req.query;
 
@@ -68,7 +68,7 @@ export class CaisseController {
    * POST /api/caisse/entries
    * Crée une entrée de caisse
    */
-  static async createEntry(req: AuthRequest, res: Response): Promise<void> {
+  static async createEntry(req: AuthRequest, res: Response): Promise<Response | void> {
     try {
       const { type, amount, ligneBudgetId, description, date } = req.body;
 
@@ -113,7 +113,7 @@ export class CaisseController {
    * POST /api/caisse/close
    * Ferme la caisse (rapprochement)
    */
-  static async closeCaisse(req: AuthRequest, res: Response): Promise<void> {
+  static async closeCaisse(req: AuthRequest, res: Response): Promise<Response | void> {
     try {
       const { date } = req.body;
 

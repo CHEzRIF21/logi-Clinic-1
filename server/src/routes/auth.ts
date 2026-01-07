@@ -191,7 +191,7 @@ router.post('/register-request', async (req: Request, res: Response) => {
         specialite: data.specialite,
         clinicCode: clinicCodeUpper,
         clinicName: clinicName,
-      });
+      } as any);
     } catch (emailError) {
       // Ne pas bloquer la réponse si l'email échoue
       console.error('Erreur lors de l\'envoi de l\'email de notification:', emailError);

@@ -1,8 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Box, Typography, useTheme, CircularProgress } from '@mui/material';
-// #region agent log (debug-session) - Hypothesis A: Import dynamique pour éviter dépendance circulaire
-// Import dynamique de recharts pour éviter l'erreur "Cannot access 'S' before initialization"
-// #endregion agent log
 
 interface TrendChartProps {
   data: Array<{
@@ -26,32 +23,24 @@ export const TrendChart: React.FC<TrendChartProps> = ({
   const theme = useTheme();
   const chartColor = color || theme.palette.primary.main;
   
-  // #region agent log (debug-session) - Hypothesis A: État pour le chargement dynamique
+  // État pour le chargement dynamique de recharts
   const [Recharts, setRecharts] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Chargement dynamique de recharts pour éviter les dépendances circulaires
   useEffect(() => {
-    // Log de début de chargement
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TrendChart.tsx:useEffect',message:'recharts_dynamic_import_start',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    
     import('recharts')
       .then((recharts) => {
         setRecharts(recharts);
         setLoading(false);
-        // Log de succès
-        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TrendChart.tsx:useEffect',message:'recharts_dynamic_import_success',data:{loaded:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       })
       .catch((error) => {
         console.error('Erreur lors du chargement de recharts:', error);
         setLoadError(error?.message || 'Erreur inconnue');
         setLoading(false);
-        // Log d'erreur
-        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'TrendChart.tsx:useEffect',message:'recharts_dynamic_import_error',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       });
   }, []);
-  // #endregion agent log
 
   const formattedData = useMemo(() => {
     return data.map((item) => ({
@@ -87,7 +76,6 @@ export const TrendChart: React.FC<TrendChartProps> = ({
     return null;
   };
 
-  // #region agent log (debug-session) - Hypothesis A: Affichage loading pendant chargement dynamique
   // Afficher un loader pendant le chargement de recharts
   if (loading || !Recharts) {
     return (
@@ -108,7 +96,6 @@ export const TrendChart: React.FC<TrendChartProps> = ({
 
   // Extraire les composants de recharts
   const { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } = Recharts;
-  // #endregion agent log
 
   return (
     <Box>

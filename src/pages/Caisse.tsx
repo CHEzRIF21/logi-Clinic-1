@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Dashboard,
   History,
+  MedicalServices,
 } from '@mui/icons-material';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
@@ -26,6 +27,7 @@ import JournalCaisse from '../components/facturation/JournalCaisse';
 import TableauBordFacturation from '../components/facturation/TableauBordFacturation';
 import GestionTickets from '../components/facturation/GestionTickets';
 import RapportsFinanciers from '../components/facturation/RapportsFinanciers';
+import ConsultationsEnAttente from '../components/facturation/ConsultationsEnAttente';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -92,6 +94,11 @@ const Caisse: React.FC = () => {
               iconPosition="start"
             />
             <Tab
+              icon={<MedicalServices />}
+              label="Consultations en Attente"
+              iconPosition="start"
+            />
+            <Tab
               icon={<Receipt />}
               label="Création Facture"
               iconPosition="start"
@@ -124,18 +131,22 @@ const Caisse: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          <CreationFacture />
+          <ConsultationsEnAttente />
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
-          <GestionPaiements />
+          <CreationFacture />
         </TabPanel>
 
         <TabPanel value={activeTab} index={4}>
-          <JournalCaisse />
+          <GestionPaiements />
         </TabPanel>
 
         <TabPanel value={activeTab} index={5}>
+          <JournalCaisse />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={6}>
           <RapportsFinanciers />
         </TabPanel>
       </Box>

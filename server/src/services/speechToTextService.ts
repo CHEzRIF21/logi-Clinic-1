@@ -90,8 +90,8 @@ class SpeechToTextService {
   ): Promise<TranscriptionResult> {
     // Import dynamique de form-data
     const FormDataModule = await import('form-data');
-    const FormData = FormDataModule.default || FormDataModule;
-    const formData = new FormData();
+    const FormDataClass = FormDataModule.default || FormDataModule;
+    const formData = new (FormDataClass as any)();
 
     // Créer un fichier temporaire pour l'audio
     formData.append('file', audioBuffer, {
@@ -123,11 +123,11 @@ class SpeechToTextService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error?.message || 'Erreur API OpenAI');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     return {
       text: data.text || '',
       language: data.language,
@@ -165,11 +165,11 @@ class SpeechToTextService {
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as any;
       throw new Error(error.error?.message || 'Erreur API Google');
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const result = data.results?.[0]?.alternatives?.[0];
 
     if (!result) {
@@ -220,7 +220,7 @@ class SpeechToTextService {
       throw new Error(`Erreur API Azure: ${error}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     return {
       text: data.DisplayText || data.RecognitionStatus || '',
     };
@@ -252,7 +252,7 @@ class SpeechToTextService {
       throw new Error(`Erreur API personnalisée: ${error}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     return {
       text: data.text || data.transcript || '',
       confidence: data.confidence,
@@ -271,7 +271,7 @@ class SpeechToTextService {
     // Convertir le stream en buffer
     const chunks: Buffer[] = [];
     for await (const chunk of audioStream) {
-      chunks.push(chunk);
+      chunks.push(chunk as Buffer);
     }
     const audioBuffer = Buffer.concat(chunks);
 

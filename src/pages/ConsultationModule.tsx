@@ -18,6 +18,7 @@ import { Patient } from '../services/supabase';
 import { Consultation, ConsultationService } from '../services/consultationService';
 import { ConsultationStartDialog } from '../components/consultation/ConsultationStartDialog';
 import { ConsultationWorkflow } from '../components/consultation/ConsultationWorkflow';
+import { ConsultationPaymentGate } from '../components/consultation/ConsultationPaymentGate';
 import PatientSelector from '../components/shared/PatientSelector';
 import { PatientService } from '../services/patientService';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +32,7 @@ const ConsultationModule: React.FC = () => {
   const [currentConsultation, setCurrentConsultation] = useState<Consultation | null>(null);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string>('');
+  const [paymentAuthorized, setPaymentAuthorized] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
     open: false,
     message: '',
@@ -159,6 +161,7 @@ const ConsultationModule: React.FC = () => {
 
     setCurrentConsultation(null);
     setSelectedPatient(null);
+    setPaymentAuthorized(false);
     setSnackbar({
       open: true,
       message: 'Consultation fermée',
@@ -182,13 +185,20 @@ const ConsultationModule: React.FC = () => {
   if (currentConsultation && selectedPatient) {
     return (
       <Box sx={{ height: '100vh', overflow: 'hidden' }}>
-        <ConsultationWorkflow
-          consultation={currentConsultation}
-          patient={selectedPatient}
-          onStepComplete={handleStepComplete}
-          onClose={handleCloseConsultation}
-          userId={userId}
+        <ConsultationPaymentGate
+          consultationId={currentConsultation.id}
+          onAuthorized={() => setPaymentAuthorized(true)}
+          onBlocked={() => setPaymentAuthorized(false)}
         />
+        {paymentAuthorized && (
+          <ConsultationWorkflow
+            consultation={currentConsultation}
+            patient={selectedPatient}
+            onStepComplete={handleStepComplete}
+            onClose={handleCloseConsultation}
+            userId={userId}
+          />
+        )}
         
         <Snackbar
           open={snackbar.open}

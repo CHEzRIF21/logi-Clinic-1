@@ -25,6 +25,7 @@ import {
   AdminPanelSettings,
   SelectAll,
   Deselect,
+  Restore,
 } from '@mui/icons-material';
 import {
   ModulePermission,
@@ -35,7 +36,9 @@ import {
   ACTION_LABELS,
   getAllPermissions,
 } from '../../types/modulePermissions';
-import { ProfilUtilisateur } from '../../types/permissions';
+import { ProfilUtilisateur, RoleUtilisateur } from '../../types/permissions';
+import { getDefaultPermissionsForRole } from '../../config/defaultRolePermissions';
+import { UserRole } from '../../types/auth';
 
 interface GestionPermissionsModulesProps {
   profil: ProfilUtilisateur;
@@ -43,19 +46,42 @@ interface GestionPermissionsModulesProps {
   currentUserRole?: string; // Pour vérifier si l'utilisateur actuel est admin
 }
 
+// Mapping des rôles RoleUtilisateur vers UserRole
+const roleMapping: Record<RoleUtilisateur, UserRole> = {
+  administrateur_clinique: 'admin',
+  administrateur: 'admin',
+  medecin: 'medecin',
+  infirmier: 'infirmier',
+  sage_femme: 'sage_femme',
+  pharmacien: 'pharmacien',
+  technicien_labo: 'technicien_labo',
+  laborantin: 'laborantin',
+  imagerie: 'imagerie',
+  caissier: 'caissier',
+  comptable: 'comptable',
+  receptionniste: 'receptionniste',
+  secretaire: 'secretaire',
+  auditeur: 'auditeur',
+};
+
 const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
   profil,
   onSave,
   currentUserRole,
 }) => {
   const isCurrentUserAdmin = currentUserRole === 'admin';
-  const isProfilAdmin = profil.isAdmin || profil.role === 'administrateur';
+  const isProfilAdmin = profil.isAdmin || profil.role === 'administrateur_clinique';
+
+  // Obtenir les permissions par défaut pour ce rôle
+  const defaultPermissions = roleMapping[profil.role] 
+    ? getDefaultPermissionsForRole(roleMapping[profil.role])
+    : [];
 
   // Initialiser les permissions : si admin, toutes les permissions, sinon celles du profil ou vides
   const [permissions, setPermissions] = useState<ModulePermission[]>(
     isProfilAdmin
       ? getAllPermissions()
-      : profil.modulePermissions || []
+      : profil.modulePermissions || defaultPermissions
   );
 
   // Si le profil est admin, désactiver la modification (admin a toujours toutes les permissions)
@@ -218,6 +244,30 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
     onSave(permissions);
   };
 
+  const handleRestoreDefaults = () => {
+    if (isReadOnly || !roleMapping[profil.role]) return;
+    const defaults = getDefaultPermissionsForRole(roleMapping[profil.role]);
+    setPermissions(defaults);
+  };
+
+  // Vérifier si une permission est recommandée par défaut pour ce rôle
+  const isDefaultPermission = (module: ModuleName, action: PermissionAction, submodule?: string): boolean => {
+    if (!defaultPermissions.length) return false;
+    const defaultModule = defaultPermissions.find(p => p.module === module);
+    if (!defaultModule) return false;
+    
+    if (!defaultModule.actions.includes(action)) return false;
+    
+    if (submodule && defaultModule.submodules) {
+      const defaultSubmodule = defaultModule.submodules.find(s => s.submodule === submodule);
+      if (defaultSubmodule) {
+        return defaultSubmodule.actions.includes(action);
+      }
+    }
+    
+    return true;
+  };
+
   if (!isCurrentUserAdmin) {
     return (
       <Alert severity="error">
@@ -245,14 +295,26 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
           Configuration des Permissions par Module
         </Typography>
         {!isReadOnly && (
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleSave}
-            startIcon={<CheckCircle />}
-          >
-            Enregistrer les Permissions
-          </Button>
+          <Box display="flex" gap={2}>
+            {defaultPermissions.length > 0 && (
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleRestoreDefaults}
+                startIcon={<Restore />}
+              >
+                Restaurer les valeurs par défaut
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleSave}
+              startIcon={<CheckCircle />}
+            >
+              Enregistrer les Permissions
+            </Button>
+          </Box>
         )}
       </Box>
 
@@ -331,11 +393,23 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
                                 label={
                                   <Box display="flex" alignItems="center" gap={1}>
                                     {hasModuleAction(module, action) ? (
-                                      <CheckCircle color="success" fontSize="small" />
+                                      <CheckCircle 
+                                        color={isDefaultPermission(module, action) ? "success" : "primary"} 
+                                        fontSize="small" 
+                                      />
                                     ) : (
                                       <Cancel color="disabled" fontSize="small" />
                                     )}
                                     {ACTION_LABELS[action]}
+                                    {isDefaultPermission(module, action) && (
+                                      <Chip 
+                                        label="Par défaut" 
+                                        size="small" 
+                                        color="info" 
+                                        variant="outlined"
+                                        sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                                      />
+                                    )}
                                   </Box>
                                 }
                               />
@@ -373,11 +447,23 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
                                           label={
                                             <Box display="flex" alignItems="center" gap={1}>
                                               {hasSubModuleAction(module, submodule, action) ? (
-                                                <CheckCircle color="success" fontSize="small" />
+                                                <CheckCircle 
+                                                  color={isDefaultPermission(module, action, submodule) ? "success" : "primary"} 
+                                                  fontSize="small" 
+                                                />
                                               ) : (
                                                 <Cancel color="disabled" fontSize="small" />
                                               )}
                                               {ACTION_LABELS[action]}
+                                              {isDefaultPermission(module, action, submodule) && (
+                                                <Chip 
+                                                  label="Par défaut" 
+                                                  size="small" 
+                                                  color="info" 
+                                                  variant="outlined"
+                                                  sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                                                />
+                                              )}
                                             </Box>
                                           }
                                         />

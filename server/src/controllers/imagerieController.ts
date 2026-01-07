@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import ImagerieService from '../services/imagerieService';
+import { supabaseAdmin } from '../config/supabase';
 
 export class ImagerieController {
   /**
@@ -323,6 +324,39 @@ export class ImagerieController {
           success: false,
           message: 'Les champs contenu, conclusion et radiologue_id sont requis',
         });
+      }
+
+      // Vérifier le paiement avant de créer le rapport
+      if (supabaseAdmin) {
+        // Récupérer l'examen pour obtenir la consultation_id
+        const { data: examen } = await supabaseAdmin
+          .from('imaging_requests')
+          .select('consultation_id')
+          .eq('id', id)
+          .single();
+
+        if (examen?.consultation_id) {
+          // Vérifier s'il y a des factures complémentaires non payées
+          const { data: facturesNonPayees } = await supabaseAdmin
+            .from('factures')
+            .select('id, numero_facture, montant_restant')
+            .eq('consultation_id', examen.consultation_id)
+            .eq('type_facture_detail', 'complementaire')
+            .in('statut', ['en_attente', 'partiellement_payee'])
+            .gt('montant_restant', 0);
+
+          if (facturesNonPayees && facturesNonPayees.length > 0) {
+            return res.status(403).json({
+              success: false,
+              message: 'Le paiement de la facture complémentaire est requis avant la création du rapport',
+              facturesNonPayees: facturesNonPayees.map((f: any) => ({
+                id: f.id,
+                numero_facture: f.numero_facture,
+                montant_restant: parseFloat(f.montant_restant),
+              })),
+            });
+          }
+        }
       }
 
       const rapport = await ImagerieService.createRapport({

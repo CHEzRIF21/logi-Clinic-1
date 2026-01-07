@@ -33,6 +33,10 @@ router.post('/', ConsultationController.create);
 router.put('/:id', ConsultationController.update);
 router.post('/:id/close', ConsultationController.close);
 
+// Vérification paiement et autorisation urgence
+router.get('/:id/payment-status', ConsultationController.checkPaymentStatus);
+router.post('/:id/authorize-emergency', ConsultationController.authorizeEmergencyConsultation);
+
 // Constantes
 router.get('/:id/constantes', ConsultationController.getConstantes);
 router.post('/:id/constantes', ConsultationController.saveConstantes);

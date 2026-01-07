@@ -170,12 +170,12 @@ export class PricingService {
           clinicId: input.clinicId,
           serviceId: input.serviceId,
           tarifBase: new Decimal(input.tarifBase),
-          unite: input.unite || service.unite || 'unité',
+          unite: input.unite || (service as any).unite || 'unité',
           active: input.active !== undefined ? input.active : true,
         },
         update: {
           tarifBase: new Decimal(input.tarifBase),
-          unite: input.unite || service.unite || 'unité',
+          unite: input.unite || (service as any).unite || 'unité',
           active: input.active,
         },
       });

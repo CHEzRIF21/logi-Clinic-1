@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import InvoiceService from '../services/invoiceService';
 import PDFService from '../services/pdfService';
-import AuditService from '../services/auditService';
+import { AuthRequest } from '../middleware/auth';
 
 export class InvoiceController {
   /**
@@ -99,7 +99,7 @@ export class InvoiceController {
         patientId,
         lines,
         comment,
-        createdBy: createdBy || req.user?.id,
+        createdBy: createdBy || (req as AuthRequest).user?.id,
         modePayment,
         aib: req.body.aib,
         typeFacture: req.body.typeFacture,
@@ -160,8 +160,8 @@ export class InvoiceController {
       const { id } = req.params;
 
       // Enregistrer l'impression dans l'audit
-      if (req.user?.id) {
-        await InvoiceService.logPrint(id, req.user.id);
+      if ((req as AuthRequest).user?.id) {
+        await InvoiceService.logPrint(id, (req as AuthRequest).user!.id);
       }
 
       const pdfBuffer = await PDFService.generateFacturePDF(id);
@@ -193,7 +193,7 @@ export class InvoiceController {
 
       const invoice = await InvoiceService.normalizeInvoice(
         id,
-        req.user?.id || 'system'
+        (req as AuthRequest).user?.id || 'system'
       );
 
       res.json({

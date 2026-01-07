@@ -1,13 +1,14 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import PaymentService from '../services/paymentService';
 import { AuthRequest } from '../middleware/auth';
+import { supabaseAdmin } from '../config/supabase';
 
 export class PaymentController {
   /**
    * POST /api/invoices/:id/payments
    * Ajoute un paiement à une facture
    */
-  static async create(req: AuthRequest, res: Response): Promise<void> {
+  static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
       const invoiceId = req.params.invoiceId || req.params.id;
       const { amount, method, reference, createdBy } = req.body;
@@ -48,7 +49,6 @@ export class PaymentController {
         'VIREMENT',
       ];
       const methodLower = method.toLowerCase();
-      const normalizedMethod = validMethods.includes(method) ? method : methodLower;
       if (!validMethods.map(m => m.toLowerCase()).includes(methodLower)) {
         return res.status(400).json({
           success: false,
@@ -64,7 +64,42 @@ export class PaymentController {
         createdBy: createdBy || req.user?.id,
       });
 
-      res.status(201).json({
+      // Mettre à jour le statut de paiement de la consultation si la facture est liée
+      if (supabaseAdmin) {
+        try {
+          const { data: facture } = await supabaseAdmin
+            .from('factures')
+            .select('consultation_id, statut, montant_restant')
+            .eq('id', invoiceId)
+            .single();
+
+          if (facture?.consultation_id) {
+            // Le trigger SQL devrait déjà mettre à jour, mais on le fait explicitement aussi
+            if (facture.statut === 'payee' && facture.montant_restant <= 0) {
+              await supabaseAdmin
+                .from('consultations')
+                .update({
+                  statut_paiement: 'paye',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', facture.consultation_id);
+            } else if (facture.statut === 'partiellement_payee' || facture.statut === 'en_attente') {
+              await supabaseAdmin
+                .from('consultations')
+                .update({
+                  statut_paiement: 'en_attente',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', facture.consultation_id);
+            }
+          }
+        } catch (updateError) {
+          console.error('Erreur mise à jour statut consultation après paiement:', updateError);
+          // Ne pas échouer le paiement si la mise à jour échoue
+        }
+      }
+
+      return res.status(201).json({
         success: true,
         message: 'Paiement enregistré avec succès',
         data: payment,
@@ -76,7 +111,7 @@ export class PaymentController {
         ? 400
         : 500;
 
-      res.status(statusCode).json({
+      return res.status(statusCode).json({
         success: false,
         message: error.message || 'Erreur lors de l\'enregistrement du paiement',
         error: error.message,
@@ -88,18 +123,18 @@ export class PaymentController {
    * GET /api/invoices/:id/payments
    * Liste les paiements d'une facture
    */
-  static async listByInvoice(req: Request, res: Response) {
+  static async listByInvoice(req: Request, res: Response): Promise<Response> {
     try {
       const invoiceId = req.params.invoiceId || req.params.id;
 
       const payments = await PaymentService.getPaymentsByInvoice(invoiceId);
 
-      res.json({
+      return res.json({
         success: true,
         data: payments,
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Erreur lors de la récupération des paiements',
         error: error.message,
@@ -109,4 +144,3 @@ export class PaymentController {
 }
 
 export default PaymentController;
-

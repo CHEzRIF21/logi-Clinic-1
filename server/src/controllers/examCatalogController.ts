@@ -1,13 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
-import { AuthenticatedRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth';
 
 export class ExamCatalogController {
   /**
    * GET /api/exams
    * Liste les examens du catalogue avec filtres
    */
-  static async list(req: AuthenticatedRequest, res: Response) {
+  static async list(req: AuthRequest, res: Response) {
     try {
       const { module, categorie, search, actif } = req.query;
 
@@ -53,7 +53,7 @@ export class ExamCatalogController {
    * GET /api/exams/:id
    * Récupère un examen par son ID
    */
-  static async getById(req: AuthenticatedRequest, res: Response) {
+  static async getById(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
 
@@ -87,7 +87,7 @@ export class ExamCatalogController {
    * POST /api/exams
    * Crée un nouvel examen dans le catalogue
    */
-  static async create(req: AuthenticatedRequest, res: Response) {
+  static async create(req: AuthRequest, res: Response) {
     try {
       const payload = req.body;
 
@@ -115,7 +115,7 @@ export class ExamCatalogController {
    * PUT /api/exams/:id
    * Met à jour un examen
    */
-  static async update(req: AuthenticatedRequest, res: Response) {
+  static async update(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
       const payload = req.body;
@@ -151,7 +151,7 @@ export class ExamCatalogController {
    * DELETE /api/exams/:id
    * Archive un examen (soft delete)
    */
-  static async archive(req: AuthenticatedRequest, res: Response) {
+  static async archive(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
 

@@ -6,10 +6,11 @@ import {
   Tab,
   Alert,
 } from '@mui/material';
-import { MedicalServices } from '@mui/icons-material';
+import { MedicalServices, Payment } from '@mui/icons-material';
 import { ParametresDiagnostics } from './sections/ParametresDiagnostics';
 import { ParametresExamens } from './sections/ParametresExamens';
 import { ParametresMedicaments } from './sections/ParametresMedicaments';
+import BillingSettings from '../settings/BillingSettings';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -45,6 +46,7 @@ export const ParametresConsultation: React.FC = () => {
           <Tab label="Diagnostics" />
           <Tab label="Examens" />
           <Tab label="Médicaments" />
+          <Tab icon={<Payment />} label="Facturation" iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -58,6 +60,10 @@ export const ParametresConsultation: React.FC = () => {
 
       <TabPanel value={activeTab} index={2}>
         <ParametresMedicaments />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={3}>
+        <BillingSettings />
       </TabPanel>
     </Box>
   );

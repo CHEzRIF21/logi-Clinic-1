@@ -1,13 +1,18 @@
-// Types de rôles disponibles
+// Types de rôles disponibles (LogiClinic)
 export type UserRole = 
-  | 'admin' 
-  | 'medecin' 
-  | 'secretaire' 
-  | 'infirmier' 
-  | 'pharmacien' 
-  | 'comptable'
-  | 'laborantin'
-  | 'caissier';
+  | 'admin'                    // Administrateur Clinique
+  | 'medecin'                  // Médecin
+  | 'infirmier'                // Infirmier
+  | 'sage_femme'               // Sage-femme
+  | 'pharmacien'               // Pharmacien
+  | 'technicien_labo'          // Technicien de Laboratoire
+  | 'laborantin'               // Laborantin (alias technicien labo)
+  | 'imagerie'                 // Imagerie / Échographie
+  | 'caissier'                 // Caissier
+  | 'comptable'                // Comptable
+  | 'receptionniste'           // Réceptionniste / Accueil
+  | 'secretaire'               // Secrétaire
+  | 'auditeur';                // Auditeur / Direction
 
 // Modules disponibles dans l'application
 export type ModulePermission = 

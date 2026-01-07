@@ -39,7 +39,7 @@ export class OperationController {
    * POST /api/operations
    * Crée une nouvelle opération
    */
-  static async create(req: AuthRequest, res: Response): Promise<void> {
+  static async create(req: AuthRequest, res: Response): Promise<Response | void> {
     try {
       const { patientId, lines, createdBy } = req.body;
 

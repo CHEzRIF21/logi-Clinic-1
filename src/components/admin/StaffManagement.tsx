@@ -53,6 +53,7 @@ import {
 } from '@mui/icons-material';
 import { supabase } from '../../services/supabase';
 import { User } from '../../types/auth';
+import { ALL_ROLES, getRoleLabelByValue } from '../../config/roles';
 
 interface StaffMember {
   id: string;
@@ -709,14 +710,11 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ currentUser, clinicId
                   label="Rôle"
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                 >
-                  <MenuItem value="STAFF">Staff</MenuItem>
-                  <MenuItem value="RECEPTIONNISTE">Réceptionniste</MenuItem>
-                  <MenuItem value="INFIRMIER">Infirmier</MenuItem>
-                  <MenuItem value="MEDECIN">Médecin</MenuItem>
-                  <MenuItem value="PHARMACIEN">Pharmacien</MenuItem>
-                  <MenuItem value="CAISSIER">Caissier</MenuItem>
-                  <MenuItem value="LABORANTIN">Laborantin</MenuItem>
-                  <MenuItem value="CLINIC_ADMIN">Admin Clinique</MenuItem>
+                  {ALL_ROLES.map((role) => (
+                    <MenuItem key={role.value} value={role.value}>
+                      {role.label}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
               <TextField

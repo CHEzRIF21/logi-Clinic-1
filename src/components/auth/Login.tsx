@@ -50,6 +50,7 @@ import { CreateRecoveryRequestDto } from '../../types/accountRecovery';
 import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
 import ChangePasswordDialog from './ChangePasswordDialog';
+import { REGISTRATION_ROLES } from '../../config/roles';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -2148,11 +2149,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     }}
                   >
                     <option value="">Sélectionnez un rôle</option>
-                    <option value="receptionniste">Réceptionniste</option>
-                    <option value="medecin">Médecin</option>
-                    <option value="pharmacien">Pharmacien</option>
-                    <option value="infirmier">Infirmier</option>
-                    <option value="admin">Administrateur</option>
+                    {REGISTRATION_ROLES.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
                   </TextField>
                 </Grid>
                 <Grid item xs={12} sm={6}>

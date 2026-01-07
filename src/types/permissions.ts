@@ -1,9 +1,19 @@
+// Rôles métier LogiClinic
 export type RoleUtilisateur = 
-  | 'responsable_centre'
-  | 'pharmacien'
-  | 'infirmier'
-  | 'administrateur'
-  | 'auditeur';
+  | 'administrateur_clinique'  // Administrateur Clinique
+  | 'administrateur'           // Alias pour administrateur_clinique
+  | 'medecin'                  // Médecin
+  | 'infirmier'                // Infirmier
+  | 'sage_femme'               // Sage-femme
+  | 'pharmacien'               // Pharmacien
+  | 'technicien_labo'          // Technicien de Laboratoire
+  | 'laborantin'               // Alias pour technicien_labo
+  | 'imagerie'                 // Imagerie / Échographie
+  | 'caissier'                 // Caissier
+  | 'comptable'                // Comptable
+  | 'receptionniste'           // Réceptionniste / Accueil
+  | 'secretaire'               // Secrétaire
+  | 'auditeur';                // Auditeur / Direction
 
 export type ActionStock = 
   | 'lecture_stock'
@@ -64,29 +74,81 @@ export interface UtilisateurStock {
 // Seul l'administrateur a automatiquement toutes les permissions.
 // Les autres profils doivent être configurés manuellement par l'administrateur.
 
-// Configuration des permissions par rôle (déprécié - utilisé uniquement comme template)
+// Configuration des permissions par rôle pour le stock (déprécié - utilisé uniquement comme template)
+// Les permissions complètes par module sont définies dans defaultRolePermissions.ts
 export const PERMISSIONS_PAR_ROLE: Record<RoleUtilisateur, Permission[]> = {
-  responsable_centre: [
+  administrateur_clinique: [
     { action: 'lecture_stock', magasin: 'tous', description: 'Lecture complète des stocks' },
-    { action: 'ecriture_stock', magasin: 'gros', description: 'Gestion du stock central' },
+    { action: 'ecriture_stock', magasin: 'tous', description: 'Gestion complète des stocks' },
     { action: 'gestion_medicaments', magasin: 'tous', description: 'Gestion du catalogue' },
     { action: 'gestion_lots', magasin: 'tous', description: 'Gestion des lots' },
     { action: 'gestion_transferts', magasin: 'tous', description: 'Gestion des transferts' },
-    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès aux dispensations' },
-    { action: 'gestion_pertes', magasin: 'gros', description: 'Gestion des pertes centrales' },
+    { action: 'gestion_dispensations', magasin: 'tous', description: 'Gestion des dispensations' },
+    { action: 'gestion_pertes', magasin: 'tous', description: 'Gestion des pertes' },
     { action: 'gestion_retours', magasin: 'tous', description: 'Gestion des retours' },
     { action: 'gestion_alertes', magasin: 'tous', description: 'Gestion des alertes' },
     { action: 'gestion_inventaires', magasin: 'tous', description: 'Gestion des inventaires' },
     { action: 'generation_rapports', magasin: 'tous', description: 'Génération de rapports' },
     { action: 'export_donnees', magasin: 'tous', description: 'Export des données' },
-    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas de gestion des utilisateurs' },
-    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas de configuration' },
+    { action: 'gestion_utilisateurs', magasin: 'tous', description: 'Gestion des utilisateurs' },
+    { action: 'configuration_systeme', magasin: 'tous', description: 'Configuration du système' },
+  ],
+
+  medecin: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
+  ],
+
+  infirmier: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
+  ],
+
+  sage_femme: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
   ],
 
   pharmacien: [
     { action: 'lecture_stock', magasin: 'tous', description: 'Lecture des stocks' },
     { action: 'ecriture_stock', magasin: 'detail', description: 'Gestion du stock détail' },
-    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Lecture seule du catalogue' },
+    { action: 'gestion_medicaments', magasin: 'tous', description: 'Gestion du catalogue' },
     { action: 'gestion_lots', magasin: 'detail', description: 'Gestion des lots détail' },
     { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas de gestion des transferts' },
     { action: 'gestion_dispensations', magasin: 'detail', description: 'Gestion des dispensations' },
@@ -100,41 +162,72 @@ export const PERMISSIONS_PAR_ROLE: Record<RoleUtilisateur, Permission[]> = {
     { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas de configuration' },
   ],
 
-  infirmier: [
-    { action: 'lecture_stock', magasin: 'detail', description: 'Lecture stock détail' },
-    { action: 'ecriture_stock', magasin: 'detail', description: 'Gestion stock détail' },
-    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Lecture seule du catalogue' },
-    { action: 'gestion_lots', magasin: 'detail', description: 'Gestion lots détail' },
-    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas de gestion des transferts' },
-    { action: 'gestion_dispensations', magasin: 'detail', description: 'Gestion des dispensations' },
-    { action: 'gestion_pertes', magasin: 'detail', description: 'Gestion des pertes détail' },
-    { action: 'gestion_retours', magasin: 'detail', description: 'Gestion des retours détail' },
-    { action: 'gestion_alertes', magasin: 'detail', description: 'Gestion des alertes détail' },
-    { action: 'gestion_inventaires', magasin: 'detail', description: 'Inventaires détail' },
-    { action: 'generation_rapports', magasin: 'detail', description: 'Rapports détail' },
-    { action: 'export_donnees', magasin: 'detail', description: 'Export données détail' },
-    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas de gestion des utilisateurs' },
-    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas de configuration' },
+  technicien_labo: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
   ],
 
-  administrateur: [
-    // L'administrateur a automatiquement TOUTES les permissions
-    // Cette liste est maintenue pour compatibilité mais n'est plus utilisée
-    // car l'admin a toutes les permissions par défaut
-    { action: 'lecture_stock', magasin: 'tous', description: 'Lecture complète des stocks' },
-    { action: 'ecriture_stock', magasin: 'tous', description: 'Gestion complète des stocks' },
-    { action: 'gestion_medicaments', magasin: 'tous', description: 'Gestion complète du catalogue' },
-    { action: 'gestion_lots', magasin: 'tous', description: 'Gestion complète des lots' },
-    { action: 'gestion_transferts', magasin: 'tous', description: 'Gestion complète des transferts' },
-    { action: 'gestion_dispensations', magasin: 'tous', description: 'Gestion complète des dispensations' },
-    { action: 'gestion_pertes', magasin: 'tous', description: 'Gestion complète des pertes' },
-    { action: 'gestion_retours', magasin: 'tous', description: 'Gestion complète des retours' },
-    { action: 'gestion_alertes', magasin: 'tous', description: 'Gestion complète des alertes' },
-    { action: 'gestion_inventaires', magasin: 'tous', description: 'Gestion complète des inventaires' },
-    { action: 'generation_rapports', magasin: 'tous', description: 'Génération de tous les rapports' },
-    { action: 'export_donnees', magasin: 'tous', description: 'Export de toutes les données' },
-    { action: 'gestion_utilisateurs', magasin: 'tous', description: 'Gestion complète des utilisateurs' },
-    { action: 'configuration_systeme', magasin: 'tous', description: 'Configuration complète du système' },
+  imagerie: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
+  ],
+
+  caissier: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
+  ],
+
+  receptionniste: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
   ],
 
   auditeur: [
@@ -152,6 +245,42 @@ export const PERMISSIONS_PAR_ROLE: Record<RoleUtilisateur, Permission[]> = {
     { action: 'export_donnees', magasin: 'tous', description: 'Export des données' },
     { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas de gestion des utilisateurs' },
     { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas de configuration' },
+  ],
+
+  // Alias et nouveaux rôles
+  administrateur: [], // Alias - utilise les permissions de administrateur_clinique
+  laborantin: [], // Alias - utilise les permissions de technicien_labo
+  comptable: [
+    { action: 'lecture_stock', magasin: 'tous', description: 'Lecture des stocks' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'écriture' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'tous', description: 'Génération de rapports' },
+    { action: 'export_donnees', magasin: 'tous', description: 'Export des données' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas de gestion des utilisateurs' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas de configuration' },
+  ],
+  secretaire: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
   ],
 };
 
@@ -181,11 +310,20 @@ export const canAccessMagasin = (
 
 export const getRoleLabel = (role: RoleUtilisateur): string => {
   const labels: Record<RoleUtilisateur, string> = {
-    responsable_centre: 'Responsable du Centre',
-    pharmacien: 'Pharmacien',
-    infirmier: 'Infirmier',
+    administrateur_clinique: 'Administrateur Clinique',
     administrateur: 'Administrateur',
-    auditeur: 'Auditeur',
+    medecin: 'Médecin',
+    infirmier: 'Infirmier',
+    sage_femme: 'Sage-femme',
+    pharmacien: 'Pharmacien',
+    technicien_labo: 'Technicien de Laboratoire',
+    laborantin: 'Laborantin',
+    imagerie: 'Imagerie / Échographie',
+    caissier: 'Caissier',
+    comptable: 'Comptable',
+    receptionniste: 'Réceptionniste / Accueil',
+    secretaire: 'Secrétaire',
+    auditeur: 'Auditeur / Direction',
   };
   return labels[role];
 };
