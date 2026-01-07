@@ -110,3 +110,4 @@ Ouvrez `http://localhost:4173` et v√©rifiez que le champ "Code Clinique" est pr√
 
 
 
+
