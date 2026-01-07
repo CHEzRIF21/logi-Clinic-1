@@ -1,7 +1,7 @@
 {
   "name": "logi-clinic",
-  "version": "1.0.0",
-  "description": "Système de gestion de clinique médicale",
+  "version": "1.0.1",
+  "description": "Système de gestion de clinique médicale - Fix recharts import",
   "private": true,
   "type": "module",
   "dependencies": {
