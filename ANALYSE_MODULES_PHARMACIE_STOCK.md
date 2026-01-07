@@ -876,3 +876,5 @@ Les modules Pharmacie et Stock des Médicaments sont fonctionnels mais présente
 
 
 
+
+

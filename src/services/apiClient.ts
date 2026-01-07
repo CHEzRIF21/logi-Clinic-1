@@ -17,10 +17,16 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ||
   (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
   PRODUCTION_API_URL;
 
-// Log pour debug (uniquement en développement)
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+// #region agent log (debug-session) - Hypothesis D: Tracer la configuration API_URL
+// Log pour debug - toujours actif pour le debugging
+if (typeof window !== 'undefined') {
   console.log('🔗 API URL configurée:', API_BASE_URL);
+  console.log('🔗 VITE_API_URL:', import.meta.env.VITE_API_URL || 'non défini');
+  console.log('🔗 Mode:', import.meta.env.MODE);
+  // Envoyer au serveur de debug
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:init',message:'api_config_loaded',data:{API_BASE_URL,VITE_API_URL:import.meta.env.VITE_API_URL||'undefined',MODE:import.meta.env.MODE,origin:window.location.origin},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
 }
+// #endregion agent log
 
 /**
  * Configuration du retry

@@ -803,3 +803,5 @@ Avant de commiter du code, vérifier :
 **Usage :** Règles pour Cursor AI et développement continu
 
 
+
+

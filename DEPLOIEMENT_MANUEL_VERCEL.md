@@ -108,3 +108,5 @@ Ouvrez `http://localhost:4173` et vérifiez que le champ "Code Clinique" est pr�
 - ✅ Le champ "Code Clinique" est bien présent dans `src/components/auth/Login.tsx` (ligne 1963-2018)
 
 
+
+

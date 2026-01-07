@@ -44,6 +44,7 @@ import { User } from '../types/auth';
 
 interface RegistrationRequest {
   _id: string;
+  id?: string; // ID original de Supabase
   nom: string;
   prenom: string;
   email: string;
@@ -61,6 +62,8 @@ interface RegistrationRequest {
   traiteLe?: string;
   raisonRejet?: string;
   notes?: string;
+  clinicId?: string;
+  clinicCode?: string;
 }
 
 interface RegistrationRequestsProps {
@@ -119,6 +122,16 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
 
       const data = await response.json();
       if (data.success) {
+        // Debug: afficher les données reçues
+        console.log('📋 Demandes d\'inscription reçues:', data.requests);
+        if (data.requests && data.requests.length > 0) {
+          console.log('📝 Exemple de demande:', {
+            id: data.requests[0].id,
+            _id: data.requests[0]._id,
+            roleSouhaite: data.requests[0].roleSouhaite,
+            createdAt: data.requests[0].createdAt,
+          });
+        }
         setRequests(data.requests || []);
         setError('');
       } else {
@@ -159,16 +172,34 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
   };
 
   const handleApprove = async () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest) {
+      console.error('Aucune demande sélectionnée pour approbation');
+      setError('Aucune demande sélectionnée');
+      return;
+    }
 
     try {
       setLoading(true);
+      setError('');
+      
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/auth/approve-registration/${selectedRequest._id}`, {
+      const clinicId = localStorage.getItem('clinic_id');
+      
+      // Utiliser l'id ou _id selon ce qui est disponible
+      const requestId = selectedRequest.id || selectedRequest._id;
+      
+      console.log('🔄 Approbation de la demande:', {
+        requestId,
+        role: approveForm.role || selectedRequest.roleSouhaite,
+        token: token ? 'présent' : 'absent',
+      });
+      
+      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/approve`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
@@ -178,9 +209,10 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       });
 
       const data = await response.json();
+      console.log('📥 Réponse approbation:', { status: response.status, data });
 
       if (response.ok && data.success) {
-        setSuccess('Demande d\'inscription approuvée avec succès');
+        setSuccess('Demande d\'inscription approuvée avec succès. Un compte a été créé pour l\'utilisateur.');
         setApproveDialogOpen(false);
         setDetailsOpen(false);
         setApproveForm({ role: '', permissions: [], notes: '' });
@@ -198,16 +230,35 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
   };
 
   const handleReject = async () => {
-    if (!selectedRequest || !rejectForm.raisonRejet) return;
+    if (!selectedRequest) {
+      console.error('Aucune demande sélectionnée pour rejet');
+      setError('Aucune demande sélectionnée');
+      return;
+    }
+    
+    if (!rejectForm.raisonRejet) {
+      setError('Veuillez indiquer une raison de rejet');
+      return;
+    }
 
     try {
       setLoading(true);
+      setError('');
+      
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/auth/reject-registration/${selectedRequest._id}`, {
+      const clinicId = localStorage.getItem('clinic_id');
+      
+      // Utiliser l'id ou _id selon ce qui est disponible
+      const requestId = selectedRequest.id || selectedRequest._id;
+      
+      console.log('🔄 Rejet de la demande:', { requestId, raison: rejectForm.raisonRejet });
+      
+      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/reject`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
+          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           raisonRejet: rejectForm.raisonRejet,
@@ -216,6 +267,7 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       });
 
       const data = await response.json();
+      console.log('📥 Réponse rejet:', { status: response.status, data });
 
       if (response.ok && data.success) {
         setSuccess('Demande d\'inscription rejetée');
@@ -246,6 +298,9 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
   };
 
   const handleViewDetails = (request: RegistrationRequest) => {
+    // #region agent log (debug-session)
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:handleViewDetails',message:'handleViewDetails appelé',data:{requestId:request?.id||request?._id,hasSecurityQuestions:!!request?.securityQuestions,securityQuestionsType:typeof request?.securityQuestions,createdAt:request?.createdAt},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,D'})}).catch(()=>{});
+    // #endregion
     setSelectedRequest(request);
     setDetailsOpen(true);
     handleMenuClose();
@@ -277,8 +332,8 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
     }
   };
 
-  const getRoleLabel = (role?: string) => {
-    if (!role || role.trim() === '') {
+  const getRoleLabel = (role?: string | null) => {
+    if (!role || (typeof role === 'string' && role.trim() === '')) {
       return 'Non spécifié';
     }
     const roleMap: Record<string, string> = {
@@ -287,9 +342,11 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       'pharmacien': 'Pharmacien',
       'infirmier': 'Infirmier',
       'admin': 'Administrateur',
-      'STAFF': 'Personnel',
+      'clinic_admin': 'Administrateur Clinique',
+      'staff': 'Personnel',
     };
-    return roleMap[role.toLowerCase()] || role;
+    const normalizedRole = role.toLowerCase().trim();
+    return roleMap[normalizedRole] || role;
   };
 
   return (
@@ -417,7 +474,7 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
               </TableRow>
             ) : (
               requests.map((request) => (
-                <TableRow key={request._id} hover>
+                <TableRow key={request.id || request._id} hover>
                   <TableCell>{request.prenom} {request.nom}</TableCell>
                   <TableCell>{request.email}</TableCell>
                   <TableCell>{request.telephone}</TableCell>
@@ -432,34 +489,42 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                     />
                   </TableCell>
                   <TableCell>
-                    {request.createdAt 
-                      ? (() => {
-                          try {
-                            const date = new Date(request.createdAt);
-                            return isNaN(date.getTime()) 
-                              ? '-' 
-                              : date.toLocaleDateString('fr-FR', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric'
-                                });
-                          } catch {
-                            return '-';
-                          }
-                        })()
-                      : '-'
-                    }
+                    {(() => {
+                      try {
+                        // Essayer createdAt, created_at, ou created_at depuis l'objet original
+                        const dateValue = request.createdAt || (request as any).created_at;
+                        if (!dateValue) return '-';
+                        
+                        const date = new Date(dateValue);
+                        if (isNaN(date.getTime())) return '-';
+                        
+                        return date.toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        });
+                      } catch {
+                        return '-';
+                      }
+                    })()}
                   </TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleMenuOpen(e, request._id);
+                        const requestId = request.id || request._id;
+                        if (requestId) {
+                          handleMenuOpen(e, requestId);
+                        } else {
+                          console.error('ID manquant pour la demande:', request);
+                        }
                       }}
                       aria-label="Actions"
                       aria-haspopup="true"
-                      aria-expanded={Boolean(anchorEl && menuRequestId === request._id)}
+                      aria-expanded={Boolean(anchorEl && menuRequestId === (request.id || request._id))}
                     >
                       <MoreVert />
                     </IconButton>
@@ -481,18 +546,34 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
           <>
             <MenuItem
               onClick={() => {
-                const request = requests.find((r) => r._id === menuRequestId);
-                if (request) handleViewDetails(request);
+                // #region agent log (debug-session)
+                fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:MenuItem-VoirDetails',message:'Clic sur Voir les détails',data:{menuRequestId,requestsLength:requests.length,allIds:requests.map(r=>({id:r.id,_id:r._id}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                const request = requests.find((r) => (r.id || r._id) === menuRequestId);
+                // #region agent log (debug-session)
+                fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:MenuItem-VoirDetails-afterFind',message:'Après find',data:{foundRequest:!!request,requestData:request?{id:request.id,_id:request._id,securityQuestions:request.securityQuestions}:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D'})}).catch(()=>{});
+                // #endregion
+                if (request) {
+                  handleViewDetails(request);
+                } else {
+                  console.error('Demande non trouvée pour ID:', menuRequestId);
+                }
               }}
             >
               <Visibility sx={{ mr: 1 }} /> Voir les détails
             </MenuItem>
-            {requests.find((r) => r._id === menuRequestId)?.statut === 'pending' && (
+            {requests.find((r) => (r.id || r._id) === menuRequestId)?.statut === 'pending' && (
               <>
                 <MenuItem
                   onClick={() => {
-                    const request = requests.find((r) => r._id === menuRequestId);
+                    // #region agent log (debug-session)
+                    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:MenuItem-Approuver',message:'Clic sur Approuver',data:{menuRequestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                    // #endregion
+                    const request = requests.find((r) => (r.id || r._id) === menuRequestId);
                     if (request) {
+                      // #region agent log (debug-session)
+                      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:MenuItem-Approuver-found',message:'Demande trouvée pour approbation',data:{requestId:request.id||request._id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                      // #endregion
                       setSelectedRequest(request);
                       setApproveForm({
                         role: request.roleSouhaite || 'receptionniste',
@@ -500,6 +581,8 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                         notes: '',
                       });
                       setApproveDialogOpen(true);
+                    } else {
+                      console.error('Demande non trouvée pour approbation, ID:', menuRequestId);
                     }
                     handleMenuClose();
                   }}
@@ -508,11 +591,16 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                 </MenuItem>
                 <MenuItem
                   onClick={() => {
-                    const request = requests.find((r) => r._id === menuRequestId);
+                    // #region agent log (debug-session)
+                    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RegistrationRequests.tsx:MenuItem-Rejeter',message:'Clic sur Rejeter',data:{menuRequestId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                    // #endregion
+                    const request = requests.find((r) => (r.id || r._id) === menuRequestId);
                     if (request) {
                       setSelectedRequest(request);
                       setRejectForm({ raisonRejet: '', notes: '' });
                       setRejectDialogOpen(true);
+                    } else {
+                      console.error('Demande non trouvée pour rejet, ID:', menuRequestId);
                     }
                     handleMenuClose();
                   }}
@@ -564,37 +652,50 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                     <Typography>{selectedRequest.specialite}</Typography>
                   </Grid>
                 )}
-                <Grid item xs={12}>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography variant="h6" sx={{ mb: 2 }}>Questions de sécurité</Typography>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="textSecondary">Question 1</Typography>
-                    <Typography>{selectedRequest.securityQuestions.question1.question}</Typography>
-                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                      Réponse: {selectedRequest.securityQuestions.question1.answer}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="textSecondary">Question 2</Typography>
-                    <Typography>{selectedRequest.securityQuestions.question2.question}</Typography>
-                    <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                      Réponse: {selectedRequest.securityQuestions.question2.answer}
-                    </Typography>
-                  </Box>
-                  {selectedRequest.securityQuestions.question3 && (
-                    <Box>
-                      <Typography variant="subtitle2" color="textSecondary">Question 3</Typography>
-                      <Typography>{selectedRequest.securityQuestions.question3.question}</Typography>
-                      <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
-                        Réponse: {selectedRequest.securityQuestions.question3.answer}
-                      </Typography>
-                    </Box>
-                  )}
-                </Grid>
+                {selectedRequest.securityQuestions && (
+                  <Grid item xs={12}>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" sx={{ mb: 2 }}>Questions de sécurité</Typography>
+                    {selectedRequest.securityQuestions.question1 && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="subtitle2" color="textSecondary">Question 1</Typography>
+                        <Typography>{selectedRequest.securityQuestions.question1.question}</Typography>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                          Réponse: {selectedRequest.securityQuestions.question1.answer}
+                        </Typography>
+                      </Box>
+                    )}
+                    {selectedRequest.securityQuestions.question2 && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="subtitle2" color="textSecondary">Question 2</Typography>
+                        <Typography>{selectedRequest.securityQuestions.question2.question}</Typography>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                          Réponse: {selectedRequest.securityQuestions.question2.answer}
+                        </Typography>
+                      </Box>
+                    )}
+                    {selectedRequest.securityQuestions.question3 && (
+                      <Box>
+                        <Typography variant="subtitle2" color="textSecondary">Question 3</Typography>
+                        <Typography>{selectedRequest.securityQuestions.question3.question}</Typography>
+                        <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5 }}>
+                          Réponse: {selectedRequest.securityQuestions.question3.answer}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Grid>
+                )}
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="subtitle2" color="textSecondary">Date de demande</Typography>
-                  <Typography>{new Date(selectedRequest.createdAt).toLocaleString('fr-FR')}</Typography>
+                  <Typography>
+                    {selectedRequest.createdAt 
+                      ? (() => {
+                          const d = new Date(selectedRequest.createdAt);
+                          return isNaN(d.getTime()) ? '-' : d.toLocaleString('fr-FR');
+                        })()
+                      : '-'}
+                  </Typography>
                   {selectedRequest.traiteLe && (
                     <>
                       <Typography variant="subtitle2" color="textSecondary" sx={{ mt: 1 }}>

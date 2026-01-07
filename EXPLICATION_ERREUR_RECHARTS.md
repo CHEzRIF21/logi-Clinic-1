@@ -131,3 +131,5 @@ useEffect(() => {
 4. Les graphiques doivent se charger avec un petit spinner pendant le chargement de Recharts
 
 
+
+
