@@ -28,6 +28,7 @@ import TableauBordFacturation from '../components/facturation/TableauBordFactura
 import GestionTickets from '../components/facturation/GestionTickets';
 import RapportsFinanciers from '../components/facturation/RapportsFinanciers';
 import ConsultationsEnAttente from '../components/facturation/ConsultationsEnAttente';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -52,6 +53,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const Caisse: React.FC = () => {
+  const { canAccessFinancialReports } = usePermissions();
   const [activeTab, setActiveTab] = useState(0);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -113,11 +115,13 @@ const Caisse: React.FC = () => {
               label="Journal de Caisse"
               iconPosition="start"
             />
-            <Tab
-              icon={<Assessment />}
-              label="Rapports"
-              iconPosition="start"
-            />
+            {canAccessFinancialReports() && (
+              <Tab
+                icon={<Assessment />}
+                label="Rapports"
+                iconPosition="start"
+              />
+            )}
           </Tabs>
         </GlassCard>
 
@@ -146,9 +150,11 @@ const Caisse: React.FC = () => {
           <JournalCaisse />
         </TabPanel>
 
-        <TabPanel value={activeTab} index={6}>
-          <RapportsFinanciers />
-        </TabPanel>
+        {canAccessFinancialReports() && (
+          <TabPanel value={activeTab} index={6}>
+            <RapportsFinanciers />
+          </TabPanel>
+        )}
       </Box>
     </Container>
   );

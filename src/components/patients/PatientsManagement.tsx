@@ -18,6 +18,7 @@ import { PatientDetailsDialog } from './PatientDetailsDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { Patient, PatientFormData } from '../../services/supabase';
 import { usePatients } from '../../hooks/usePatients';
+import { usePermissions } from '../../hooks/usePermissions';
 import { GradientText } from '../ui/GradientText';
 import { ToolbarBits } from '../ui/ToolbarBits';
 import { GlassCard } from '../ui/GlassCard';
@@ -34,6 +35,8 @@ export const PatientsManagement: React.FC = () => {
     deletePatient,
     clearError,
   } = usePatients();
+  
+  const { canCreatePatient, canModifyPatient } = usePermissions();
 
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
@@ -77,6 +80,19 @@ export const PatientsManagement: React.FC = () => {
   // Gérer la soumission du formulaire
   const handleSubmitForm = async (data: PatientFormData): Promise<Patient> => {
     try {
+      // Vérifier les permissions
+      if (editingPatient) {
+        if (!canModifyPatient()) {
+          showSnackbar('Vous n\'avez pas la permission de modifier un patient', 'error');
+          throw new Error('Permission refusée');
+        }
+      } else {
+        if (!canCreatePatient()) {
+          showSnackbar('Seuls les réceptionnistes et secrétaires peuvent créer des patients', 'error');
+          throw new Error('Permission refusée');
+        }
+      }
+      
       let result: Patient;
       if (editingPatient) {
         result = await updatePatient(editingPatient.id, data);
@@ -152,14 +168,16 @@ export const PatientsManagement: React.FC = () => {
             </Typography>
           </Box>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={handleAddPatient}
-          size="medium"
-        >
-          Nouveau Patient
-        </Button>
+        {canCreatePatient() && (
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={handleAddPatient}
+            size="medium"
+          >
+            Nouveau Patient
+          </Button>
+        )}
       </ToolbarBits>
 
       {/* Statistiques synthétiques */}

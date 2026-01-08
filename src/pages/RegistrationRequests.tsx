@@ -41,7 +41,7 @@ import {
   Block,
 } from '@mui/icons-material';
 import { User } from '../types/auth';
-import { ALL_ROLES } from '../config/roles';
+import { ALL_ROLES, getRoleLabelByValue } from '../config/roles';
 
 interface RegistrationRequest {
   _id: string;
@@ -337,17 +337,23 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
     if (!role || (typeof role === 'string' && role.trim() === '')) {
       return 'Non spécifié';
     }
-    const roleMap: Record<string, string> = {
-      'receptionniste': 'Réceptionniste',
-      'medecin': 'Médecin',
-      'pharmacien': 'Pharmacien',
-      'infirmier': 'Infirmier',
-      'admin': 'Administrateur',
-      'clinic_admin': 'Administrateur Clinique',
-      'staff': 'Personnel',
-    };
-    const normalizedRole = role.toLowerCase().trim();
-    return roleMap[normalizedRole] || role;
+    // Utiliser la configuration centralisée des rôles
+    try {
+      return getRoleLabelByValue(role as any);
+    } catch {
+      // Fallback sur un mapping simple si le rôle n'est pas trouvé
+      const roleMap: Record<string, string> = {
+        'receptionniste': 'Réceptionniste',
+        'medecin': 'Médecin',
+        'pharmacien': 'Pharmacien',
+        'infirmier': 'Infirmier',
+        'admin': 'Administrateur',
+        'clinic_admin': 'Administrateur Clinique',
+        'staff': 'Personnel',
+      };
+      const normalizedRole = role.toLowerCase().trim();
+      return roleMap[normalizedRole] || role;
+    }
   };
 
   return (
@@ -644,8 +650,15 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
                   <Typography>{selectedRequest.adresse}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color="textSecondary">Rôle souhaité</Typography>
-                  <Typography>{getRoleLabel(selectedRequest.roleSouhaite)}</Typography>
+                  <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                    Rôle souhaité
+                  </Typography>
+                  <Chip 
+                    label={getRoleLabel(selectedRequest.roleSouhaite)} 
+                    color={selectedRequest.roleSouhaite ? "primary" : "default"}
+                    variant={selectedRequest.roleSouhaite ? "filled" : "outlined"}
+                    sx={{ fontWeight: selectedRequest.roleSouhaite ? 600 : 400 }}
+                  />
                 </Grid>
                 {selectedRequest.specialite && (
                   <Grid item xs={12} sm={6}>
@@ -758,16 +771,34 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
         <DialogTitle>Approuver la demande d'inscription</DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2, minWidth: 400 }}>
+            {selectedRequest && selectedRequest.roleSouhaite && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Rôle souhaité initial :</strong> {getRoleLabel(selectedRequest.roleSouhaite)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Vous pouvez modifier ce rôle ci-dessous si nécessaire
+                </Typography>
+              </Alert>
+            )}
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Rôle</InputLabel>
+              <InputLabel>Rôle à attribuer</InputLabel>
               <Select
                 value={approveForm.role}
-                label="Rôle"
+                label="Rôle à attribuer"
                 onChange={(e) => setApproveForm({ ...approveForm, role: e.target.value })}
               >
                 {ALL_ROLES.map((role) => (
                   <MenuItem key={role.value} value={role.value}>
                     {role.label}
+                    {selectedRequest?.roleSouhaite === role.value && (
+                      <Chip 
+                        label="Souhaité" 
+                        size="small" 
+                        color="primary" 
+                        sx={{ ml: 1, height: 20, fontSize: '0.65rem' }}
+                      />
+                    )}
                   </MenuItem>
                 ))}
               </Select>

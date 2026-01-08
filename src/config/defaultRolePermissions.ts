@@ -115,15 +115,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
     },
   ],
 
-  // Médecin - Patients (lecture/écriture), Consultations (diagnostic, prescription), Laboratoire (demande examens)
+  // Médecin - Patients (lecture seule), Consultations (diagnostic, prescription), Laboratoire/Imagerie (demande examens)
   medecin: [
     {
       module: 'gestion_patients',
-      actions: ['read', 'write'],
+      actions: ['read'],
       submodules: [
-        { submodule: 'creation', actions: ['read', 'write'] },
-        { submodule: 'modification', actions: ['read', 'write'] },
-        { submodule: 'dossier', actions: ['read', 'write'] },
+        { submodule: 'dossier', actions: ['read'] },
         { submodule: 'historique', actions: ['read'] },
       ],
     },
@@ -154,9 +152,26 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
         { submodule: 'resultats', actions: ['read'] },
       ],
     },
+    {
+      module: 'imagerie',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read', 'write'] },
+        { submodule: 'examens', actions: ['read'] },
+        { submodule: 'rapports', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'pharmacie',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'prescriptions', actions: ['read'] },
+        { submodule: 'inventaire', actions: ['read'] },
+      ],
+    },
   ],
 
-  // Infirmier / Sage-femme - Patients (lecture), Consultations (constantes, soins)
+  // Infirmier - Patients (lecture), Consultations (constantes, soins), Laboratoire/Imagerie (demande examens)
   infirmier: [
     {
       module: 'gestion_patients',
@@ -181,9 +196,26 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
         { submodule: 'workflow', actions: ['read', 'write'] },
       ],
     },
+    {
+      module: 'laboratoire',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read', 'write'] },
+        { submodule: 'resultats', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'imagerie',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read', 'write'] },
+        { submodule: 'examens', actions: ['read'] },
+        { submodule: 'rapports', actions: ['read'] },
+      ],
+    },
   ],
 
-  // Sage-femme - Même permissions que infirmier + accès maternité
+  // Sage-femme - Même permissions que infirmier + accès maternité + Laboratoire/Imagerie (demande examens)
   sage_femme: [
     {
       module: 'gestion_patients',
@@ -216,6 +248,23 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
         { submodule: 'cpn', actions: ['read', 'write'] },
         { submodule: 'accouchements', actions: ['read', 'write'] },
         { submodule: 'post_partum', actions: ['read', 'write'] },
+      ],
+    },
+    {
+      module: 'laboratoire',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read', 'write'] },
+        { submodule: 'resultats', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'imagerie',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read', 'write'] },
+        { submodule: 'examens', actions: ['read'] },
+        { submodule: 'rapports', actions: ['read'] },
       ],
     },
   ],
@@ -279,7 +328,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
     },
   ],
 
-  // Caissier - Caisse (paiements, reçus), Rapports (journal caisse)
+  // Caissier - Caisse (paiements, reçus), Journal caisse uniquement (pas de rapports financiers)
   caissier: [
     {
       module: 'caisse',
@@ -290,18 +339,19 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
         { submodule: 'creation_facture', actions: ['read', 'write'] },
         { submodule: 'paiements', actions: ['read', 'write', 'export'] },
         { submodule: 'journal', actions: ['read', 'write', 'export'] },
-        { submodule: 'rapports', actions: ['read', 'export'] },
       ],
     },
   ],
 
-  // Réceptionniste / Accueil - Patients (création uniquement)
+  // Réceptionniste / Accueil - Patients (création et modification), RDV
   receptionniste: [
     {
       module: 'gestion_patients',
       actions: ['read', 'write'],
       submodules: [
         { submodule: 'creation', actions: ['read', 'write'] },
+        { submodule: 'modification', actions: ['read', 'write'] },
+        { submodule: 'dossier', actions: ['read'] },
       ],
     },
     {
@@ -315,7 +365,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
     },
   ],
 
-  // Auditeur / Direction - Rapports (lecture seule)
+  // Auditeur / Direction - Lecture seule sur tous les modules + Rapports financiers
   auditeur: [
     {
       module: 'dashboard',
@@ -324,6 +374,49 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
         { submodule: 'statistiques', actions: ['read', 'export'] },
         { submodule: 'graphiques', actions: ['read', 'export'] },
         { submodule: 'rapports', actions: ['read', 'export'] },
+      ],
+    },
+    {
+      module: 'gestion_patients',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'dossier', actions: ['read'] },
+        { submodule: 'historique', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'consultations',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'liste', actions: ['read'] },
+        { submodule: 'historique', actions: ['read'] },
+        { submodule: 'details', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'pharmacie',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'prescriptions', actions: ['read'] },
+        { submodule: 'inventaire', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'laboratoire',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read'] },
+        { submodule: 'resultats', actions: ['read'] },
+        { submodule: 'rapports', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'imagerie',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'demandes', actions: ['read'] },
+        { submodule: 'examens', actions: ['read'] },
+        { submodule: 'rapports', actions: ['read'] },
       ],
     },
     {
@@ -367,7 +460,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
       module: 'bilan',
       actions: ['read', 'export'],
       submodules: [
+        { submodule: 'consultation', actions: ['read', 'export'] },
         { submodule: 'export', actions: ['read', 'export'] },
+      ],
+    },
+    {
+      module: 'pharmacie',
+      actions: ['read'],
+      submodules: [
+        { submodule: 'inventaire', actions: ['read'] },
       ],
     },
   ],

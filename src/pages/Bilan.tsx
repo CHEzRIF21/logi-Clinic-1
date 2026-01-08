@@ -6,6 +6,7 @@ import {
   Paper,
   Card,
   CardContent,
+  Alert,
 } from '@mui/material';
 import {
   Assessment,
@@ -18,8 +19,22 @@ import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatBadge } from '../components/ui/StatBadge';
+import { usePermissions } from '../hooks/usePermissions';
 
 const Bilan: React.FC = () => {
+  const { canAccessFinancialReports } = usePermissions();
+
+  // Vérifier les permissions d'accès aux rapports financiers
+  if (!canAccessFinancialReports()) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">
+          Accès refusé. Seuls les administrateurs, comptables et auditeurs peuvent accéder aux rapports financiers.
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ p: 3 }}>
       {/* En-tête amélioré */}

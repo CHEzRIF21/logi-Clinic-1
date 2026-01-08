@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { ConsultationBillingService } from '../../services/consultationBillingService';
 import { ConfigurationService } from '../../services/configurationService';
 import { apiPost } from '../../services/apiClient';
+import { usePermissions } from '../../hooks/usePermissions';
 
 interface ConsultationPaymentGateProps {
   consultationId: string;
@@ -45,6 +46,7 @@ export const ConsultationPaymentGate: React.FC<ConsultationPaymentGateProps> = (
   onBlocked,
 }) => {
   const navigate = useNavigate();
+  const { canAuthorizeEmergency } = usePermissions();
   const [loading, setLoading] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [emergencyDialogOpen, setEmergencyDialogOpen] = useState(false);
@@ -193,7 +195,7 @@ export const ConsultationPaymentGate: React.FC<ConsultationPaymentGateProps> = (
               Aller à la Caisse
             </Button>
 
-            {paymentStatus.statutPaiement === 'en_attente' && (
+            {paymentStatus.statutPaiement === 'en_attente' && canAuthorizeEmergency() && (
               <Button
                 variant="outlined"
                 color="warning"
@@ -201,7 +203,7 @@ export const ConsultationPaymentGate: React.FC<ConsultationPaymentGateProps> = (
                 onClick={() => setEmergencyDialogOpen(true)}
                 size="large"
               >
-                Demander Autorisation Urgence
+                Autoriser Urgence
               </Button>
             )}
           </Box>
