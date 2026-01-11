@@ -141,46 +141,96 @@ const RendezVous: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem('token');
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (token) headers.Authorization = `Bearer ${token}`;
-
-        const [listRes, statsRes] = await Promise.all([
-          fetch(`/api/rendez-vous?start=${encodeURIComponent(todayRange.start)}&end=${encodeURIComponent(todayRange.end)}&limit=100`, { headers }),
-          fetch(`/api/rendez-vous/stats/summary?start=${encodeURIComponent(todayRange.start)}&end=${encodeURIComponent(todayRange.end)}`, { headers })
-        ]);
-
-        if (!listRes.ok || !statsRes.ok) {
-          // fallback démo si backend KO
-          const demo = generateDemoForToday(12);
-          setItems(demo);
-          const byStatus: Record<string, number> = {};
-          demo.forEach(d => { byStatus[d.statut] = (byStatus[d.statut] || 0) + 1; });
-          setStats({ total: demo.length, byStatus });
-          setUseDemo(true);
+        // Charger directement depuis Supabase
+        const { supabase } = await import('../services/supabase');
+        const { getMyClinicId } = await import('../services/clinicService');
+        
+        const clinicId = await getMyClinicId();
+        if (!clinicId) {
+          setItems([]);
+          setStats({ total: 0, byStatus: {} });
+          setUseDemo(false);
           return;
         }
 
-        const listJson = await listRes.json();
-        const statsJson = await statsRes.json();
-        setItems(listJson.data || []);
-        setStats({ total: statsJson.data?.total || 0, byStatus: statsJson.data?.byStatus || {} });
+        // Récupérer les rendez-vous depuis Supabase
+        let query = supabase
+          .from('rendez_vous')
+          .select(`
+            id,
+            patient_id,
+            service,
+            praticien_id,
+            praticien_name,
+            motif,
+            date_debut,
+            date_fin,
+            statut,
+            priorite,
+            notes,
+            patients(nom, prenom)
+          `)
+          .gte('date_debut', todayRange.start)
+          .lte('date_debut', todayRange.end)
+          .order('date_debut', { ascending: true })
+          .limit(100);
+
+        // Filtrer par clinic_id si la colonne existe
+        const { data: rendezVousData, error: rendezVousError } = await query;
+
+        if (rendezVousError) {
+          console.error('Erreur lors du chargement des rendez-vous:', rendezVousError);
+          setError('Erreur lors du chargement des rendez-vous');
+          setItems([]);
+          setStats({ total: 0, byStatus: {} });
+          setUseDemo(false);
+          return;
+        }
+
+        // Transformer les données Supabase en format attendu
+        const transformedItems: RendezVousItem[] = (rendezVousData || []).map((rv: any) => {
+          // Gérer le cas où patients est un tableau (relation) ou un objet
+          const patientData = Array.isArray(rv.patients) ? rv.patients[0] : rv.patients;
+          
+          return {
+            _id: rv.id,
+            patient: {
+              nom: patientData?.nom || '',
+              prenom: patientData?.prenom || '',
+            },
+            praticien: {
+              nom: rv.praticien_name?.split(' ').slice(-1)[0] || '',
+              prenom: rv.praticien_name?.split(' ').slice(0, -1).join(' ') || '',
+            },
+            service: rv.service,
+            motif: rv.motif,
+            dateDebut: rv.date_debut,
+            dateFin: rv.date_fin,
+            statut: rv.statut || 'programmé',
+          };
+        });
+
+        // Calculer les statistiques
+        const byStatus: Record<string, number> = {};
+        transformedItems.forEach(d => { 
+          byStatus[d.statut] = (byStatus[d.statut] || 0) + 1; 
+        });
+
+        setItems(transformedItems);
+        setStats({ total: transformedItems.length, byStatus });
         setUseDemo(false);
       } catch (e: any) {
-        // fallback démo si erreur
-        const demo = generateDemoForToday(12);
-        setItems(demo);
-        const byStatus: Record<string, number> = {};
-        demo.forEach(d => { byStatus[d.statut] = (byStatus[d.statut] || 0) + 1; });
-        setStats({ total: demo.length, byStatus });
-        setUseDemo(true);
-        setError(null);
+        console.error('Erreur lors du chargement:', e);
+        setError(e.message || 'Erreur lors du chargement des rendez-vous');
+        setItems([]);
+        setStats({ total: 0, byStatus: {} });
+        setUseDemo(false);
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, [todayRange, generateDemoForToday]);
+  }, [todayRange]);
 
   const getStatusColor = (status: Statut) => {
     switch (status) {
@@ -427,23 +477,8 @@ const RendezVous: React.FC = () => {
       <Grid item xs={12}>
         <Paper>
           <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">Rendez-vous du jour {useDemo ? '(données démo)' : ''}</Typography>
+            <Typography variant="h6">Rendez-vous du jour</Typography>
             <Box>
-              <Button
-                variant="outlined"
-                size="small"
-                sx={{ mr: 1 }}
-                onClick={() => {
-                  const demo = generateDemoForToday(12);
-                  setItems(demo);
-                  const byStatus: Record<string, number> = {};
-                  demo.forEach(d => { byStatus[d.statut] = (byStatus[d.statut] || 0) + 1; });
-                  setStats({ total: demo.length, byStatus });
-                  setUseDemo(true);
-                }}
-              >
-                Charger démo
-            </Button>
               <Button variant="contained" startIcon={<Add />} onClick={() => setOpenCreate(true)}>Nouveau rendez-vous</Button>
             </Box>
           </Box>

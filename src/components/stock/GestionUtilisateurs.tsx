@@ -34,6 +34,7 @@ import {
   AccordionSummary,
   AccordionDetails,
   Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add,
@@ -44,6 +45,7 @@ import {
   AdminPanelSettings,
   Visibility,
   Edit as EditIcon,
+  Info,
 } from '@mui/icons-material';
 import {
   UtilisateurStock,
@@ -58,6 +60,7 @@ import {
 } from '../../types/permissions';
 import { ModulePermission } from '../../types/modulePermissions';
 import GestionPermissionsModules from '../parametres/GestionPermissionsModules';
+import { UserPermissionsService } from '../../services/userPermissionsService';
 
 interface GestionUtilisateursProps {
   utilisateurs: UtilisateurStock[];
@@ -69,6 +72,7 @@ interface GestionUtilisateursProps {
   onUpdateProfil: (profil: ProfilUtilisateur) => void;
   onDeleteProfil: (profilId: string) => void;
   currentUserRole?: string; // Rôle de l'utilisateur actuel pour vérifier les permissions
+  onViewUserDetail?: (userId: string) => void; // Callback pour ouvrir la vue détaillée
 }
 
 const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
@@ -81,6 +85,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   onUpdateProfil,
   onDeleteProfil,
   currentUserRole,
+  onViewUserDetail,
 }) => {
   const [openDialogUtilisateur, setOpenDialogUtilisateur] = useState(false);
   const [openDialogProfil, setOpenDialogProfil] = useState(false);
@@ -88,6 +93,8 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   const [editingUtilisateur, setEditingUtilisateur] = useState<UtilisateurStock | null>(null);
   const [editingProfil, setEditingProfil] = useState<ProfilUtilisateur | null>(null);
   const [profilForPermissions, setProfilForPermissions] = useState<ProfilUtilisateur | null>(null);
+  const [utilisateurForPermissions, setUtilisateurForPermissions] = useState<UtilisateurStock | null>(null);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [activeTab, setActiveTab] = useState<'utilisateurs' | 'profils'>('utilisateurs');
 
   const [formUtilisateur, setFormUtilisateur] = useState({
@@ -217,13 +224,62 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
     }
   };
 
-  const handleOpenPermissionsDialog = (profil: ProfilUtilisateur) => {
-    setProfilForPermissions(profil);
-    setOpenDialogPermissions(true);
+  const handleOpenPermissionsDialog = async (utilisateur: UtilisateurStock) => {
+    setLoadingPermissions(true);
+    try {
+      // Charger les permissions depuis la base
+      const permissions = await UserPermissionsService.getUserPermissions(utilisateur.id);
+      
+      // Créer un profil temporaire pour le composant GestionPermissionsModules
+      const profilTemp: ProfilUtilisateur = {
+        id: utilisateur.id,
+        nom: `${utilisateur.prenom} ${utilisateur.nom}`,
+        role: utilisateur.role,
+        permissions: [],
+        magasinsAcces: [],
+        modulePermissions: permissions,
+        isAdmin: utilisateur.isAdmin || false,
+        actif: true,
+        dateCreation: new Date(),
+        dateModification: new Date(),
+      };
+      
+      setProfilForPermissions(profilTemp);
+      setUtilisateurForPermissions(utilisateur);
+      setOpenDialogPermissions(true);
+    } catch (error: any) {
+      console.error('Erreur lors du chargement des permissions:', error);
+      alert('Erreur lors du chargement des permissions: ' + error.message);
+    } finally {
+      setLoadingPermissions(false);
+    }
   };
 
-  const handleSavePermissions = (modulePermissions: ModulePermission[]) => {
-    if (profilForPermissions) {
+  const handleSavePermissions = async (modulePermissions: ModulePermission[]) => {
+    if (utilisateurForPermissions) {
+      try {
+        // Sauvegarder les permissions dans la base
+        await UserPermissionsService.updateUserPermissions(
+          utilisateurForPermissions.id,
+          modulePermissions
+        );
+        
+        // Mettre à jour l'utilisateur localement
+        const utilisateurModifie: UtilisateurStock = {
+          ...utilisateurForPermissions,
+          modulePermissions,
+        };
+        onUpdateUtilisateur(utilisateurModifie);
+        
+        setOpenDialogPermissions(false);
+        setProfilForPermissions(null);
+        setUtilisateurForPermissions(null);
+      } catch (error: any) {
+        console.error('Erreur lors de la sauvegarde des permissions:', error);
+        alert('Erreur lors de la sauvegarde des permissions: ' + error.message);
+      }
+    } else if (profilForPermissions) {
+      // Ancien comportement pour les profils (si nécessaire)
       const profilModifie: ProfilUtilisateur = {
         ...profilForPermissions,
         modulePermissions,
@@ -232,6 +288,36 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
       onUpdateProfil(profilModifie);
       setOpenDialogPermissions(false);
       setProfilForPermissions(null);
+    }
+  };
+
+  const handleResetToDefaultPermissions = async () => {
+    if (utilisateurForPermissions) {
+      try {
+        await UserPermissionsService.resetToDefaultPermissions(utilisateurForPermissions.id);
+        
+        // Recharger les permissions
+        const permissions = await UserPermissionsService.getUserPermissions(utilisateurForPermissions.id);
+        
+        const profilTemp: ProfilUtilisateur = {
+          id: utilisateurForPermissions.id,
+          nom: `${utilisateurForPermissions.prenom} ${utilisateurForPermissions.nom}`,
+          role: utilisateurForPermissions.role,
+          permissions: [],
+          magasinsAcces: [],
+          modulePermissions: permissions,
+          isAdmin: utilisateurForPermissions.isAdmin || false,
+          actif: true,
+          dateCreation: new Date(),
+          dateModification: new Date(),
+        };
+        
+        setProfilForPermissions(profilTemp);
+        alert('Permissions réinitialisées aux valeurs par défaut du rôle');
+      } catch (error: any) {
+        console.error('Erreur lors de la réinitialisation:', error);
+        alert('Erreur lors de la réinitialisation: ' + error.message);
+      }
     }
   };
 
@@ -365,17 +451,37 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                       </TableCell>
                       <TableCell>
                         <Box display="flex" gap={1}>
+                          {onViewUserDetail && (
+                            <IconButton
+                              size="small"
+                              color="info"
+                              onClick={() => onViewUserDetail(utilisateur.id)}
+                              title="Voir les détails de l'utilisateur"
+                            >
+                              <Info />
+                            </IconButton>
+                          )}
                           <IconButton
                             size="small"
                             color="primary"
                             onClick={() => handleEditUtilisateur(utilisateur)}
+                            title="Modifier l'utilisateur"
                           >
                             <Edit />
                           </IconButton>
                           <IconButton
                             size="small"
+                            color="secondary"
+                            onClick={() => handleOpenPermissionsDialog(utilisateur)}
+                            title="Configurer les permissions"
+                          >
+                            <Security />
+                          </IconButton>
+                          <IconButton
+                            size="small"
                             color="error"
                             onClick={() => onDeleteUtilisateur(utilisateur.id)}
+                            title="Supprimer l'utilisateur"
                           >
                             <Delete />
                           </IconButton>
@@ -428,7 +534,22 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                           <IconButton
                             size="small"
                             color="secondary"
-                            onClick={() => handleOpenPermissionsDialog(profil)}
+                            onClick={() => {
+                              // Convertir ProfilUtilisateur en UtilisateurStock pour la compatibilité
+                              const utilisateurStock: UtilisateurStock = {
+                                id: profil.id,
+                                nom: profil.nom.split(' ')[0] || '',
+                                prenom: profil.nom.split(' ').slice(1).join(' ') || '',
+                                email: '',
+                                role: profil.role,
+                                profilId: profil.id,
+                                magasinPrincipal: profil.magasinsAcces?.[0] || 'detail',
+                                permissions: profil.permissions || [],
+                                modulePermissions: profil.modulePermissions || [],
+                                isAdmin: profil.isAdmin || false,
+                              };
+                              handleOpenPermissionsDialog(utilisateurStock);
+                            }}
                             title="Configurer les permissions"
                           >
                             <Security />
@@ -662,16 +783,38 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           Configuration des Permissions - {profilForPermissions?.nom}
         </DialogTitle>
         <DialogContent>
-          {profilForPermissions && (
-            <GestionPermissionsModules
-              profil={profilForPermissions}
-              onSave={handleSavePermissions}
-              currentUserRole={currentUserRole}
-            />
-          )}
+          {loadingPermissions ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+              <CircularProgress />
+            </Box>
+          ) : profilForPermissions ? (
+            <>
+              <GestionPermissionsModules
+                profil={profilForPermissions}
+                onSave={handleSavePermissions}
+                currentUserRole={currentUserRole}
+              />
+              {utilisateurForPermissions && (
+                <Box mt={2}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={handleResetToDefaultPermissions}
+                    fullWidth
+                  >
+                    Réinitialiser aux permissions par défaut du rôle
+                  </Button>
+                </Box>
+              )}
+            </>
+          ) : null}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialogPermissions(false)}>Fermer</Button>
+          <Button onClick={() => {
+            setOpenDialogPermissions(false);
+            setProfilForPermissions(null);
+            setUtilisateurForPermissions(null);
+          }}>Fermer</Button>
         </DialogActions>
       </Dialog>
     </Box>

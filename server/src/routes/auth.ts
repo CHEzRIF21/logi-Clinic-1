@@ -457,12 +457,35 @@ router.post('/registration-requests/:id/approve', authenticateToken, async (req:
       console.log('✅ Demande mise à jour avec statut approved');
     }
 
-    // TODO: Envoyer un email avec le lien de réinitialisation
-    // await emailService.sendWelcomeEmail({
-    //   to: request.email,
-    //   resetLink: resetData?.properties?.action_link,
-    //   tempPassword: tempPassword
-    // });
+    // Récupérer le code clinique pour l'email
+    let clinicCode = 'N/A';
+    if (request.clinic_id) {
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('code')
+        .eq('id', request.clinic_id)
+        .single();
+      
+      if (clinic?.code) {
+        clinicCode = clinic.code;
+      }
+    }
+
+    // Envoyer l'email de validation de compte
+    try {
+      await emailService.sendAccountValidationEmail({
+        nom: request.nom,
+        prenom: request.prenom,
+        email: request.email,
+        username: request.email,
+        temporaryPassword: tempPassword,
+        clinicCode: clinicCode,
+      });
+      console.log('✅ Email de validation envoyé avec succès à', request.email);
+    } catch (emailError: any) {
+      // Ne pas bloquer l'approbation si l'email échoue
+      console.error('⚠️ Erreur lors de l\'envoi de l\'email (non bloquant):', emailError?.message || emailError);
+    }
 
     res.json({
       success: true,

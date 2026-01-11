@@ -48,6 +48,7 @@ import {
   Science,
   Image as ImageIcon,
   Receipt,
+  Close,
   Notifications,
   Settings,
   Search,
@@ -61,6 +62,8 @@ import ThemeToggleButton from '../ui/ThemeToggleButton';
 import Logo from '../ui/Logo';
 import PatientSelector from '../shared/PatientSelector';
 import { Patient } from '../../services/supabase';
+import MonProfilModal from '../profil/MonProfilModal';
+import ParametresUtilisateur from '../profil/ParametresUtilisateur';
 
 const drawerWidth = 280;
 
@@ -145,6 +148,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [searchFeedback, setSearchFeedback] = useState<{ open: boolean; message: string }>({
     open: false,
@@ -267,7 +271,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
 
   const handleNavigateToParametres = () => {
     handleMenuClose();
-    navigate('/parametres');
+    setSettingsDialogOpen(true);
   };
 
   const handleGoToParametresPage = () => {
@@ -286,7 +290,11 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
 
   const handleProfileGoToSettings = () => {
     setProfileDialogOpen(false);
-    navigate('/parametres');
+    setSettingsDialogOpen(true);
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsDialogOpen(false);
   };
 
   const handleSearchBoxActivate = () => {
@@ -746,42 +754,42 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
             allowCreate={false}
           />
 
-          <Dialog open={profileDialogOpen} onClose={handleProfileClose} fullWidth maxWidth="sm">
-            <DialogTitle>Mon profil</DialogTitle>
-            <DialogContent dividers>
-              <Box display="flex" alignItems="center" gap={2} mb={2}>
-                <Avatar
-                  sx={{
-                    bgcolor: theme.palette.primary.main,
-                    width: 64,
-                    height: 64,
-                  }}
-                >
-                  {user?.prenom?.charAt(0) || 'U'}
-                </Avatar>
-                <Box>
-                  <Typography variant="h6">
-                    {user ? `${user.prenom} ${user.nom}` : 'Utilisateur'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {user?.email || 'email@example.com'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {user?.role || 'Rôle non défini'}
-                  </Typography>
-                </Box>
+          <MonProfilModal
+            open={profileDialogOpen}
+            onClose={handleProfileClose}
+            user={user}
+          />
+
+          <Dialog
+            open={settingsDialogOpen}
+            onClose={handleSettingsClose}
+            maxWidth="md"
+            fullWidth
+            PaperProps={{
+              sx: {
+                height: '90vh',
+                maxHeight: '900px',
+              },
+            }}
+          >
+            <DialogTitle>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Typography variant="h5">Paramètres utilisateur</Typography>
+                <IconButton onClick={handleSettingsClose} size="small">
+                  <Close />
+                </IconButton>
               </Box>
-              <Typography variant="body2" color="text.secondary">
-                Accédez à vos informations personnelles et ajustez vos préférences d&apos;utilisation depuis la
-                page Paramètres. Cette fenêtre vous permet simplement de consulter vos informations principales.
-              </Typography>
+            </DialogTitle>
+            <DialogContent dividers sx={{ p: 0, overflow: 'auto' }}>
+              <Box sx={{ p: 3 }}>
+                <ParametresUtilisateur
+                  user={user}
+                  onUpdate={() => {
+                    // Rafraîchir les données si nécessaire
+                  }}
+                />
+              </Box>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={handleProfileClose}>Fermer</Button>
-              <Button variant="contained" onClick={handleProfileGoToSettings}>
-                Modifier mes paramètres
-              </Button>
-            </DialogActions>
           </Dialog>
 
           <Snackbar

@@ -106,8 +106,25 @@ export class PatientService {
     try {
       // Générer un identifiant unique si non fourni
       if (!patientData.identifiant || patientData.identifiant.trim() === '') {
+        const clinicId = await getMyClinicId();
         const count = await this.getPatientsCount();
-        patientData.identifiant = `PAT${String(count + 1).padStart(3, '0')}`;
+        const generatedIdentifiant = `PAT${String(count + 1).padStart(3, '0')}`;
+        
+        // Vérifier l'unicité globale de l'identifiant
+        const { data: existingPatient } = await supabase
+          .from('patients')
+          .select('id, identifiant, clinic_id')
+          .eq('identifiant', generatedIdentifiant)
+          .maybeSingle();
+        
+        if (existingPatient) {
+          // Si l'identifiant existe déjà, générer un nouveau avec UUID partiel pour garantir l'unicité
+          // Utiliser les 8 premiers caractères d'un UUID pour garantir l'unicité
+          const uuidPart = crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase();
+          patientData.identifiant = `PAT${uuidPart}`;
+        } else {
+          patientData.identifiant = generatedIdentifiant;
+        }
       }
 
       // Liste des champs requis qui ne doivent pas être null
@@ -152,6 +169,32 @@ export class PatientService {
         throw new Error('Les champs nom, prénom, date de naissance et personne d\'urgence sont requis');
       }
 
+      // Ajouter clinic_id (OBLIGATOIRE pour l'isolation multi-tenant)
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        throw new Error('Clinic ID manquant. Impossible de créer un patient sans clinic_id.');
+      }
+      dataToInsert.clinic_id = clinicId;
+
+      // Vérifier qu'un patient avec le même nom et prénom n'existe pas déjà dans cette clinique
+      const nomNormalise = dataToInsert.nom.trim().toUpperCase();
+      const prenomNormalise = dataToInsert.prenom.trim().toUpperCase();
+      
+      const { data: existingPatientByName } = await supabase
+        .from('patients')
+        .select('id, identifiant, nom, prenom, date_naissance')
+        .eq('clinic_id', clinicId)
+        .ilike('nom', nomNormalise)
+        .ilike('prenom', prenomNormalise)
+        .maybeSingle();
+
+      if (existingPatientByName) {
+        throw new Error(
+          `Un patient avec le nom "${dataToInsert.nom}" et le prénom "${dataToInsert.prenom}" existe déjà dans cette clinique (Identifiant: ${existingPatientByName.identifiant}). ` +
+          `Un patient ne peut pas avoir deux dossiers d'enregistrement dans la même clinique.`
+        );
+      }
+
       console.log('Données à insérer:', JSON.stringify(dataToInsert, null, 2));
 
       // Si erreur de colonne manquante, retirer les nouveaux champs et réessayer
@@ -165,12 +208,50 @@ export class PatientService {
       
       let dataToInsertFinal = { ...dataToInsert };
       let retryWithoutNewFields = false;
+      let maxRetries = 3;
+      let retryCount = 0;
+      let lastError: any = null;
 
-      const { data, error } = await supabase
-        .from('patients')
-        .insert([dataToInsertFinal])
-        .select()
-        .single();
+      // Boucle de retry pour gérer les conditions de course
+      let data: any = null;
+      let error: any = null;
+
+      while (retryCount < maxRetries) {
+        // Si erreur de duplication précédente, générer un nouvel identifiant
+        if (lastError?.code === '23505' && lastError?.message?.includes('identifiant')) {
+          const count = await this.getPatientsCount();
+          const uuidPart = crypto.randomUUID().replace(/-/g, '').substring(0, 6).toUpperCase();
+          dataToInsertFinal.identifiant = `PAT${String(count + 1).padStart(3, '0')}-${uuidPart}`;
+          
+          // S'assurer que clinic_id est toujours présent
+          if (!dataToInsertFinal.clinic_id) {
+            const clinicId = await getMyClinicId();
+            if (clinicId) {
+              dataToInsertFinal.clinic_id = clinicId;
+            }
+          }
+        }
+
+        const result = await supabase
+          .from('patients')
+          .insert([dataToInsertFinal])
+          .select()
+          .single();
+
+        data = result.data;
+        error = result.error;
+
+        // Si succès ou erreur non liée à la duplication, sortir de la boucle
+        if (!error || (error.code !== '23505' || !error.message?.includes('identifiant'))) {
+          break;
+        }
+
+        lastError = error;
+        retryCount++;
+
+        // Attendre un peu avant de réessayer (éviter les collisions simultanées)
+        await new Promise(resolve => setTimeout(resolve, 100 * retryCount));
+      }
 
       if (error) {
         console.error('Erreur Supabase lors de la création du patient:', error);
@@ -247,6 +328,40 @@ export class PatientService {
   // Mettre à jour un patient
   static async updatePatient(id: string, patientData: Partial<PatientFormData>): Promise<Patient> {
     try {
+      // Si le nom ou prénom est modifié, vérifier qu'il n'y a pas de doublon dans la même clinique
+      if (patientData.nom || patientData.prenom) {
+        const clinicId = await getMyClinicId();
+        if (clinicId) {
+          // Récupérer le patient actuel pour obtenir les valeurs complètes
+          const { data: currentPatient } = await supabase
+            .from('patients')
+            .select('nom, prenom')
+            .eq('id', id)
+            .single();
+
+          const nomAVerifier = (patientData.nom || currentPatient?.nom || '').trim().toUpperCase();
+          const prenomAVerifier = (patientData.prenom || currentPatient?.prenom || '').trim().toUpperCase();
+
+          if (nomAVerifier && prenomAVerifier) {
+            const { data: existingPatientByName } = await supabase
+              .from('patients')
+              .select('id, identifiant, nom, prenom')
+              .eq('clinic_id', clinicId)
+              .neq('id', id) // Exclure le patient actuel
+              .ilike('nom', nomAVerifier)
+              .ilike('prenom', prenomAVerifier)
+              .maybeSingle();
+
+            if (existingPatientByName) {
+              throw new Error(
+                `Un patient avec le nom "${patientData.nom || currentPatient?.nom}" et le prénom "${patientData.prenom || currentPatient?.prenom}" existe déjà dans cette clinique (Identifiant: ${existingPatientByName.identifiant}). ` +
+                `Un patient ne peut pas avoir deux dossiers d'enregistrement dans la même clinique.`
+              );
+            }
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from('patients')
         .update(patientData)
