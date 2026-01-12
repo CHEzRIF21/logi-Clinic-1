@@ -68,6 +68,10 @@ export interface UtilisateurStock {
   modulePermissions?: import('./modulePermissions').ModulePermission[];
   // Indique si cet utilisateur est administrateur (a toutes les permissions automatiquement)
   isAdmin?: boolean;
+  // Statut de l'utilisateur (ACTIVE, PENDING, SUSPENDED, etc.)
+  status?: string;
+  // Indique si l'utilisateur est nouveau (créé récemment, par exemple dans les 7 derniers jours)
+  isNewUser?: boolean;
 }
 
 // NOTE: Les permissions par rôle ne sont plus utilisées automatiquement.

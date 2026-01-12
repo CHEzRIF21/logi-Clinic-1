@@ -272,8 +272,9 @@ const VueDetailleeUtilisateur: React.FC<VueDetailleeUtilisateurProps> = ({
               onClick={async () => {
                 if (window.confirm('Voulez-vous réinitialiser le mot de passe de cet utilisateur ? Un email sera envoyé avec un nouveau mot de passe temporaire.')) {
                   try {
-                    // TODO: Implémenter l'appel API pour réinitialiser le mot de passe
-                    alert('Fonctionnalité de réinitialisation de mot de passe à implémenter');
+                    await UserPermissionsService.resetUserPassword(user.id);
+                    alert('Mot de passe réinitialisé avec succès. Un email avec le nouveau mot de passe temporaire a été envoyé à l\'utilisateur.');
+                    if (onUpdate) onUpdate();
                   } catch (err: any) {
                     alert('Erreur: ' + err.message);
                   }

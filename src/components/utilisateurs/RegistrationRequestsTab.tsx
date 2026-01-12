@@ -36,6 +36,8 @@ import {
   Refresh,
   FilterList,
   MoreVert,
+  PersonAdd,
+  PersonOutline,
 } from '@mui/icons-material';
 import { User } from '../../types/auth';
 import { ALL_ROLES, getRoleLabelByValue } from '../../config/roles';
@@ -67,11 +69,13 @@ interface RegistrationRequest {
 interface RegistrationRequestsTabProps {
   user: User | null;
   onRequestApproved?: () => void; // Callback pour rafraîchir la liste des utilisateurs
+  onViewUser?: (userId: string) => void; // Callback pour voir les détails d'un utilisateur créé
 }
 
 const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({ 
   user, 
-  onRequestApproved 
+  onRequestApproved,
+  onViewUser,
 }) => {
   const [requests, setRequests] = useState<RegistrationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,7 +199,7 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess('Demande d\'inscription approuvée avec succès. Un compte a été créé pour l\'utilisateur.');
+        setSuccess(`✅ Demande approuvée ! Le compte de ${selectedRequest.prenom} ${selectedRequest.nom} (${selectedRequest.email}) a été créé automatiquement. Un email avec les identifiants temporaires a été envoyé.`);
         setApproveDialogOpen(false);
         setDetailsOpen(false);
         setApproveForm({ role: '', permissions: [], notes: '' });
@@ -207,7 +211,7 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
           onRequestApproved();
         }
         
-        setTimeout(() => setSuccess(''), 5000);
+        setTimeout(() => setSuccess(''), 8000); // Plus de temps pour lire le message
       } else {
         throw new Error(data.message || 'Erreur lors de l\'approbation');
       }
@@ -365,6 +369,15 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
         </Alert>
       )}
 
+      {/* Info explicative */}
+      <Alert severity="info" sx={{ mb: 3 }}>
+        <Typography variant="body2">
+          <strong>Workflow automatisé :</strong> Lorsqu'une demande est approuvée, un compte utilisateur est automatiquement créé 
+          et un email avec les identifiants temporaires est envoyé au membre. Vous pouvez ensuite gérer les permissions 
+          de l'utilisateur depuis l'onglet "Gestion des Utilisateurs".
+        </Typography>
+      </Alert>
+
       {/* Statistiques */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
@@ -394,6 +407,9 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
                 Approuvées
               </Typography>
               <Typography variant="h5" color="success.main">{stats.approved}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                = comptes créés
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -462,7 +478,19 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
               requests.map((request) => (
                 <TableRow key={request.id || request._id} hover>
                   <TableCell>{request.prenom} {request.nom}</TableCell>
-                  <TableCell>{request.email}</TableCell>
+                  <TableCell>
+                    <Box>
+                      {request.email}
+                      {request.statut === 'approved' && (
+                        <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
+                          <PersonOutline sx={{ fontSize: 14, color: 'success.main' }} />
+                          <Typography variant="caption" color="success.main">
+                            Compte créé
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </TableCell>
                   <TableCell>{request.telephone}</TableCell>
                   <TableCell>
                     {getRoleLabel(request.roleSouhaite)}
@@ -472,6 +500,7 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
                       label={getStatusLabel(request.statut)}
                       color={getStatusColor(request.statut) as any}
                       size="small"
+                      icon={request.statut === 'approved' ? <CheckCircle /> : undefined}
                     />
                   </TableCell>
                   <TableCell>
@@ -532,6 +561,20 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
             >
               <Visibility sx={{ mr: 1 }} /> Voir les détails
             </MenuItem>
+            {requests.find((r) => (r.id || r._id) === menuRequestId)?.statut === 'approved' && (
+              <MenuItem
+                onClick={() => {
+                  // L'utilisateur a été automatiquement créé lors de l'approbation
+                  // Basculer vers l'onglet des utilisateurs pour le voir
+                  if (onRequestApproved) {
+                    onRequestApproved();
+                  }
+                  handleMenuClose();
+                }}
+              >
+                <PersonAdd sx={{ mr: 1 }} /> Voir l'utilisateur créé
+              </MenuItem>
+            )}
             {requests.find((r) => (r.id || r._id) === menuRequestId)?.statut === 'pending' && (
               <>
                 <MenuItem

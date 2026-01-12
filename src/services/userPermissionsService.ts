@@ -25,11 +25,46 @@ export class UserPermissionsService {
    * Récupère tous les utilisateurs d'une clinique
    */
   static async getAllUsers(clinicId: string): Promise<ExtendedUser[]> {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('clinic_id', clinicId)
-      .order('created_at', { ascending: false });
+    // Essayer d'abord avec la fonction RPC qui bypass RLS
+    let data: any[] | null = null;
+    let error: any = null;
+    
+    // Récupérer l'ID utilisateur depuis localStorage
+    const userDataStr = localStorage.getItem('user');
+    let userId: string | null = null;
+    if (userDataStr) {
+      try {
+        const userData = JSON.parse(userDataStr);
+        userId = userData.id || null;
+      } catch (e) {
+        // Ignorer l'erreur de parsing
+      }
+    }
+    
+    try {
+      const rpcParams: any = { p_clinic_id: clinicId };
+      if (userId) {
+        rpcParams.p_user_id = userId;
+      }
+      
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_clinic_users', rpcParams);
+      
+      if (!rpcError && rpcData) {
+        data = rpcData;
+      } else {
+        error = rpcError;
+      }
+    } catch (rpcErr: any) {
+      // Fallback vers la requête directe si RPC échoue
+      const { data: directData, error: directError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .order('created_at', { ascending: false });
+      
+      data = directData;
+      error = directError;
+    }
 
     if (error) {
       console.error('Erreur lors de la récupération des utilisateurs:', error);
@@ -441,6 +476,30 @@ export class UserPermissionsService {
   }
 
   /**
+   * Réinitialise le mot de passe d'un utilisateur
+   */
+  static async resetUserPassword(userId: string): Promise<void> {
+    const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+    const token = localStorage.getItem('token');
+    const clinicId = localStorage.getItem('clinic_id');
+
+    const response = await fetch(`${API_BASE_URL}/auth/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'x-clinic-id': clinicId || '',
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Erreur lors de la réinitialisation du mot de passe');
+    }
+  }
+
+  /**
    * Récupère le nombre de demandes d'inscription en attente
    */
   static async getPendingRegistrationRequestsCount(clinicId: string): Promise<number> {
@@ -497,16 +556,310 @@ export class UserPermissionsService {
   }
 
   /**
+   * Récupère les demandes de récupération de compte
+   */
+  static async getRecoveryRequests(clinicId: string, status?: string): Promise<any[]> {
+    try {
+      let query = supabase
+        .from('account_recovery_requests')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .order('created_at', { ascending: false });
+
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Erreur lors de la récupération des demandes:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error('Erreur lors de la récupération des demandes:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Approuve une demande de récupération de compte
+   */
+  static async approveRecoveryRequest(requestId: string): Promise<void> {
+    const { error } = await supabase
+      .from('account_recovery_requests')
+      .update({ status: 'approved', updated_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Erreur lors de l\'approbation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rejette une demande de récupération de compte
+   */
+  static async rejectRecoveryRequest(requestId: string, reason?: string): Promise<void> {
+    const { error } = await supabase
+      .from('account_recovery_requests')
+      .update({ 
+        status: 'rejected', 
+        rejection_reason: reason,
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', requestId);
+
+    if (error) {
+      console.error('Erreur lors du rejet:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Récupère le nombre de demandes de récupération en attente
    */
   static async getPendingRecoveryRequestsCount(clinicId: string): Promise<number> {
     try {
-      // TODO: Implémenter quand la table account_recovery_requests sera disponible
-      // Pour l'instant, retourner 0
-      return 0;
+      const requests = await this.getRecoveryRequests(clinicId, 'pending');
+      return requests.length;
     } catch (err) {
       console.error('Erreur lors du comptage des récupérations:', err);
       return 0;
+    }
+  }
+
+  /**
+   * Récupère tous les profils personnalisés d'une clinique
+   */
+  static async getCustomProfiles(clinicId: string): Promise<any[]> {
+    try {
+      // Utiliser la fonction RPC qui bypass RLS pour éviter les problèmes de JWT
+      const { data, error } = await supabase.rpc('get_custom_profiles', {
+        p_clinic_id: clinicId,
+      });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des profils:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (err) {
+      console.error('Erreur lors de la récupération des profils:', err);
+      return [];
+    }
+  }
+
+  /**
+   * Crée un profil personnalisé
+   */
+  static async createCustomProfile(
+    clinicId: string,
+    nom: string,
+    description: string,
+    roleCode: string,
+    isAdmin: boolean,
+    permissions: ModulePermission[],
+    createdBy?: string
+  ): Promise<string> {
+    try {
+      // Convertir les permissions en format JSONB
+      const permissionsJson = permissions.map(perm => ({
+        module: perm.module,
+        actions: perm.actions,
+        submodules: perm.submodules || [],
+      }));
+
+      const { data, error } = await supabase.rpc('create_custom_profile', {
+        p_clinic_id: clinicId,
+        p_nom: nom,
+        p_description: description,
+        p_role_code: roleCode,
+        p_is_admin: isAdmin,
+        p_permissions: permissionsJson as any,
+        p_created_by: createdBy || null,
+      });
+
+      if (error) {
+        console.error('Erreur lors de la création du profil:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (err: any) {
+      console.error('Erreur lors de la création du profil:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Récupère les permissions d'un profil personnalisé
+   */
+  static async getCustomProfilePermissions(profileId: string): Promise<ModulePermission[]> {
+    try {
+      const { data, error } = await supabase.rpc('get_custom_profile_permissions', {
+        p_profile_id: profileId,
+      });
+
+      if (error) {
+        console.error('Erreur lors de la récupération des permissions:', error);
+        throw error;
+      }
+
+      // Transformer les résultats en ModulePermission[]
+      const permissionsMap = new Map<string, ModulePermission>();
+
+      (data || []).forEach((perm: any) => {
+        const key = perm.module_name;
+        
+        if (!permissionsMap.has(key)) {
+          permissionsMap.set(key, {
+            module: perm.module_name as any,
+            actions: [],
+            submodules: [],
+          });
+        }
+
+        const modulePerm = permissionsMap.get(key)!;
+        
+        if (!modulePerm.actions.includes(perm.permission_action as any)) {
+          modulePerm.actions.push(perm.permission_action as any);
+        }
+
+        if (perm.submodule_name) {
+          if (!modulePerm.submodules) {
+            modulePerm.submodules = [];
+          }
+          
+          const submodule = modulePerm.submodules.find(
+            s => s.submodule === perm.submodule_name
+          );
+
+          if (!submodule) {
+            modulePerm.submodules.push({
+              submodule: perm.submodule_name,
+              actions: [perm.permission_action as any],
+            });
+          } else if (!submodule.actions.includes(perm.permission_action as any)) {
+            submodule.actions.push(perm.permission_action as any);
+          }
+        }
+      });
+
+      return Array.from(permissionsMap.values());
+    } catch (err: any) {
+      console.error('Erreur lors de la récupération des permissions:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Met à jour un profil personnalisé
+   */
+  static async updateCustomProfile(
+    profileId: string,
+    updates: {
+      nom?: string;
+      description?: string;
+      actif?: boolean;
+      permissions?: ModulePermission[];
+    }
+  ): Promise<void> {
+    try {
+      // Mettre à jour les informations de base du profil
+      const updateData: any = {};
+      if (updates.nom !== undefined) updateData.nom = updates.nom;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.actif !== undefined) updateData.actif = updates.actif;
+      updateData.updated_at = new Date().toISOString();
+
+      if (Object.keys(updateData).length > 0) {
+        const { error: updateError } = await supabase
+          .from('custom_profiles')
+          .update(updateData)
+          .eq('id', profileId);
+
+        if (updateError) {
+          throw updateError;
+        }
+      }
+
+      // Mettre à jour les permissions si fournies
+      if (updates.permissions) {
+        // Supprimer les anciennes permissions
+        const { error: deleteError } = await supabase
+          .from('custom_profile_permissions')
+          .delete()
+          .eq('profile_id', profileId);
+
+        if (deleteError) {
+          throw deleteError;
+        }
+
+        // Insérer les nouvelles permissions
+        const customPermissions: any[] = [];
+        updates.permissions.forEach(perm => {
+          perm.actions.forEach(action => {
+            customPermissions.push({
+              profile_id: profileId,
+              module_name: perm.module,
+              permission_action: action,
+              submodule_name: null,
+              granted: true,
+            });
+          });
+
+          if (perm.submodules) {
+            perm.submodules.forEach(submodule => {
+              submodule.actions.forEach(action => {
+                customPermissions.push({
+                  profile_id: profileId,
+                  module_name: perm.module,
+                  permission_action: action,
+                  submodule_name: submodule.submodule,
+                  granted: true,
+                });
+              });
+            });
+          }
+        });
+
+        if (customPermissions.length > 0) {
+          const { error: insertError } = await supabase
+            .from('custom_profile_permissions')
+            .insert(customPermissions);
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la mise à jour du profil:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Supprime un profil personnalisé
+   */
+  static async deleteCustomProfile(profileId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('custom_profiles')
+        .delete()
+        .eq('id', profileId);
+
+      if (error) {
+        console.error('Erreur lors de la suppression du profil:', error);
+        throw error;
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du profil:', err);
+      throw err;
     }
   }
 }

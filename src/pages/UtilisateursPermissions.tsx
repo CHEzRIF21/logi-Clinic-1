@@ -18,8 +18,8 @@ import GestionUtilisateursComponent from '../components/stock/GestionUtilisateur
 import VueDetailleeUtilisateur from '../components/utilisateurs/VueDetailleeUtilisateur';
 import StatistiquesUtilisateurs from '../components/utilisateurs/StatistiquesUtilisateurs';
 import VisualisationPermissionsProfil from '../components/utilisateurs/VisualisationPermissionsProfil';
-import RegistrationRequestsTab from '../components/utilisateurs/RegistrationRequestsTab';
 import AccountRecoveryTab from '../components/utilisateurs/AccountRecoveryTab';
+import GestionNotifications from '../components/utilisateurs/GestionNotifications';
 import { UtilisateurStock, ProfilUtilisateur } from '../types/permissions';
 import { User } from '../types/auth';
 import { UserPermissionsService, ExtendedUser } from '../services/userPermissionsService';
@@ -44,7 +44,6 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [openUserDetail, setOpenUserDetail] = useState(false);
-  const [pendingRegistrationCount, setPendingRegistrationCount] = useState(0);
   const [pendingRecoveryCount, setPendingRecoveryCount] = useState(0);
   
   const theme = useTheme();
@@ -61,6 +60,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
         setError(null);
         
         const currentClinicId = await getMyClinicId();
+        
         if (!currentClinicId) {
           setError('Clinic ID manquant');
           return;
@@ -69,25 +69,53 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
         setClinicId(currentClinicId);
         const users = await UserPermissionsService.getAllUsers(currentClinicId);
         
-        // Transformer les User en UtilisateurStock
-        const utilisateursStock: UtilisateurStock[] = users.map(u => ({
-          id: u.id,
-          nom: u.nom,
-          prenom: u.prenom,
-          email: u.email,
-          role: u.role as any,
-          profilId: u.id, // Utiliser l'ID utilisateur comme profilId temporaire
-          magasinPrincipal: 'detail' as any,
-          permissions: [],
-          modulePermissions: [],
-          isAdmin: isAdminRole(u.role as string),
-        }));
+        // Transformer les User en UtilisateurStock avec statut et dernière connexion
+        const utilisateursStock: UtilisateurStock[] = users.map(u => {
+          const createdAt = u.createdAt ? new Date(u.createdAt) : new Date();
+          const isNewUser = (Date.now() - createdAt.getTime()) < 7 * 24 * 60 * 60 * 1000; // 7 jours
+          
+          return {
+            id: u.id,
+            nom: u.nom,
+            prenom: u.prenom,
+            email: u.email,
+            role: u.role as any,
+            profilId: u.id,
+            magasinPrincipal: 'detail' as any,
+            permissions: [],
+            modulePermissions: [],
+            isAdmin: isAdminRole(u.role as string),
+            // Ajouter la date de dernière connexion si disponible
+            dateConnexion: u.lastLogin ? new Date(u.lastLogin) : undefined,
+            // Ajouter le statut réel de l'utilisateur
+            status: u.status || (u.actif ? 'ACTIVE' : 'SUSPENDED'),
+            // Indicateur pour les nouveaux utilisateurs
+            isNewUser: isNewUser,
+          };
+        });
 
         setUtilisateurs(utilisateursStock);
         
-        // Les profils sont basés sur les rôles définis dans role_definitions
-        // On peut les charger depuis la base si nécessaire, pour l'instant on garde une liste vide
-        setProfils([]);
+        // Charger les profils personnalisés depuis la base de données
+        const customProfiles = await UserPermissionsService.getCustomProfiles(currentClinicId);
+        const profilsStock: ProfilUtilisateur[] = await Promise.all(
+          customProfiles.map(async (profile: any) => {
+            const permissions = await UserPermissionsService.getCustomProfilePermissions(profile.id);
+            return {
+              id: profile.id,
+              nom: profile.nom,
+              role: profile.role_code as any,
+              permissions: [],
+              magasinsAcces: [],
+              modulePermissions: permissions,
+              isAdmin: profile.is_admin || false,
+              actif: profile.actif ?? true,
+              dateCreation: new Date(profile.created_at),
+              dateModification: new Date(profile.updated_at),
+            };
+          })
+        );
+        setProfils(profilsStock);
       } catch (err: any) {
         console.error('Erreur lors du chargement des utilisateurs:', err);
         setError(err.message || 'Erreur lors du chargement des utilisateurs');
@@ -107,12 +135,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
       if (!clinicId) return;
       
       try {
-        const [registrationCount, recoveryCount] = await Promise.all([
-          UserPermissionsService.getPendingRegistrationRequestsCount(clinicId),
-          UserPermissionsService.getPendingRecoveryRequestsCount(clinicId),
-        ]);
-        
-        setPendingRegistrationCount(registrationCount);
+        const recoveryCount = await UserPermissionsService.getPendingRecoveryRequestsCount(clinicId);
         setPendingRecoveryCount(recoveryCount);
       } catch (err) {
         console.error('Erreur lors du chargement des notifications:', err);
@@ -127,37 +150,6 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
     }
   }, [clinicId, isAdmin]);
 
-  // Fonction pour recharger les utilisateurs après approbation d'une demande
-  const handleRequestApproved = async () => {
-    if (clinicId) {
-      try {
-        const users = await UserPermissionsService.getAllUsers(clinicId);
-        const utilisateursStock: UtilisateurStock[] = users.map(u => ({
-          id: u.id,
-          nom: u.nom,
-          prenom: u.prenom,
-          email: u.email,
-          role: u.role as any,
-          profilId: u.id,
-          magasinPrincipal: 'detail' as any,
-          permissions: [],
-          modulePermissions: [],
-          isAdmin: isAdminRole(u.role as string),
-        }));
-        setUtilisateurs(utilisateursStock);
-        
-        // Recharger les compteurs de notifications
-        const [registrationCount, recoveryCount] = await Promise.all([
-          UserPermissionsService.getPendingRegistrationRequestsCount(clinicId),
-          UserPermissionsService.getPendingRecoveryRequestsCount(clinicId),
-        ]);
-        setPendingRegistrationCount(registrationCount);
-        setPendingRecoveryCount(recoveryCount);
-      } catch (err) {
-        console.error('Erreur lors du rechargement:', err);
-      }
-    }
-  };
 
   const handleCreateUtilisateur = async (utilisateur: Omit<UtilisateurStock, 'id'>) => {
     // Cette fonction sera gérée par le composant GestionUtilisateurs
@@ -186,6 +178,8 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
           permissions: [],
           modulePermissions: [],
           isAdmin: isAdminRole(u.role as string),
+          dateConnexion: u.lastLogin ? new Date(u.lastLogin) : undefined,
+          status: u.status || (u.actif ? 'ACTIVE' : 'SUSPENDED'),
         }));
         setUtilisateurs(utilisateursStock);
       }
@@ -200,19 +194,124 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
     console.log('Suppression utilisateur:', utilisateurId);
   };
 
-  const handleCreateProfil = (profil: Omit<ProfilUtilisateur, 'id'>) => {
-    // Les profils sont basés sur les rôles, pas besoin de créer de nouveaux profils
-    console.log('Création profil:', profil);
+  const handleCreateProfil = async (profil: Omit<ProfilUtilisateur, 'id'>) => {
+    if (!clinicId) {
+      setError('Clinic ID manquant');
+      throw new Error('Clinic ID manquant');
+    }
+
+    try {
+      const userDataStr = localStorage.getItem('user');
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const createdBy = userData?.id || null;
+
+      const profileId = await UserPermissionsService.createCustomProfile(
+        clinicId,
+        profil.nom,
+        profil.nom, // Utiliser le nom comme description par défaut
+        profil.role,
+        profil.isAdmin || false,
+        profil.modulePermissions || [],
+        createdBy
+      );
+
+      // Recharger les profils
+      const customProfiles = await UserPermissionsService.getCustomProfiles(clinicId);
+      const profilsStock: ProfilUtilisateur[] = await Promise.all(
+        customProfiles.map(async (profile: any) => {
+          const permissions = await UserPermissionsService.getCustomProfilePermissions(profile.id);
+          return {
+            id: profile.id,
+            nom: profile.nom,
+            role: profile.role_code as any,
+            permissions: [],
+            magasinsAcces: [],
+            modulePermissions: permissions,
+            isAdmin: profile.is_admin || false,
+            actif: profile.actif ?? true,
+            dateCreation: new Date(profile.created_at),
+            dateModification: new Date(profile.updated_at),
+          };
+        })
+      );
+      setProfils(profilsStock);
+    } catch (err: any) {
+      console.error('Erreur lors de la création du profil:', err);
+      setError(err.message || 'Erreur lors de la création du profil');
+      throw err; // Propager l'erreur pour que le composant enfant puisse la gérer
+    }
   };
 
-  const handleUpdateProfil = (profil: ProfilUtilisateur) => {
-    // Les profils sont basés sur les rôles, pas besoin de modifier
-    console.log('Mise à jour profil:', profil);
+  const handleUpdateProfil = async (profil: ProfilUtilisateur) => {
+    try {
+      await UserPermissionsService.updateCustomProfile(profil.id, {
+        nom: profil.nom,
+        actif: profil.actif,
+        permissions: profil.modulePermissions,
+      });
+
+      // Recharger les profils
+      if (clinicId) {
+        const customProfiles = await UserPermissionsService.getCustomProfiles(clinicId);
+        const profilsStock: ProfilUtilisateur[] = await Promise.all(
+          customProfiles.map(async (profile: any) => {
+            const permissions = await UserPermissionsService.getCustomProfilePermissions(profile.id);
+            return {
+              id: profile.id,
+              nom: profile.nom,
+              role: profile.role_code as any,
+              permissions: [],
+              magasinsAcces: [],
+              modulePermissions: permissions,
+              isAdmin: profile.is_admin || false,
+              actif: profile.actif ?? true,
+              dateCreation: new Date(profile.created_at),
+              dateModification: new Date(profile.updated_at),
+            };
+          })
+        );
+        setProfils(profilsStock);
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la mise à jour du profil:', err);
+      setError(err.message || 'Erreur lors de la mise à jour du profil');
+    }
   };
 
-  const handleDeleteProfil = (profilId: string) => {
-    // Les profils sont basés sur les rôles, pas besoin de supprimer
-    console.log('Suppression profil:', profilId);
+  const handleDeleteProfil = async (profilId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce profil ?')) {
+      return;
+    }
+
+    try {
+      await UserPermissionsService.deleteCustomProfile(profilId);
+
+      // Recharger les profils
+      if (clinicId) {
+        const customProfiles = await UserPermissionsService.getCustomProfiles(clinicId);
+        const profilsStock: ProfilUtilisateur[] = await Promise.all(
+          customProfiles.map(async (profile: any) => {
+            const permissions = await UserPermissionsService.getCustomProfilePermissions(profile.id);
+            return {
+              id: profile.id,
+              nom: profile.nom,
+              role: profile.role_code as any,
+              permissions: [],
+              magasinsAcces: [],
+              modulePermissions: permissions,
+              isAdmin: profile.is_admin || false,
+              actif: profile.actif ?? true,
+              dateCreation: new Date(profile.created_at),
+              dateModification: new Date(profile.updated_at),
+            };
+          })
+        );
+        setProfils(profilsStock);
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression du profil:', err);
+      setError(err.message || 'Erreur lors de la suppression du profil');
+    }
   };
 
   // Si l'utilisateur n'est pas admin, afficher un message d'accès refusé
@@ -270,6 +369,9 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
           permissions: [],
           modulePermissions: [],
           isAdmin: isAdminRole(u.role as string),
+          dateConnexion: u.lastLogin ? new Date(u.lastLogin) : undefined,
+          status: u.status || (u.actif ? 'ACTIVE' : 'SUSPENDED'),
+          isNewUser: u.createdAt ? (Date.now() - new Date(u.createdAt).getTime()) < 7 * 24 * 60 * 60 * 1000 : false,
         }));
         setUtilisateurs(utilisateursStock);
       });
@@ -321,18 +423,6 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             />
             <Tab 
               label={
-                <Badge badgeContent={pendingRegistrationCount} color="error" invisible={pendingRegistrationCount === 0}>
-                  {isMobile ? "Demandes" : "Demandes d'inscription"}
-                </Badge>
-              }
-              sx={{ 
-                minWidth: { xs: 'auto', md: 180 },
-                textTransform: 'none',
-                fontSize: { xs: '0.875rem', md: '1rem' },
-              }}
-            />
-            <Tab 
-              label={
                 <Badge badgeContent={pendingRecoveryCount} color="error" invisible={pendingRecoveryCount === 0}>
                   {isMobile ? "Récupération" : "Récupération de compte"}
                 </Badge>
@@ -359,6 +449,14 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
                 fontSize: { xs: '0.875rem', md: '1rem' },
               }}
             />
+            <Tab 
+              label={isMobile ? "Notifications" : "Gestion Notifications"}
+              sx={{ 
+                minWidth: { xs: 'auto', md: 180 },
+                textTransform: 'none',
+                fontSize: { xs: '0.875rem', md: '1rem' },
+              }}
+            />
           </Tabs>
         </Box>
 
@@ -379,22 +477,19 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
         )}
 
         {activeTab === 1 && user && (
-          <RegistrationRequestsTab 
-            user={user} 
-            onRequestApproved={handleRequestApproved}
-          />
-        )}
-
-        {activeTab === 2 && user && (
           <AccountRecoveryTab user={user} />
         )}
 
-        {activeTab === 3 && clinicId && (
+        {activeTab === 2 && clinicId && (
           <StatistiquesUtilisateurs clinicId={clinicId} />
         )}
 
-        {activeTab === 4 && (
+        {activeTab === 3 && (
           <VisualisationPermissionsProfil />
+        )}
+
+        {activeTab === 4 && user && (
+          <GestionNotifications user={user as ExtendedUser} />
         )}
 
         {/* Dialog pour la vue détaillée utilisateur */}

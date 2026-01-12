@@ -87,3 +87,24 @@ export function getRandomQuestions(count: number = 3): SecurityQuestionOption[] 
   return shuffled.slice(0, count);
 }
 
+/**
+ * Récupère une question par son ID
+ */
+export function getQuestionById(id: string): SecurityQuestionOption | undefined {
+  return SECURITY_QUESTIONS.find(q => q.id === id);
+}
+
+/**
+ * Vérifie si une question est valide (existe dans la liste autorisée)
+ */
+export function isValidQuestion(questionText: string): boolean {
+  return SECURITY_QUESTIONS.some(q => q.question === questionText);
+}
+
+/**
+ * Vérifie si un ID de question est valide
+ */
+export function isValidQuestionId(questionId: string): boolean {
+  return SECURITY_QUESTIONS.some(q => q.id === questionId);
+}
+

@@ -69,6 +69,66 @@ router.post('/register-request', async (req: Request, res: Response) => {
       });
     }
 
+    // Liste des questions de sécurité autorisées (doit correspondre à src/data/securityQuestions.ts)
+    const AUTHORIZED_QUESTIONS = [
+      'Quel est le nom de votre premier animal de compagnie ?',
+      'Dans quelle ville êtes-vous né(e) ?',
+      'Quel est le nom de jeune fille de votre mère ?',
+      'Quel était le nom de votre école primaire ?',
+      'Quel est le prénom de votre meilleur(e) ami(e) d\'enfance ?',
+      'Quel est le nom de votre professeur préféré à l\'école ?',
+      'Quel est le modèle de votre première voiture ?',
+      'Quel est le nom de votre ville de naissance ?',
+      'Quel est le prénom de votre grand-mère maternelle ?',
+      'Quel était le nom de votre premier employeur ?',
+      'Quel est le nom de votre film préféré ?',
+      'Quel est le nom de votre équipe de sport préférée ?',
+      'Quel est le prénom de votre parrain/marraine ?',
+      'Quel est le nom de votre restaurant préféré ?',
+      'Quel est le nom de votre premier patron ?',
+    ];
+
+    // Validation des questions de sécurité
+    if (securityQuestions) {
+      const questions = [
+        securityQuestions.question1,
+        securityQuestions.question2,
+        securityQuestions.question3,
+      ].filter(q => q && q.question && q.answer);
+
+      if (questions.length < 2) {
+        return res.status(400).json({
+          success: false,
+          message: 'Au moins 2 questions de sécurité sont requises',
+        });
+      }
+
+      // Vérifier que toutes les questions sont dans la liste autorisée
+      for (const q of questions) {
+        if (!AUTHORIZED_QUESTIONS.includes(q.question)) {
+          return res.status(400).json({
+            success: false,
+            message: `La question "${q.question}" n'est pas autorisée. Veuillez sélectionner une question dans la liste proposée.`,
+          });
+        }
+      }
+
+      // Vérifier qu'il n'y a pas de doublons
+      const questionTexts = questions.map(q => q.question);
+      const uniqueQuestions = new Set(questionTexts);
+      if (uniqueQuestions.size !== questionTexts.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Vous ne pouvez pas utiliser la même question plusieurs fois',
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Les questions de sécurité sont requises',
+      });
+    }
+
     if (!supabase) {
       console.error('Supabase non configuré');
       return res.status(500).json({
@@ -356,6 +416,54 @@ router.post('/registration-requests/:id/approve', authenticateToken, async (req:
       });
     }
 
+    // VALIDATION CRITIQUE : Vérifier que clinic_id est présent
+    if (!request.clinic_id) {
+      console.error('❌ Demande sans clinic_id:', {
+        requestId: id,
+        email: request.email,
+        clinicCode: request.clinic_code,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'La demande d\'inscription n\'a pas de clinique associée. Impossible de créer l\'utilisateur.',
+      });
+    }
+
+    // Vérifier que la clinique existe toujours et est active
+    const { data: clinic, error: clinicCheckError } = await supabase
+      .from('clinics')
+      .select('id, name, code, active')
+      .eq('id', request.clinic_id)
+      .single();
+
+    if (clinicCheckError || !clinic) {
+      console.error('❌ Clinique non trouvée:', {
+        clinicId: request.clinic_id,
+        error: clinicCheckError?.message,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'La clinique associée à cette demande n\'existe plus ou est inactive.',
+      });
+    }
+
+    if (!clinic.active) {
+      console.error('❌ Clinique inactive:', {
+        clinicId: request.clinic_id,
+        clinicCode: clinic.code,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'La clinique associée à cette demande est inactive.',
+      });
+    }
+
+    console.log('✅ Validation clinique réussie:', {
+      clinicId: request.clinic_id,
+      clinicCode: clinic.code,
+      clinicName: clinic.name,
+    });
+
     // Vérifier que supabaseAdmin est disponible
     if (!supabaseAdmin) {
       return res.status(500).json({
@@ -426,6 +534,9 @@ router.post('/registration-requests/:id/approve', authenticateToken, async (req:
       email: request.email,
       role: finalRole,
       clinicId: request.clinic_id,
+      clinicCode: clinic.code,
+      nom: request.nom,
+      prenom: request.prenom,
     });
 
     // Générer un lien de réinitialisation de mot de passe
@@ -549,6 +660,130 @@ router.post('/registration-requests/:id/reject', authenticateToken, async (req: 
     res.status(500).json({
       success: false,
       message: 'Erreur interne du serveur',
+    });
+  }
+});
+
+// POST /api/auth/users/:id/reset-password - Réinitialiser le mot de passe d'un utilisateur
+router.post('/users/:id/reset-password', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (!supabaseAdmin) {
+      return res.status(500).json({
+        success: false,
+        message: 'Service admin non disponible. Vérifiez SUPABASE_SERVICE_ROLE_KEY',
+      });
+    }
+
+    // Récupérer l'utilisateur
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email, auth_user_id, clinic_id')
+      .eq('id', id)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+      });
+    }
+
+    // Vérifier que l'utilisateur qui fait la demande a les droits (admin de la même clinique ou super admin)
+    const requesterClinicId = req.user?.clinic_id;
+    if (requesterClinicId && user.clinic_id !== requesterClinicId && req.user?.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous n\'avez pas les droits pour réinitialiser le mot de passe de cet utilisateur',
+      });
+    }
+
+    // Générer un mot de passe temporaire
+    const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
+
+    // Si l'utilisateur a un auth_user_id, mettre à jour le mot de passe dans Supabase Auth
+    if (user.auth_user_id) {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        user.auth_user_id,
+        {
+          password: tempPassword,
+        }
+      );
+
+      if (updateError) {
+        console.error('Erreur lors de la mise à jour du mot de passe Auth:', updateError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la réinitialisation du mot de passe',
+          error: updateError.message,
+        });
+      }
+    }
+
+    // Mettre à jour le statut de l'utilisateur pour forcer le changement de mot de passe
+    const { error: updateStatusError } = await supabase
+      .from('users')
+      .update({
+        status: 'PENDING',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+
+    if (updateStatusError) {
+      console.error('Erreur lors de la mise à jour du statut:', updateStatusError);
+    }
+
+    // Récupérer les informations complètes de l'utilisateur pour l'email
+    const { data: fullUser } = await supabase
+      .from('users')
+      .select('nom, prenom, email, clinic_id')
+      .eq('id', id)
+      .single();
+
+    // Récupérer le code clinique
+    let clinicCode = 'N/A';
+    if (fullUser?.clinic_id) {
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('code')
+        .eq('id', fullUser.clinic_id)
+        .single();
+      
+      if (clinic?.code) {
+        clinicCode = clinic.code;
+      }
+    }
+
+    // Envoyer l'email avec le nouveau mot de passe temporaire
+    if (fullUser) {
+      try {
+        await emailService.sendAccountValidationEmail({
+          nom: fullUser.nom || '',
+          prenom: fullUser.prenom || '',
+          email: fullUser.email,
+          username: fullUser.email,
+          temporaryPassword: tempPassword,
+          clinicCode: clinicCode,
+        });
+        console.log('✅ Email de réinitialisation envoyé avec succès à', fullUser.email);
+      } catch (emailError: any) {
+        // Ne pas bloquer si l'email échoue
+        console.error('⚠️ Erreur lors de l\'envoi de l\'email (non bloquant):', emailError?.message || emailError);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Mot de passe réinitialisé avec succès. Un email avec le nouveau mot de passe temporaire a été envoyé.',
+      note: 'L\'utilisateur devra changer son mot de passe lors de sa prochaine connexion.',
+    });
+  } catch (error: any) {
+    console.error('Erreur:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur',
+      error: error.message,
     });
   }
 });

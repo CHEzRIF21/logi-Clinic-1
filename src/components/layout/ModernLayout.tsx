@@ -49,7 +49,6 @@ import {
   Image as ImageIcon,
   Receipt,
   Close,
-  Notifications,
   Settings,
   Search,
   Lock,
@@ -101,16 +100,7 @@ const menuItemsConfig: MenuItemConfig[] = [
   { text: "Demandes d'inscription", icon: <PersonAdd />, path: '/registration-requests', badge: null, module: null, requiresAdmin: true },
 ];
 
-type NotificationCategory = 'consultation' | 'laboratoire' | 'stock' | 'caisse';
-
-interface NotificationItem {
-  id: number;
-  title: string;
-  description: string;
-  time: string;
-  type: NotificationCategory;
-  read: boolean;
-}
+// Types de notifications supprimés - gérés dans le module Utilisateurs et Permissions
 
 type QuickSettings = {
   compactDrawer: boolean;
@@ -144,7 +134,7 @@ const getFilteredMenuItems = (user: User | null) => {
 const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [notificationAnchorEl, setNotificationAnchorEl] = useState<null | HTMLElement>(null);
+  // Notifications supprimées - gérées dans le module Utilisateurs et Permissions
   const [settingsAnchorEl, setSettingsAnchorEl] = useState<null | HTMLElement>(null);
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -154,32 +144,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
     open: false,
     message: '',
   });
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 1,
-      title: 'Nouvelle consultation',
-      description: 'Patient Marie Koné est arrivée en salle 2.',
-      time: 'Il y a 5 min',
-      type: 'consultation',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Résultat de laboratoire prêt',
-      description: 'Analyse sanguine de Moussa Traoré disponible.',
-      time: 'Il y a 32 min',
-      type: 'laboratoire',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Stock critique',
-      description: 'Le lot de Paracétamol 500mg est presque épuisé.',
-      time: 'Il y a 1 h',
-      type: 'stock',
-      read: true,
-    },
-  ]);
+  // Notifications supprimées - gérées dans le module Utilisateurs et Permissions
   const [quickSettings, setQuickSettings] = useState<QuickSettings>({
     compactDrawer: false,
     emailAlerts: true,
@@ -188,37 +153,6 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const unreadNotifications = notifications.filter((notification) => !notification.read).length;
-
-  const getNotificationVisuals = (type: NotificationCategory) => {
-    switch (type) {
-      case 'consultation':
-        return {
-          color: theme.palette.primary.main,
-          background: alpha(theme.palette.primary.main, 0.15),
-          icon: <MedicalServices fontSize="small" />,
-        };
-      case 'laboratoire':
-        return {
-          color: theme.palette.success.main,
-          background: alpha(theme.palette.success.main, 0.15),
-          icon: <Science fontSize="small" />,
-        };
-      case 'stock':
-        return {
-          color: theme.palette.warning.main,
-          background: alpha(theme.palette.warning.main, 0.2),
-          icon: <Inventory fontSize="small" />,
-        };
-      case 'caisse':
-      default:
-        return {
-          color: theme.palette.info.main,
-          background: alpha(theme.palette.info.main, 0.15),
-          icon: <Receipt fontSize="small" />,
-        };
-    }
-  };
 
   const toggleQuickSetting = (key: keyof QuickSettings) => {
     setQuickSettings((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -236,13 +170,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
     setAnchorEl(null);
   };
 
-  const handleNotificationMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setNotificationAnchorEl(event.currentTarget);
-  };
-
-  const handleNotificationMenuClose = () => {
-    setNotificationAnchorEl(null);
-  };
+  // Handlers de notifications supprimés - gérés dans le module Utilisateurs et Permissions
 
   const handleSettingsMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSettingsAnchorEl(event.currentTarget);
@@ -252,17 +180,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
     setSettingsAnchorEl(null);
   };
 
-  const handleMarkNotificationsRead = () => {
-    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
-  };
-
-  const handleNotificationClick = (notificationId: number) => {
-    setNotifications((prev) =>
-      prev.map((notification) =>
-        notification.id === notificationId ? { ...notification, read: true } : notification
-      )
-    );
-  };
+  // Handlers de notifications supprimés - gérés dans le module Utilisateurs et Permissions
 
   const handleLogout = () => {
     handleMenuClose();
@@ -523,14 +441,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
           {/* Toggle Dark Mode */}
           <ThemeToggleButton />
 
-          {/* Notifications */}
-          <Tooltip title="Notifications" arrow>
-            <IconButton color="inherit" sx={{ mr: 1 }} onClick={handleNotificationMenuOpen}>
-              <Badge badgeContent={unreadNotifications} color="error" max={9} showZero>
-                <Notifications />
-              </Badge>
-            </IconButton>
-          </Tooltip>
+          {/* Notifications - Supprimé, géré dans le module Utilisateurs et Permissions */}
 
           {/* Paramètres */}
           <Tooltip title="Paramètres rapides" arrow>
@@ -613,87 +524,7 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
             </MenuItem>
           </Menu>
 
-          <Menu
-            id="notifications-menu"
-            anchorEl={notificationAnchorEl}
-            open={Boolean(notificationAnchorEl)}
-            onClose={handleNotificationMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'right',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-            PaperProps={{
-              sx: { mt: 1.5, minWidth: 360, maxWidth: '90vw', maxHeight: 420 },
-            }}
-          >
-            <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle1" fontWeight={600}>
-                Notifications
-              </Typography>
-              <Button
-                size="small"
-                onClick={() => {
-                  handleMarkNotificationsRead();
-                  handleNotificationMenuClose();
-                }}
-                disabled={unreadNotifications === 0}
-              >
-                Tout marquer lu
-              </Button>
-            </Box>
-            <Divider />
-            {notifications.length === 0 ? (
-              <Box sx={{ p: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Aucune notification
-                </Typography>
-              </Box>
-            ) : (
-              <List dense sx={{ maxHeight: 360, overflowY: 'auto' }}>
-                {notifications.map((notification) => {
-                  const visuals = getNotificationVisuals(notification.type);
-                  return (
-                    <ListItemButton
-                      key={notification.id}
-                      onClick={() => handleNotificationClick(notification.id)}
-                      sx={{
-                        alignItems: 'flex-start',
-                        gap: 1.5,
-                        borderLeft: notification.read ? '4px solid transparent' : `4px solid ${visuals.color}`,
-                        py: 1.25,
-                      }}
-                    >
-                      <Avatar
-                        sx={{
-                          width: 36,
-                          height: 36,
-                          bgcolor: visuals.background,
-                          color: visuals.color,
-                        }}
-                      >
-                        {visuals.icon}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle2" fontWeight={notification.read ? 500 : 600}>
-                          {notification.title}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {notification.description}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {notification.time}
-                        </Typography>
-                      </Box>
-                    </ListItemButton>
-                  );
-                })}
-              </List>
-            )}
-          </Menu>
+          {/* Menu notifications supprimé - géré dans le module Utilisateurs et Permissions */}
 
           <Menu
             id="quick-settings-menu"

@@ -16,6 +16,12 @@ import {
   Tabs,
   Tab,
   Chip,
+  AppBar,
+  Toolbar,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   LocalHospital,
@@ -51,6 +57,8 @@ import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import { REGISTRATION_ROLES } from '../../config/roles';
+import ThemeToggleButton from '../ui/ThemeToggleButton';
+import { SECURITY_QUESTIONS, SecurityQuestionOption } from '../../data/securityQuestions';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -118,9 +126,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     roleSouhaite: 'receptionniste',
     specialite: '',
     securityQuestions: {
-      question1: { question: '', answer: '' },
-      question2: { question: '', answer: '' },
-      question3: { question: '', answer: '' },
+      question1: { questionId: '', question: '', answer: '' },
+      question2: { questionId: '', question: '', answer: '' },
+      question3: { questionId: '', question: '', answer: '' },
     },
   });
   const [clinicValidation, setClinicValidation] = useState<{
@@ -1204,14 +1212,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
     }
 
-    if (!signupForm.securityQuestions.question1.question || !signupForm.securityQuestions.question1.answer) {
-      setError('Veuillez remplir la première question de sécurité');
+    if (!signupForm.securityQuestions.question1.questionId || !signupForm.securityQuestions.question1.answer) {
+      setError('Veuillez sélectionner la première question de sécurité et fournir une réponse');
       setSignupLoading(false);
       return;
     }
 
-    if (!signupForm.securityQuestions.question2.question || !signupForm.securityQuestions.question2.answer) {
-      setError('Veuillez remplir la deuxième question de sécurité');
+    if (!signupForm.securityQuestions.question2.questionId || !signupForm.securityQuestions.question2.answer) {
+      setError('Veuillez sélectionner la deuxième question de sécurité et fournir une réponse');
       setSignupLoading(false);
       return;
     }
@@ -1247,7 +1255,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               question: signupForm.securityQuestions.question2.question,
               answer: signupForm.securityQuestions.question2.answer,
             },
-            ...(signupForm.securityQuestions.question3.question && signupForm.securityQuestions.question3.answer ? {
+            ...(signupForm.securityQuestions.question3.questionId && signupForm.securityQuestions.question3.answer ? {
               question3: {
                 question: signupForm.securityQuestions.question3.question,
                 answer: signupForm.securityQuestions.question3.answer,
@@ -1276,9 +1284,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         roleSouhaite: 'receptionniste',
         specialite: '',
         securityQuestions: {
-          question1: { question: '', answer: '' },
-          question2: { question: '', answer: '' },
-          question3: { question: '', answer: '' },
+          question1: { questionId: '', question: '', answer: '' },
+          question2: { questionId: '', question: '', answer: '' },
+          question3: { questionId: '', question: '', answer: '' },
         },
       });
       setClinicValidation({ isValid: false, clinicName: null, isChecking: false });
@@ -1364,13 +1372,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   ];
 
   return (
-    <Box sx={{ 
-      minHeight: '100vh', 
+    <Box sx={{
+      minHeight: '100vh',
       bgcolor: 'background.default',
       overflowX: 'hidden',
       width: '100%',
       position: 'relative',
     }}>
+      {/* Bouton de thème discret en position fixe */}
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: { xs: 16, sm: 24 },
+          right: { xs: 16, sm: 24 },
+          zIndex: 1000,
+        }}
+      >
+        <ThemeToggleButton discreet />
+      </Box>
+
       {/* Indicateur de chargement progressif */}
       {isPageLoading && (
         <Box
@@ -2179,25 +2199,42 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   Ces questions vous permettront de récupérer votre compte en cas d'oubli de mot de passe.
                 </Typography>
                 
-                <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  id="question1"
-                  label="Question 1"
-                  name="question1"
-                  value={signupForm.securityQuestions.question1.question}
-                  onChange={(e) => setSignupForm({
-                    ...signupForm,
-                    securityQuestions: {
-                      ...signupForm.securityQuestions,
-                      question1: { ...signupForm.securityQuestions.question1, question: e.target.value }
-                    }
-                  })}
-                  disabled={signupLoading}
-                  placeholder="Ex: Quel est le nom de jeune fille de votre mère ?"
-                  sx={{ mb: 1 }}
-                />
+                <FormControl fullWidth margin="normal" required sx={{ mb: 1 }}>
+                  <InputLabel>Question 1</InputLabel>
+                  <Select
+                    value={signupForm.securityQuestions.question1.questionId || ''}
+                    label="Question 1"
+                    onChange={(e) => {
+                      const value = e.target.value as string;
+                      const selectedQuestion = SECURITY_QUESTIONS.find(q => q.id === value);
+                      setSignupForm({
+                        ...signupForm,
+                        securityQuestions: {
+                          ...signupForm.securityQuestions,
+                          question1: { 
+                            questionId: value,
+                            question: selectedQuestion?.question || '',
+                            answer: signupForm.securityQuestions.question1.answer
+                          }
+                        }
+                      });
+                    }}
+                    disabled={signupLoading}
+                  >
+                    {SECURITY_QUESTIONS.map((q) => (
+                      <MenuItem 
+                        key={q.id} 
+                        value={q.id}
+                        disabled={
+                          q.id === signupForm.securityQuestions.question2.questionId ||
+                          q.id === signupForm.securityQuestions.question3.questionId
+                        }
+                      >
+                        {q.question}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <TextField
                   margin="normal"
                   required
@@ -2213,29 +2250,46 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       question1: { ...signupForm.securityQuestions.question1, answer: e.target.value }
                     }
                   })}
-                  disabled={signupLoading}
+                  disabled={signupLoading || !signupForm.securityQuestions.question1.questionId}
                   sx={{ mb: 2 }}
                 />
 
-                <TextField
-                  margin="normal"
-                  required
-                  fullWidth
-                  id="question2"
-                  label="Question 2"
-                  name="question2"
-                  value={signupForm.securityQuestions.question2.question}
-                  onChange={(e) => setSignupForm({
-                    ...signupForm,
-                    securityQuestions: {
-                      ...signupForm.securityQuestions,
-                      question2: { ...signupForm.securityQuestions.question2, question: e.target.value }
-                    }
-                  })}
-                  disabled={signupLoading}
-                  placeholder="Ex: Dans quelle ville êtes-vous né(e) ?"
-                  sx={{ mb: 1 }}
-                />
+                <FormControl fullWidth margin="normal" required sx={{ mb: 1 }}>
+                  <InputLabel>Question 2</InputLabel>
+                  <Select
+                    value={signupForm.securityQuestions.question2.questionId || ''}
+                    label="Question 2"
+                    onChange={(e) => {
+                      const value = e.target.value as string;
+                      const selectedQuestion = SECURITY_QUESTIONS.find(q => q.id === value);
+                      setSignupForm({
+                        ...signupForm,
+                        securityQuestions: {
+                          ...signupForm.securityQuestions,
+                          question2: { 
+                            questionId: value,
+                            question: selectedQuestion?.question || '',
+                            answer: signupForm.securityQuestions.question2.answer
+                          }
+                        }
+                      });
+                    }}
+                    disabled={signupLoading}
+                  >
+                    {SECURITY_QUESTIONS.map((q) => (
+                      <MenuItem 
+                        key={q.id} 
+                        value={q.id}
+                        disabled={
+                          q.id === signupForm.securityQuestions.question1.questionId ||
+                          q.id === signupForm.securityQuestions.question3.questionId
+                        }
+                      >
+                        {q.question}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <TextField
                   margin="normal"
                   required
@@ -2251,28 +2305,62 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       question2: { ...signupForm.securityQuestions.question2, answer: e.target.value }
                     }
                   })}
-                  disabled={signupLoading}
+                  disabled={signupLoading || !signupForm.securityQuestions.question2.questionId}
                   sx={{ mb: 2 }}
                 />
 
-                <TextField
-                  margin="normal"
-                  fullWidth
-                  id="question3"
-                  label="Question 3 (optionnelle)"
-                  name="question3"
-                  value={signupForm.securityQuestions.question3.question}
-                  onChange={(e) => setSignupForm({
-                    ...signupForm,
-                    securityQuestions: {
-                      ...signupForm.securityQuestions,
-                      question3: { ...signupForm.securityQuestions.question3, question: e.target.value }
-                    }
-                  })}
-                  disabled={signupLoading}
-                  placeholder="Ex: Quel est le nom de votre premier animal de compagnie ?"
-                  sx={{ mb: 1 }}
-                />
+                <FormControl fullWidth margin="normal" sx={{ mb: 1 }}>
+                  <InputLabel>Question 3 (optionnelle)</InputLabel>
+                  <Select
+                    value={signupForm.securityQuestions.question3.questionId || ''}
+                    label="Question 3 (optionnelle)"
+                    onChange={(e) => {
+                      const value = e.target.value as string;
+                      if (value === '') {
+                        // Si aucune question sélectionnée, vider tout
+                        setSignupForm({
+                          ...signupForm,
+                          securityQuestions: {
+                            ...signupForm.securityQuestions,
+                            question3: { 
+                              questionId: '',
+                              question: '',
+                              answer: ''
+                            }
+                          }
+                        });
+                      } else {
+                        const selectedQuestion = SECURITY_QUESTIONS.find(q => q.id === value);
+                        setSignupForm({
+                          ...signupForm,
+                          securityQuestions: {
+                            ...signupForm.securityQuestions,
+                            question3: { 
+                              questionId: value,
+                              question: selectedQuestion?.question || '',
+                              answer: signupForm.securityQuestions.question3.answer
+                            }
+                          }
+                        });
+                      }
+                    }}
+                    disabled={signupLoading}
+                  >
+                    <MenuItem value="">Aucune (optionnel)</MenuItem>
+                    {SECURITY_QUESTIONS.map((q) => (
+                      <MenuItem 
+                        key={q.id} 
+                        value={q.id}
+                        disabled={
+                          q.id === signupForm.securityQuestions.question1.questionId ||
+                          q.id === signupForm.securityQuestions.question2.questionId
+                        }
+                      >
+                        {q.question}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
                 <TextField
                   margin="normal"
                   fullWidth
@@ -2287,7 +2375,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       question3: { ...signupForm.securityQuestions.question3, answer: e.target.value }
                     }
                   })}
-                  disabled={signupLoading || !signupForm.securityQuestions.question3.question}
+                  disabled={signupLoading || !signupForm.securityQuestions.question3.questionId}
                   sx={{ mb: 2 }}
                 />
               </Box>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -35,6 +35,7 @@ import {
   AccordionDetails,
   Alert,
   CircularProgress,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add,
@@ -46,6 +47,9 @@ import {
   Visibility,
   Edit as EditIcon,
   Info,
+  NewReleases,
+  FilterList,
+  Search,
 } from '@mui/icons-material';
 import {
   UtilisateurStock,
@@ -96,6 +100,8 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   const [utilisateurForPermissions, setUtilisateurForPermissions] = useState<UtilisateurStock | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
   const [activeTab, setActiveTab] = useState<'utilisateurs' | 'profils'>('utilisateurs');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'active' | 'pending' | 'suspended'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [formUtilisateur, setFormUtilisateur] = useState({
     nom: '',
@@ -115,15 +121,38 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   });
 
   const handleCreateUtilisateur = () => {
-    const profil = profils.find(p => p.id === formUtilisateur.profilId);
-    if (profil) {
-      const nouvelUtilisateur: Omit<UtilisateurStock, 'id'> = {
-        ...formUtilisateur,
-        permissions: profil.permissions,
-        dateConnexion: undefined,
+    const nouvelUtilisateur: Omit<UtilisateurStock, 'id'> = {
+      ...formUtilisateur,
+      profilId: '', // Pas de profil requis
+      magasinPrincipal: 'detail', // Valeur par défaut
+      permissions: [], // Les permissions seront assignées selon le rôle
+      dateConnexion: undefined,
+    };
+    
+    onCreateUtilisateur(nouvelUtilisateur);
+    setFormUtilisateur({
+      nom: '',
+      prenom: '',
+      email: '',
+      role: 'pharmacien',
+      profilId: '',
+      magasinPrincipal: 'detail',
+    });
+    setOpenDialogUtilisateur(false);
+  };
+
+  const handleUpdateUtilisateur = () => {
+    if (editingUtilisateur) {
+      const utilisateurModifie: UtilisateurStock = {
+        ...editingUtilisateur,
+        nom: formUtilisateur.nom,
+        prenom: formUtilisateur.prenom,
+        email: formUtilisateur.email,
+        role: formUtilisateur.role,
       };
       
-      onCreateUtilisateur(nouvelUtilisateur);
+      onUpdateUtilisateur(utilisateurModifie);
+      setEditingUtilisateur(null);
       setFormUtilisateur({
         nom: '',
         prenom: '',
@@ -133,31 +162,6 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         magasinPrincipal: 'detail',
       });
       setOpenDialogUtilisateur(false);
-    }
-  };
-
-  const handleUpdateUtilisateur = () => {
-    if (editingUtilisateur) {
-      const profil = profils.find(p => p.id === formUtilisateur.profilId);
-      if (profil) {
-        const utilisateurModifie: UtilisateurStock = {
-          ...editingUtilisateur,
-          ...formUtilisateur,
-          permissions: profil.permissions,
-        };
-        
-        onUpdateUtilisateur(utilisateurModifie);
-        setEditingUtilisateur(null);
-        setFormUtilisateur({
-          nom: '',
-          prenom: '',
-          email: '',
-          role: 'pharmacien',
-          profilId: '',
-          magasinPrincipal: 'detail',
-        });
-        setOpenDialogUtilisateur(false);
-      }
     }
   };
 
@@ -174,45 +178,22 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
     setOpenDialogUtilisateur(true);
   };
 
-  const handleCreateProfil = () => {
+  const handleCreateProfil = async () => {
     // Si le rôle est administrateur, marquer comme admin
-    const isAdmin = formProfil.role === 'administrateur';
+    const isAdmin = formProfil.role === 'administrateur' || formProfil.role === 'administrateur_clinique';
     
     const nouveauProfil: Omit<ProfilUtilisateur, 'id'> = {
       ...formProfil,
-      permissions: isAdmin ? [] : PERMISSIONS_PAR_ROLE[formProfil.role], // Admin n'a pas besoin de permissions explicites
-      modulePermissions: isAdmin ? undefined : [], // Les permissions seront configurées manuellement
+      permissions: isAdmin ? [] : PERMISSIONS_PAR_ROLE[formProfil.role] || [], // Admin n'a pas besoin de permissions explicites
+      modulePermissions: isAdmin ? undefined : [], // Les permissions seront configurées après création
       isAdmin: isAdmin,
       dateCreation: new Date(),
       dateModification: new Date(),
     };
     
-    onCreateProfil(nouveauProfil);
-    setFormProfil({
-      nom: '',
-      role: 'pharmacien',
-      permissions: [],
-      magasinsAcces: [],
-      actif: true,
-    });
-    setOpenDialogProfil(false);
-  };
-
-  const handleUpdateProfil = () => {
-    if (editingProfil) {
-      const isAdmin = formProfil.role === 'administrateur';
+    try {
+      await onCreateProfil(nouveauProfil);
       
-      const profilModifie: ProfilUtilisateur = {
-        ...editingProfil,
-        ...formProfil,
-        permissions: isAdmin ? [] : (editingProfil.permissions || PERMISSIONS_PAR_ROLE[formProfil.role]),
-        modulePermissions: isAdmin ? undefined : (editingProfil.modulePermissions || []),
-        isAdmin: isAdmin,
-        dateModification: new Date(),
-      };
-      
-      onUpdateProfil(profilModifie);
-      setEditingProfil(null);
       setFormProfil({
         nom: '',
         role: 'pharmacien',
@@ -221,19 +202,64 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         actif: true,
       });
       setOpenDialogProfil(false);
+    } catch (error: any) {
+      console.error('Erreur lors de la création du profil:', error);
+      alert('Erreur lors de la création du profil: ' + (error?.message || 'Erreur inconnue'));
+    }
+  };
+
+  const handleUpdateProfil = async () => {
+    if (editingProfil) {
+      try {
+        const isAdmin = formProfil.role === 'administrateur' || formProfil.role === 'administrateur_clinique';
+        
+        const profilModifie: ProfilUtilisateur = {
+          ...editingProfil,
+          ...formProfil,
+          permissions: isAdmin ? [] : (editingProfil.permissions || PERMISSIONS_PAR_ROLE[formProfil.role] || []),
+          modulePermissions: isAdmin ? undefined : (editingProfil.modulePermissions || []),
+          isAdmin: isAdmin,
+          dateModification: new Date(),
+        };
+        
+        await onUpdateProfil(profilModifie);
+        
+        setEditingProfil(null);
+        setFormProfil({
+          nom: '',
+          role: 'pharmacien',
+          permissions: [],
+          magasinsAcces: [],
+          actif: true,
+        });
+        setOpenDialogProfil(false);
+      } catch (error: any) {
+        console.error('Erreur lors de la mise à jour du profil:', error);
+        alert('Erreur lors de la mise à jour du profil: ' + (error?.message || 'Erreur inconnue'));
+      }
     }
   };
 
   const handleOpenPermissionsDialog = async (utilisateur: UtilisateurStock) => {
     setLoadingPermissions(true);
     try {
-      // Charger les permissions depuis la base
-      const permissions = await UserPermissionsService.getUserPermissions(utilisateur.id);
+      let permissions: ModulePermission[] = [];
+      
+      // Détecter si c'est un profil personnalisé (pas d'email) ou un utilisateur réel
+      const isCustomProfile = !utilisateur.email || utilisateur.email === '';
+      
+      if (isCustomProfile) {
+        // C'est un profil personnalisé, utiliser getCustomProfilePermissions
+        permissions = await UserPermissionsService.getCustomProfilePermissions(utilisateur.id);
+      } else {
+        // C'est un utilisateur réel, utiliser getUserPermissions
+        permissions = await UserPermissionsService.getUserPermissions(utilisateur.id);
+      }
       
       // Créer un profil temporaire pour le composant GestionPermissionsModules
       const profilTemp: ProfilUtilisateur = {
         id: utilisateur.id,
-        nom: `${utilisateur.prenom} ${utilisateur.nom}`,
+        nom: utilisateur.email ? `${utilisateur.prenom} ${utilisateur.nom}` : utilisateur.nom,
         role: utilisateur.role,
         permissions: [],
         magasinsAcces: [],
@@ -245,7 +271,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
       };
       
       setProfilForPermissions(profilTemp);
-      setUtilisateurForPermissions(utilisateur);
+      setUtilisateurForPermissions(isCustomProfile ? null : utilisateur); // null si c'est un profil personnalisé
       setOpenDialogPermissions(true);
     } catch (error: any) {
       console.error('Erreur lors du chargement des permissions:', error);
@@ -257,6 +283,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
 
   const handleSavePermissions = async (modulePermissions: ModulePermission[]) => {
     if (utilisateurForPermissions) {
+      // C'est un utilisateur réel
       try {
         // Sauvegarder les permissions dans la base
         await UserPermissionsService.updateUserPermissions(
@@ -279,15 +306,28 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         alert('Erreur lors de la sauvegarde des permissions: ' + error.message);
       }
     } else if (profilForPermissions) {
-      // Ancien comportement pour les profils (si nécessaire)
-      const profilModifie: ProfilUtilisateur = {
-        ...profilForPermissions,
-        modulePermissions,
-        dateModification: new Date(),
-      };
-      onUpdateProfil(profilModifie);
-      setOpenDialogPermissions(false);
-      setProfilForPermissions(null);
+      // C'est un profil personnalisé
+      try {
+        // Sauvegarder les permissions du profil personnalisé dans la base
+        await UserPermissionsService.updateCustomProfile(profilForPermissions.id, {
+          permissions: modulePermissions,
+        });
+        
+        // Mettre à jour le profil localement
+        const profilModifie: ProfilUtilisateur = {
+          ...profilForPermissions,
+          modulePermissions,
+          dateModification: new Date(),
+        };
+        await onUpdateProfil(profilModifie);
+        
+        setOpenDialogPermissions(false);
+        setProfilForPermissions(null);
+        setUtilisateurForPermissions(null);
+      } catch (error: any) {
+        console.error('Erreur lors de la sauvegarde des permissions du profil:', error);
+        alert('Erreur lors de la sauvegarde des permissions: ' + error.message);
+      }
     }
   };
 
@@ -393,7 +433,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           <CardContent>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6">
-                Liste des Utilisateurs
+                Liste des Utilisateurs ({utilisateurs.length})
               </Typography>
               <Button
                 variant="contained"
@@ -404,6 +444,39 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
               </Button>
             </Box>
 
+            {/* Filtres et recherche */}
+            <Box display="flex" gap={2} mb={2} flexWrap="wrap">
+              <TextField
+                size="small"
+                placeholder="Rechercher par nom, email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search fontSize="small" />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ minWidth: 250, flexGrow: 1 }}
+              />
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel>Filtrer par statut</InputLabel>
+                <Select
+                  value={filterStatus}
+                  label="Filtrer par statut"
+                  onChange={(e) => setFilterStatus(e.target.value as any)}
+                  startAdornment={<FilterList />}
+                >
+                  <MenuItem value="all">Tous</MenuItem>
+                  <MenuItem value="new">Nouveaux (7 jours)</MenuItem>
+                  <MenuItem value="active">Actifs</MenuItem>
+                  <MenuItem value="pending">En attente</MenuItem>
+                  <MenuItem value="suspended">Suspendus</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
@@ -411,84 +484,171 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                     <TableCell>Nom</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Rôle</TableCell>
-                    <TableCell>Magasin Principal</TableCell>
-                    <TableCell>Profil</TableCell>
+                    <TableCell>Statut</TableCell>
                     <TableCell>Dernière Connexion</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {utilisateurs.map((utilisateur) => (
-                    <TableRow key={utilisateur.id}>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="medium">
-                          {utilisateur.prenom} {utilisateur.nom}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{utilisateur.email}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={getRoleLabel(utilisateur.role)}
-                          color="primary"
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={getMagasinLabel(utilisateur.magasinPrincipal)}
-                          color="secondary"
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {profils.find(p => p.id === utilisateur.profilId)?.nom || 'N/A'}
-                      </TableCell>
-                      <TableCell>
-                        {utilisateur.dateConnexion 
-                          ? utilisateur.dateConnexion.toLocaleDateString('fr-FR')
-                          : 'Jamais connecté'
+                  {(() => {
+                    // Filtrer les utilisateurs
+                    let filteredUsers = utilisateurs;
+                    
+                    // Filtre par recherche
+                    if (searchTerm) {
+                      const searchLower = searchTerm.toLowerCase();
+                      filteredUsers = filteredUsers.filter(u => 
+                        u.nom.toLowerCase().includes(searchLower) ||
+                        u.prenom.toLowerCase().includes(searchLower) ||
+                        u.email.toLowerCase().includes(searchLower)
+                      );
+                    }
+                    
+                    // Filtre par statut
+                    if (filterStatus !== 'all') {
+                      filteredUsers = filteredUsers.filter(u => {
+                        switch (filterStatus) {
+                          case 'new':
+                            return u.isNewUser === true;
+                          case 'active':
+                            return (u.status || '').toUpperCase() === 'ACTIVE';
+                          case 'pending':
+                            return (u.status || '').toUpperCase() === 'PENDING';
+                          case 'suspended':
+                            return (u.status || '').toUpperCase() === 'SUSPENDED';
+                          default:
+                            return true;
                         }
-                      </TableCell>
-                      <TableCell>
-                        <Box display="flex" gap={1}>
-                          {onViewUserDetail && (
+                      });
+                    }
+                    
+                    return filteredUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">
+                          <Typography color="text.secondary" sx={{ py: 4 }}>
+                            {searchTerm || filterStatus !== 'all' 
+                              ? 'Aucun utilisateur ne correspond aux critères de recherche.'
+                              : 'Aucun utilisateur trouvé. Les utilisateurs apparaîtront ici après approbation de leurs demandes d\'inscription.'}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredUsers.map((utilisateur) => (
+                      <TableRow key={utilisateur.id} hover>
+                        <TableCell>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <Typography variant="body2" fontWeight="medium">
+                              {utilisateur.prenom} {utilisateur.nom}
+                            </Typography>
+                            {utilisateur.isNewUser && (
+                              <Chip
+                                icon={<NewReleases />}
+                                label="Nouveau"
+                                color="info"
+                                size="small"
+                                sx={{ height: 20, fontSize: '0.65rem' }}
+                              />
+                            )}
+                          </Box>
+                        </TableCell>
+                        <TableCell>{utilisateur.email}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={getRoleLabel(utilisateur.role)}
+                            color="primary"
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const status = utilisateur.status || (utilisateur.isAdmin ? 'ACTIVE' : 'ACTIVE');
+                            const getStatusLabel = (s: string) => {
+                              switch (s.toUpperCase()) {
+                                case 'ACTIVE':
+                                  return 'Actif';
+                                case 'PENDING':
+                                  return 'En attente';
+                                case 'SUSPENDED':
+                                  return 'Suspendu';
+                                default:
+                                  return s;
+                              }
+                            };
+                            const getStatusColor = (s: string) => {
+                              switch (s.toUpperCase()) {
+                                case 'ACTIVE':
+                                  return utilisateur.isAdmin ? 'warning' : 'success';
+                                case 'PENDING':
+                                  return 'warning';
+                                case 'SUSPENDED':
+                                  return 'error';
+                                default:
+                                  return 'default';
+                              }
+                            };
+                            return (
+                              <Chip
+                                label={utilisateur.isAdmin ? 'Admin' : getStatusLabel(status)}
+                                color={getStatusColor(status) as any}
+                                size="small"
+                              />
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          {utilisateur.dateConnexion 
+                            ? utilisateur.dateConnexion.toLocaleDateString('fr-FR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : 'Jamais connecté'
+                          }
+                        </TableCell>
+                        <TableCell align="right">
+                          <Box display="flex" gap={0.5} justifyContent="flex-end">
+                            {onViewUserDetail && (
+                              <IconButton
+                                size="small"
+                                color="info"
+                                onClick={() => onViewUserDetail(utilisateur.id)}
+                                title="Voir les détails de l'utilisateur"
+                              >
+                                <Info />
+                              </IconButton>
+                            )}
                             <IconButton
                               size="small"
-                              color="info"
-                              onClick={() => onViewUserDetail(utilisateur.id)}
-                              title="Voir les détails de l'utilisateur"
+                              color="primary"
+                              onClick={() => handleEditUtilisateur(utilisateur)}
+                              title="Modifier l'utilisateur"
                             >
-                              <Info />
+                              <Edit />
                             </IconButton>
-                          )}
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleEditUtilisateur(utilisateur)}
-                            title="Modifier l'utilisateur"
-                          >
-                            <Edit />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="secondary"
-                            onClick={() => handleOpenPermissionsDialog(utilisateur)}
-                            title="Configurer les permissions"
-                          >
-                            <Security />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => onDeleteUtilisateur(utilisateur.id)}
-                            title="Supprimer l'utilisateur"
-                          >
-                            <Delete />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            <IconButton
+                              size="small"
+                              color="secondary"
+                              onClick={() => handleOpenPermissionsDialog(utilisateur)}
+                              title="Configurer les permissions"
+                            >
+                              <Security />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => onDeleteUtilisateur(utilisateur.id)}
+                              title="Supprimer l'utilisateur"
+                            >
+                              <Delete />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                    );
+                  })()}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -569,37 +729,61 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                         Rôle: {getRoleLabel(profil.role)}
                       </Typography>
 
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Magasins d'accès: {profil.magasinsAcces.map(m => getMagasinLabel(m)).join(', ')}
-                      </Typography>
+                      {profil.magasinsAcces && profil.magasinsAcces.length > 0 && (
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          Magasins d'accès: {profil.magasinsAcces.map(m => getMagasinLabel(m)).join(', ')}
+                        </Typography>
+                      )}
 
-                      <Accordion>
-                        <AccordionSummary expandIcon={<ExpandMore />}>
-                          <Typography variant="subtitle2">
-                            Permissions ({profil.permissions.length})
-                          </Typography>
-                        </AccordionSummary>
-                        <AccordionDetails>
-                          <List dense>
-                            {profil.permissions.map((permission, index) => (
-                              <ListItem key={index} sx={{ pl: 0 }}>
-                                <ListItemIcon>
-                                  {getPermissionIcon(permission.action)}
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={permission.description}
-                                  secondary={`Magasin: ${getMagasinLabel(permission.magasin)}`}
-                                />
-                                <Chip
-                                  label={getMagasinLabel(permission.magasin)}
-                                  color={getPermissionColor(permission.magasin) as any}
-                                  size="small"
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        </AccordionDetails>
-                      </Accordion>
+                      {profil.isAdmin ? (
+                        <Typography variant="body2" color="warning.main" fontWeight="medium">
+                          ⚠️ Administrateur - Toutes les permissions sont accordées
+                        </Typography>
+                      ) : (
+                        <Accordion>
+                          <AccordionSummary expandIcon={<ExpandMore />}>
+                            <Typography variant="subtitle2">
+                              Permissions ({profil.modulePermissions?.length || 0} modules)
+                            </Typography>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            {profil.modulePermissions && profil.modulePermissions.length > 0 ? (
+                              <List dense>
+                                {profil.modulePermissions.map((modulePerm, index) => (
+                                  <ListItem key={index} sx={{ pl: 0, flexDirection: 'column', alignItems: 'flex-start' }}>
+                                    <Box display="flex" alignItems="center" gap={1} width="100%">
+                                      <Security fontSize="small" color="primary" />
+                                      <Typography variant="body2" fontWeight="medium">
+                                        {modulePerm.module}
+                                      </Typography>
+                                      <Chip
+                                        label={`${modulePerm.actions.length} action(s)`}
+                                        size="small"
+                                        color="primary"
+                                        variant="outlined"
+                                      />
+                                    </Box>
+                                    {modulePerm.actions.length > 0 && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 4, mt: 0.5 }}>
+                                        Actions: {modulePerm.actions.join(', ')}
+                                      </Typography>
+                                    )}
+                                    {modulePerm.submodules && modulePerm.submodules.length > 0 && (
+                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 4, mt: 0.5 }}>
+                                        Sous-modules: {modulePerm.submodules.map(s => s.submodule).join(', ')}
+                                      </Typography>
+                                    )}
+                                  </ListItem>
+                                ))}
+                              </List>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary">
+                                Aucune permission configurée. Cliquez sur l'icône de sécurité pour configurer les permissions.
+                              </Typography>
+                            )}
+                          </AccordionDetails>
+                        </Accordion>
+                      )}
                     </CardContent>
                   </Card>
                 </Grid>
@@ -660,36 +844,11 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Profil</InputLabel>
-                <Select
-                  value={formUtilisateur.profilId}
-                  onChange={(e) => setFormUtilisateur({ ...formUtilisateur, profilId: e.target.value })}
-                  label="Profil"
-                  required
-                >
-                  {profils.filter(p => p.role === formUtilisateur.role).map((profil) => (
-                    <MenuItem key={profil.id} value={profil.id}>
-                      {profil.nom}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Magasin Principal</InputLabel>
-                <Select
-                  value={formUtilisateur.magasinPrincipal}
-                  onChange={(e) => setFormUtilisateur({ ...formUtilisateur, magasinPrincipal: e.target.value as MagasinAcces })}
-                  label="Magasin Principal"
-                >
-                  <MenuItem value="gros">Magasin Gros</MenuItem>
-                  <MenuItem value="detail">Magasin Détail</MenuItem>
-                  <MenuItem value="tous">Tous les Magasins</MenuItem>
-                </Select>
-              </FormControl>
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mt: 1 }}>
+                Les permissions seront configurées automatiquement selon le rôle sélectionné. 
+                Vous pourrez les personnaliser après création en cliquant sur l'icône de sécurité.
+              </Alert>
             </Grid>
           </Grid>
         </DialogContent>
@@ -698,7 +857,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           <Button
             onClick={editingUtilisateur ? handleUpdateUtilisateur : handleCreateUtilisateur}
             variant="contained"
-            disabled={!formUtilisateur.nom || !formUtilisateur.prenom || !formUtilisateur.email || !formUtilisateur.profilId}
+            disabled={!formUtilisateur.nom || !formUtilisateur.prenom || !formUtilisateur.email}
           >
             {editingUtilisateur ? 'Modifier' : 'Créer'}
           </Button>

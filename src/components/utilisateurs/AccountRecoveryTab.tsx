@@ -35,6 +35,8 @@ import {
 import { AccountRecoveryRequest, RecoveryRequestStatus } from '../../types/accountRecovery';
 import RecoveryRequestDetails from '../admin/RecoveryRequestDetails';
 import { User } from '../../types/auth';
+import { UserPermissionsService } from '../../services/userPermissionsService';
+import { getMyClinicId } from '../../services/clinicService';
 
 interface AccountRecoveryTabProps {
   user: User | null;
@@ -66,12 +68,46 @@ const AccountRecoveryTab: React.FC<AccountRecoveryTabProps> = ({ user }) => {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      // TODO: Implémenter l'appel API réel
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setRequests([]);
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        setError('Clinic ID manquant');
+        return;
+      }
+
+      const status = filterStatus !== 'all' ? filterStatus : undefined;
+      const requestsData = await UserPermissionsService.getRecoveryRequests(clinicId, status);
+      
+      // Transformer les données en AccountRecoveryRequest
+      const transformedRequests: AccountRecoveryRequest[] = requestsData.map((req: any) => ({
+        id: req.id || req._id,
+        clinicCode: req.clinic_code || req.clinicCode,
+        email: req.email,
+        nom: req.nom,
+        prenom: req.prenom,
+        telephone: req.telephone || '',
+        securityQuestions: req.security_questions || req.securityQuestions || [],
+        requestedData: req.requested_data || req.requestedData || [],
+        status: (req.statut || req.status || 'pending') as RecoveryRequestStatus,
+        adminNotes: req.admin_notes || req.adminNotes,
+        rejectionReason: req.rejection_reason || req.rejectionReason,
+        verifiedBy: req.verified_by || req.verifiedBy,
+        approvedBy: req.approved_by || req.approvedBy,
+        rejectedBy: req.rejected_by || req.rejectedBy,
+        createdAt: req.created_at ? new Date(req.created_at) : new Date(),
+        updatedAt: req.updated_at ? new Date(req.updated_at) : new Date(),
+        expiresAt: req.expires_at ? new Date(req.expires_at) : undefined,
+      }));
+
+      setRequests(transformedRequests);
       setError('');
     } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement des demandes');
+      console.error('Erreur lors du chargement des demandes:', err);
+      // Ne pas afficher d'erreur si c'est juste que la table n'existe pas encore
+      if (err.message && !err.message.includes('relation') && !err.message.includes('table')) {
+        setError(err.message || 'Erreur lors du chargement des demandes');
+      } else {
+        setRequests([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -92,21 +128,36 @@ const AccountRecoveryTab: React.FC<AccountRecoveryTabProps> = ({ user }) => {
 
   const handleApprove = async (requestId: string) => {
     try {
-      // TODO: Implémenter l'appel API réel
+      setLoading(true);
+      await UserPermissionsService.approveRecoveryRequest(requestId);
       await fetchRequests();
+      await fetchStats();
       setDetailsOpen(false);
+      setError('');
     } catch (err: any) {
       setError(err.message || 'Erreur lors de l\'approbation');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleReject = async (requestId: string, reason: string) => {
     try {
-      // TODO: Implémenter l'appel API réel
+      setLoading(true);
+      if (!reason || reason.trim() === '') {
+        setError('Veuillez indiquer une raison de rejet');
+        return;
+      }
+      
+      await UserPermissionsService.rejectRecoveryRequest(requestId, reason);
       await fetchRequests();
+      await fetchStats();
       setDetailsOpen(false);
+      setError('');
     } catch (err: any) {
       setError(err.message || 'Erreur lors du rejet');
+    } finally {
+      setLoading(false);
     }
   };
 
