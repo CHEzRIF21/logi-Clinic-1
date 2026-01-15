@@ -16,6 +16,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   ExpandMore,
@@ -42,8 +43,9 @@ import { UserRole } from '../../types/auth';
 
 interface GestionPermissionsModulesProps {
   profil: ProfilUtilisateur;
-  onSave: (permissions: ModulePermission[]) => void;
+  onSave: (permissions: ModulePermission[]) => void | Promise<void>;
   currentUserRole?: string; // Pour vérifier si l'utilisateur actuel est admin
+  saving?: boolean; // État de sauvegarde en cours
 }
 
 // Mapping des rôles RoleUtilisateur vers UserRole
@@ -68,6 +70,7 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
   profil,
   onSave,
   currentUserRole,
+  saving = false,
 }) => {
   const isCurrentUserAdmin = currentUserRole === 'admin';
   const isProfilAdmin = profil.isAdmin || profil.role === 'administrateur_clinique';
@@ -240,8 +243,13 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
     return subModulePermission?.actions.includes(action) || false;
   };
 
-  const handleSave = () => {
-    onSave(permissions);
+  const handleSave = async () => {
+    try {
+      await onSave(permissions);
+    } catch (error) {
+      // L'erreur est déjà gérée dans handleSavePermissions du parent
+      console.error('Erreur lors de la sauvegarde des permissions:', error);
+    }
   };
 
   const handleRestoreDefaults = () => {
@@ -310,9 +318,10 @@ const GestionPermissionsModules: React.FC<GestionPermissionsModulesProps> = ({
               variant="contained"
               color="primary"
               onClick={handleSave}
-              startIcon={<CheckCircle />}
+              startIcon={saving ? <CircularProgress size={20} /> : <CheckCircle />}
+              disabled={saving}
             >
-              Enregistrer les Permissions
+              {saving ? 'Enregistrement...' : 'Enregistrer les Permissions'}
             </Button>
           </Box>
         )}

@@ -1,13 +1,22 @@
 import { User, ModulePermission } from '../types/auth';
 
 /**
+ * Source de vérité: détecte si un rôle est "admin" (au sens clinique / global).
+ * Note: le backend peut renvoyer des rôles en majuscules.
+ */
+export function isAdminRole(role: string | undefined | null): boolean {
+  const roleUpper = (role || '').toString().trim().toUpperCase();
+  return roleUpper === 'ADMIN' || roleUpper === 'CLINIC_ADMIN' || roleUpper === 'SUPER_ADMIN';
+}
+
+/**
  * Vérifie si un utilisateur a accès à un module spécifique
  */
 export function hasModuleAccess(user: User | null, module: ModulePermission): boolean {
   if (!user) return false;
   
   // L'admin a accès à tous les modules
-  if (user.role === 'admin') {
+  if (isAdminRole(user.role as unknown as string)) {
     return true;
   }
   
@@ -21,7 +30,7 @@ export function hasModuleAccess(user: User | null, module: ModulePermission): bo
  */
 export function canManageUsers(user: User | null): boolean {
   if (!user) return false;
-  return user.role === 'admin';
+  return isAdminRole(user.role as unknown as string);
 }
 
 /**
@@ -31,7 +40,7 @@ export function getAccessibleModules(user: User | null): ModulePermission[] {
   if (!user) return [];
   
   // L'admin a accès à tous les modules
-  if (user.role === 'admin') {
+  if (isAdminRole(user.role as unknown as string)) {
     return [
       'consultations',
       'patients',
@@ -56,6 +65,6 @@ export function getAccessibleModules(user: User | null): ModulePermission[] {
  */
 export function canAccessSettings(user: User | null): boolean {
   if (!user) return false;
-  return user.role === 'admin' || hasModuleAccess(user, 'parametres');
+  return isAdminRole(user.role as unknown as string) || hasModuleAccess(user, 'parametres');
 }
 

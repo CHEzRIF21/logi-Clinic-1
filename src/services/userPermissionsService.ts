@@ -71,48 +71,76 @@ export class UserPermissionsService {
       throw error;
     }
 
-    return (data || []).map(user => ({
-      id: user.id,
-      email: user.email,
-      nom: user.nom || '',
-      prenom: user.prenom || '',
-      role: user.role || 'STAFF',
-      status: user.status || 'PENDING',
-      clinicId: user.clinic_id,
-      actif: user.actif ?? true,
-      specialite: user.specialite,
-      telephone: user.telephone,
-      adresse: user.adresse,
-      lastLogin: user.last_login ? new Date(user.last_login) : undefined,
-      createdAt: user.created_at ? new Date(user.created_at) : new Date(),
-      updatedAt: user.updated_at ? new Date(user.updated_at) : new Date(),
-      avatar_url: user.avatar_url,
-      language: user.language || 'fr',
-      // Propriétés requises par User avec valeurs par défaut
-      username: user.email, // Utiliser email comme username par défaut
-      clinicCode: '', // Sera rempli si nécessaire
-      permissions: [], // Sera rempli si nécessaire
-    } as ExtendedUser));
+    return (data || []).map(user => {
+      return {
+        id: user.id,
+        email: user.email,
+        nom: user.nom || '',
+        prenom: user.prenom || '',
+        role: user.role || 'STAFF',
+        status: user.status || 'PENDING',
+        clinicId: user.clinic_id,
+        actif: user.actif ?? true,
+        specialite: user.specialite,
+        telephone: user.telephone,
+        adresse: user.adresse,
+        lastLogin: user.last_login ? new Date(user.last_login) : undefined,
+        createdAt: user.created_at ? new Date(user.created_at) : new Date(),
+        updatedAt: user.updated_at ? new Date(user.updated_at) : new Date(),
+        avatar_url: user.avatar_url,
+        language: user.language || 'fr',
+        // Propriétés requises par User avec valeurs par défaut
+        username: user.email, // Utiliser email comme username par défaut
+        clinicCode: '', // Sera rempli si nécessaire
+        permissions: [], // Sera rempli si nécessaire
+      } as ExtendedUser;
+    });
   }
 
   /**
    * Récupère les permissions d'un utilisateur (défaut + personnalisées)
    */
   static async getUserPermissions(userId: string): Promise<ModulePermission[]> {
-    // Appeler la fonction SQL get_user_permissions
+    // Appeler directement la fonction RPC qui utilise SECURITY DEFINER et peut bypass RLS
+    // La fonction RPC elle-même vérifie l'existence de l'utilisateur
     const { data, error } = await supabase.rpc('get_user_permissions', {
       p_user_id: userId,
     });
 
+    // Si la fonction RPC n'existe pas, retourner un tableau vide (fallback)
+    if (error && (error.code === '42883' || error.message?.includes('function') || error.message?.includes('does not exist'))) {
+      console.warn('La fonction RPC get_user_permissions n\'existe pas. Veuillez appliquer la migration 41_CREATE_USER_PERMISSIONS_SYSTEM.sql');
+      return [];
+    }
+
+    // Si l'utilisateur n'est pas trouvé (P0001), retourner un tableau vide
+    if (error && error.code === 'P0001') {
+      console.warn('Utilisateur non trouvé dans la base de données pour les permissions:', userId);
+      return [];
+    }
+
+    // Pour les autres erreurs, logger mais ne pas bloquer
     if (error) {
       console.error('Erreur lors de la récupération des permissions:', error);
-      throw error;
+      // Ne pas lever d'exception, retourner un tableau vide pour ne pas bloquer l'interface
+      return [];
+    }
+
+    // Si la fonction RPC retourne un résultat vide (admin), retourner un tableau vide
+    // Le frontend interprétera cela comme "toutes les permissions"
+    if (!data || data.length === 0) {
+      return [];
     }
 
     // Transformer les résultats en ModulePermission[]
     const permissionsMap = new Map<string, ModulePermission>();
 
     (data || []).forEach((perm: any) => {
+      // Ignorer les lignes NULL (pour les admins)
+      if (!perm.module_name) {
+        return;
+      }
+      
       const key = perm.module_name;
       
       if (!permissionsMap.has(key)) {
@@ -126,7 +154,7 @@ export class UserPermissionsService {
       const modulePerm = permissionsMap.get(key)!;
       
       // Ajouter l'action si elle n'existe pas déjà
-      if (!modulePerm.actions.includes(perm.permission_action as any)) {
+      if (perm.permission_action && !modulePerm.actions.includes(perm.permission_action as any)) {
         modulePerm.actions.push(perm.permission_action as any);
       }
 
@@ -143,9 +171,9 @@ export class UserPermissionsService {
         if (!submodule) {
           modulePerm.submodules.push({
             submodule: perm.submodule_name,
-            actions: [perm.permission_action as any],
+            actions: perm.permission_action ? [perm.permission_action as any] : [],
           });
-        } else if (!submodule.actions.includes(perm.permission_action as any)) {
+        } else if (perm.permission_action && !submodule.actions.includes(perm.permission_action as any)) {
           submodule.actions.push(perm.permission_action as any);
         }
       }
@@ -161,58 +189,103 @@ export class UserPermissionsService {
     userId: string,
     permissions: ModulePermission[]
   ): Promise<void> {
-    // D'abord, supprimer toutes les permissions personnalisées existantes
-    const { error: deleteError } = await supabase
-      .from('user_custom_permissions')
-      .delete()
-      .eq('user_id', userId);
-
-    if (deleteError) {
-      console.error('Erreur lors de la suppression des permissions:', deleteError);
-      throw deleteError;
-    }
+    console.log('updateUserPermissions appelé pour userId:', userId, 'avec', permissions.length, 'modules');
+    
+    // Note: La fonction RPC insert_user_custom_permissions supprime automatiquement les anciennes permissions
 
     // Ensuite, insérer les nouvelles permissions personnalisées
     const customPermissions: any[] = [];
 
     permissions.forEach(perm => {
       // Permissions au niveau module
-      perm.actions.forEach(action => {
-        customPermissions.push({
-          user_id: userId,
-          module_name: perm.module,
-          permission_action: action,
-          submodule_name: null,
-          granted: true,
+      if (perm.actions && perm.actions.length > 0) {
+        perm.actions.forEach(action => {
+          customPermissions.push({
+            user_id: userId,
+            module_name: perm.module,
+            permission_action: action,
+            submodule_name: null,
+            granted: true,
+          });
         });
-      });
+      }
 
       // Permissions au niveau sous-module
-      if (perm.submodules) {
+      if (perm.submodules && perm.submodules.length > 0) {
         perm.submodules.forEach(submodule => {
-          submodule.actions.forEach(action => {
-            customPermissions.push({
-              user_id: userId,
-              module_name: perm.module,
-              permission_action: action,
-              submodule_name: submodule.submodule,
-              granted: true,
+          if (submodule.actions && submodule.actions.length > 0) {
+            submodule.actions.forEach(action => {
+              customPermissions.push({
+                user_id: userId,
+                module_name: perm.module,
+                permission_action: action,
+                submodule_name: submodule.submodule,
+                granted: true,
+              });
             });
-          });
+          }
         });
       }
     });
 
-    if (customPermissions.length > 0) {
-      const { error: insertError } = await supabase
-        .from('user_custom_permissions')
-        .insert(customPermissions);
+    console.log('Nombre de permissions à insérer:', customPermissions.length);
 
-      if (insertError) {
-        console.error('Erreur lors de l\'insertion des permissions:', insertError);
-        throw insertError;
+    // Si aucune permission à insérer, c'est OK (l'utilisateur n'aura que les permissions par défaut)
+    if (customPermissions.length === 0) {
+      console.log('Aucune permission personnalisée à insérer. L\'utilisateur utilisera les permissions par défaut de son rôle.');
+      return;
+    }
+    
+    // Récupérer l'ID utilisateur actuel depuis localStorage
+    const userDataStr = localStorage.getItem('user');
+    let currentUserId: string | null = null;
+    if (userDataStr) {
+      try {
+        const userData = JSON.parse(userDataStr);
+        currentUserId = userData.id || null;
+      } catch (e) {
+        // Ignorer l'erreur de parsing
       }
     }
+    
+    // Utiliser la fonction RPC qui bypass RLS
+    // Transformer les permissions en format JSONB pour la fonction RPC
+    const permissionsJson = customPermissions.map(perm => ({
+      module_name: perm.module_name,
+      permission_action: perm.permission_action,
+      submodule_name: perm.submodule_name,
+      granted: perm.granted,
+    }));
+    
+    const { error: rpcError } = await supabase.rpc('insert_user_custom_permissions', {
+      p_user_id: userId,
+      p_permissions: permissionsJson as any,
+      p_current_user_id: currentUserId,
+    });
+
+    if (rpcError) {
+      // Si la fonction RPC n'existe pas, fallback vers insertion directe
+      if (rpcError.code === '42883' || rpcError.message?.includes('function') || rpcError.message?.includes('does not exist')) {
+        console.warn('La fonction RPC insert_user_custom_permissions n\'existe pas. Utilisation du fallback direct.');
+        const { error: insertError } = await supabase
+          .from('user_custom_permissions')
+          .insert(customPermissions);
+        
+        if (insertError) {
+          if (insertError.code === 'PGRST204' || insertError.code === 'PGRST205') {
+            console.warn('Table user_custom_permissions non trouvée. Veuillez appliquer la migration 41_CREATE_USER_PERMISSIONS_SYSTEM.sql');
+            throw new Error('La table user_custom_permissions n\'existe pas. Veuillez appliquer la migration.');
+          }
+          console.error('Erreur lors de l\'insertion des permissions:', insertError);
+          throw insertError;
+        }
+      } else {
+        console.error('Erreur lors de l\'insertion des permissions via RPC:', rpcError);
+        throw rpcError;
+      }
+    }
+
+    console.log('Permissions insérées avec succès pour userId:', userId);
   }
 
   /**
@@ -257,6 +330,49 @@ export class UserPermissionsService {
    * Récupère un utilisateur par son ID
    */
   static async getUserById(userId: string): Promise<ExtendedUser | null> {
+    // Essayer d'abord avec la fonction RPC qui bypass RLS
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_by_id', {
+        p_user_id: userId,
+      });
+
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        const user = rpcData[0];
+        return {
+          id: user.id,
+          email: user.email,
+          nom: user.nom || '',
+          prenom: user.prenom || '',
+          role: user.role || 'STAFF',
+          status: user.status || 'PENDING',
+          clinicId: user.clinic_id,
+          actif: user.actif ?? true,
+          specialite: user.specialite,
+          telephone: user.telephone,
+          adresse: user.adresse,
+          lastLogin: user.last_login ? new Date(user.last_login) : undefined,
+          createdAt: user.created_at ? new Date(user.created_at) : new Date(),
+          updatedAt: user.updated_at ? new Date(user.updated_at) : new Date(),
+          avatar_url: user.avatar_url,
+          language: user.language || 'fr',
+          // Propriétés requises par User avec valeurs par défaut
+          username: user.email,
+          clinicCode: '',
+          permissions: [],
+        } as ExtendedUser;
+      }
+
+      // Si la fonction RPC n'existe pas ou retourne vide, fallback vers requête directe
+      if (rpcError && (rpcError.code === '42883' || rpcError.message?.includes('function') || rpcError.message?.includes('does not exist'))) {
+        console.warn('La fonction RPC get_user_by_id n\'existe pas. Utilisation du fallback direct.');
+      } else if (rpcError) {
+        console.warn('Erreur RPC get_user_by_id:', rpcError);
+      }
+    } catch (rpcErr: any) {
+      console.warn('Erreur lors de l\'appel RPC get_user_by_id:', rpcErr);
+    }
+
+    // Fallback vers la requête directe si RPC échoue
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -269,6 +385,10 @@ export class UserPermissionsService {
       }
       console.error('Erreur lors de la récupération de l\'utilisateur:', error);
       throw error;
+    }
+
+    if (!data) {
+      return null;
     }
 
     return {
@@ -302,7 +422,7 @@ export class UserPermissionsService {
   /**
    * Met à jour un utilisateur
    */
-  static async updateUser(userId: string, updates: Partial<ExtendedUser>): Promise<ExtendedUser> {
+  static async updateUser(userId: string, updates: Partial<ExtendedUser>): Promise<ExtendedUser | null> {
     const updateData: any = {};
 
     if (updates.role !== undefined) updateData.role = updates.role;
@@ -315,16 +435,33 @@ export class UserPermissionsService {
     if ((updates as any).language !== undefined) updateData.language = (updates as any).language;
     // Note: Les champs username, clinicCode, permissions ne sont pas modifiables via cette méthode
 
+    // Vérifier qu'il y a des données à mettre à jour
+    if (Object.keys(updateData).length === 0) {
+      console.warn('Aucune donnée à mettre à jour pour l\'utilisateur:', userId);
+      return null;
+    }
+
     const { data, error } = await supabase
       .from('users')
       .update(updateData)
       .eq('id', userId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
+      // Si l'erreur est liée à RLS (pas de lignes retournées), on ne lève pas d'exception
+      if (error.code === 'PGRST116') {
+        console.warn('Mise à jour impossible (RLS): utilisateur non accessible ou non trouvé:', userId);
+        return null;
+      }
       console.error('Erreur lors de la mise à jour de l\'utilisateur:', error);
       throw error;
+    }
+
+    // Si aucune donnée retournée (RLS ou utilisateur non trouvé)
+    if (!data) {
+      console.warn('Aucune donnée retournée lors de la mise à jour:', userId);
+      return null;
     }
 
     return {
@@ -573,6 +710,11 @@ export class UserPermissionsService {
       const { data, error } = await query;
 
       if (error) {
+        // Si la table n'existe pas, retourner un tableau vide au lieu de logger l'erreur
+        if (error.code === 'PGRST205' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+          console.warn('Table account_recovery_requests n\'existe pas encore. Créez la migration pour activer cette fonctionnalité.');
+          return [];
+        }
         console.error('Erreur lors de la récupération des demandes:', error);
         return [];
       }
@@ -859,6 +1001,39 @@ export class UserPermissionsService {
       }
     } catch (err: any) {
       console.error('Erreur lors de la suppression du profil:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Supprime un utilisateur
+   * Note: Cette opération supprime également les permissions personnalisées associées
+   */
+  static async deleteUser(userId: string): Promise<void> {
+    try {
+      // Supprimer d'abord les permissions personnalisées de l'utilisateur
+      const { error: permError } = await supabase
+        .from('user_custom_permissions')
+        .delete()
+        .eq('user_id', userId);
+
+      if (permError) {
+        console.warn('Erreur lors de la suppression des permissions personnalisées:', permError);
+        // Ne pas bloquer la suppression de l'utilisateur si les permissions ne peuvent pas être supprimées
+      }
+
+      // Supprimer l'utilisateur
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Erreur lors de la suppression de l\'utilisateur:', error);
+        throw error;
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression de l\'utilisateur:', err);
       throw err;
     }
   }

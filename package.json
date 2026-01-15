@@ -42,8 +42,10 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:clean": "node scripts/clean-vite-cache.js && vite --force",
     "start": "vite",
     "build": "tsc && vite build",
+    "preview:e2e": "vite build && vite preview --port 4173 --strictPort --host",
     "preview": "vite preview",
     "test": "vitest",
     "license:generate": "node scripts/generate-license.js",

@@ -36,6 +36,7 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
+  Avatar,
 } from '@mui/material';
 import {
   Add,
@@ -50,7 +51,10 @@ import {
   NewReleases,
   FilterList,
   Search,
+  Warning,
+  Person,
 } from '@mui/icons-material';
+import { useSnackbar } from 'notistack';
 import {
   UtilisateurStock,
   ProfilUtilisateur,
@@ -91,14 +95,19 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   currentUserRole,
   onViewUserDetail,
 }) => {
+  const { enqueueSnackbar } = useSnackbar();
   const [openDialogUtilisateur, setOpenDialogUtilisateur] = useState(false);
   const [openDialogProfil, setOpenDialogProfil] = useState(false);
   const [openDialogPermissions, setOpenDialogPermissions] = useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [editingUtilisateur, setEditingUtilisateur] = useState<UtilisateurStock | null>(null);
   const [editingProfil, setEditingProfil] = useState<ProfilUtilisateur | null>(null);
   const [profilForPermissions, setProfilForPermissions] = useState<ProfilUtilisateur | null>(null);
   const [utilisateurForPermissions, setUtilisateurForPermissions] = useState<UtilisateurStock | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UtilisateurStock | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'utilisateurs' | 'profils'>('utilisateurs');
   const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'active' | 'pending' | 'suspended'>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,39 +129,18 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
     actif: true,
   });
 
-  const handleCreateUtilisateur = () => {
-    const nouvelUtilisateur: Omit<UtilisateurStock, 'id'> = {
-      ...formUtilisateur,
-      profilId: '', // Pas de profil requis
-      magasinPrincipal: 'detail', // Valeur par défaut
-      permissions: [], // Les permissions seront assignées selon le rôle
-      dateConnexion: undefined,
-    };
-    
-    onCreateUtilisateur(nouvelUtilisateur);
-    setFormUtilisateur({
-      nom: '',
-      prenom: '',
-      email: '',
-      role: 'pharmacien',
-      profilId: '',
-      magasinPrincipal: 'detail',
-    });
-    setOpenDialogUtilisateur(false);
-  };
-
-  const handleUpdateUtilisateur = () => {
-    if (editingUtilisateur) {
-      const utilisateurModifie: UtilisateurStock = {
-        ...editingUtilisateur,
-        nom: formUtilisateur.nom,
-        prenom: formUtilisateur.prenom,
-        email: formUtilisateur.email,
-        role: formUtilisateur.role,
+  const handleCreateUtilisateur = async () => {
+    try {
+      setSaving(true);
+      const nouvelUtilisateur: Omit<UtilisateurStock, 'id'> = {
+        ...formUtilisateur,
+        profilId: '', // Pas de profil requis
+        magasinPrincipal: 'detail', // Valeur par défaut
+        permissions: [], // Les permissions seront assignées selon le rôle
+        dateConnexion: undefined,
       };
       
-      onUpdateUtilisateur(utilisateurModifie);
-      setEditingUtilisateur(null);
+      await onCreateUtilisateur(nouvelUtilisateur);
       setFormUtilisateur({
         nom: '',
         prenom: '',
@@ -162,6 +150,43 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         magasinPrincipal: 'detail',
       });
       setOpenDialogUtilisateur(false);
+      enqueueSnackbar('Utilisateur créé avec succès', { variant: 'success' });
+    } catch (error: any) {
+      enqueueSnackbar(error.message || 'Erreur lors de la création de l\'utilisateur', { variant: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateUtilisateur = async () => {
+    if (editingUtilisateur) {
+      try {
+        setSaving(true);
+        const utilisateurModifie: UtilisateurStock = {
+          ...editingUtilisateur,
+          nom: formUtilisateur.nom,
+          prenom: formUtilisateur.prenom,
+          email: formUtilisateur.email,
+          role: formUtilisateur.role,
+        };
+        
+        await onUpdateUtilisateur(utilisateurModifie);
+        setEditingUtilisateur(null);
+        setFormUtilisateur({
+          nom: '',
+          prenom: '',
+          email: '',
+          role: 'pharmacien',
+          profilId: '',
+          magasinPrincipal: 'detail',
+        });
+        setOpenDialogUtilisateur(false);
+        enqueueSnackbar('Utilisateur modifié avec succès', { variant: 'success' });
+      } catch (error: any) {
+        enqueueSnackbar(error.message || 'Erreur lors de la modification de l\'utilisateur', { variant: 'error' });
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -191,26 +216,31 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
       dateModification: new Date(),
     };
     
-    try {
-      await onCreateProfil(nouveauProfil);
-      
-      setFormProfil({
-        nom: '',
-        role: 'pharmacien',
-        permissions: [],
-        magasinsAcces: [],
-        actif: true,
-      });
-      setOpenDialogProfil(false);
-    } catch (error: any) {
-      console.error('Erreur lors de la création du profil:', error);
-      alert('Erreur lors de la création du profil: ' + (error?.message || 'Erreur inconnue'));
-    }
+      try {
+        setSaving(true);
+        await onCreateProfil(nouveauProfil);
+        
+        setFormProfil({
+          nom: '',
+          role: 'pharmacien',
+          permissions: [],
+          magasinsAcces: [],
+          actif: true,
+        });
+        setOpenDialogProfil(false);
+        enqueueSnackbar('Profil créé avec succès', { variant: 'success' });
+      } catch (error: any) {
+        console.error('Erreur lors de la création du profil:', error);
+        enqueueSnackbar('Erreur lors de la création du profil: ' + (error?.message || 'Erreur inconnue'), { variant: 'error' });
+      } finally {
+        setSaving(false);
+      }
   };
 
   const handleUpdateProfil = async () => {
     if (editingProfil) {
       try {
+        setSaving(true);
         const isAdmin = formProfil.role === 'administrateur' || formProfil.role === 'administrateur_clinique';
         
         const profilModifie: ProfilUtilisateur = {
@@ -233,15 +263,21 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           actif: true,
         });
         setOpenDialogProfil(false);
+        enqueueSnackbar('Profil modifié avec succès', { variant: 'success' });
       } catch (error: any) {
         console.error('Erreur lors de la mise à jour du profil:', error);
-        alert('Erreur lors de la mise à jour du profil: ' + (error?.message || 'Erreur inconnue'));
+        enqueueSnackbar('Erreur lors de la mise à jour du profil: ' + (error?.message || 'Erreur inconnue'), { variant: 'error' });
+      } finally {
+        setSaving(false);
       }
     }
   };
 
   const handleOpenPermissionsDialog = async (utilisateur: UtilisateurStock) => {
+    // Ouvrir immédiatement le dialogue pour un meilleur UX
+    setOpenDialogPermissions(true);
     setLoadingPermissions(true);
+    
     try {
       let permissions: ModulePermission[] = [];
       
@@ -253,7 +289,14 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         permissions = await UserPermissionsService.getCustomProfilePermissions(utilisateur.id);
       } else {
         // C'est un utilisateur réel, utiliser getUserPermissions
-        permissions = await UserPermissionsService.getUserPermissions(utilisateur.id);
+        try {
+          permissions = await UserPermissionsService.getUserPermissions(utilisateur.id);
+        } catch (permError: any) {
+          console.error('Erreur lors de la récupération des permissions utilisateur:', permError);
+          // En cas d'erreur, utiliser les permissions vides plutôt que de bloquer
+          permissions = [];
+          enqueueSnackbar('Impossible de charger les permissions. Utilisation des permissions par défaut.', { variant: 'warning' });
+        }
       }
       
       // Créer un profil temporaire pour le composant GestionPermissionsModules
@@ -272,46 +315,62 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
       
       setProfilForPermissions(profilTemp);
       setUtilisateurForPermissions(isCustomProfile ? null : utilisateur); // null si c'est un profil personnalisé
-      setOpenDialogPermissions(true);
     } catch (error: any) {
       console.error('Erreur lors du chargement des permissions:', error);
-      alert('Erreur lors du chargement des permissions: ' + error.message);
+      enqueueSnackbar('Erreur lors du chargement des permissions: ' + (error.message || 'Erreur inconnue'), { variant: 'error' });
+      // Ne pas fermer le dialogue, mais afficher un message d'erreur
+      setProfilForPermissions(null);
+      setUtilisateurForPermissions(null);
     } finally {
       setLoadingPermissions(false);
     }
   };
 
   const handleSavePermissions = async (modulePermissions: ModulePermission[]) => {
+    console.log('handleSavePermissions appelé avec:', modulePermissions);
+    
     if (utilisateurForPermissions) {
       // C'est un utilisateur réel
       try {
+        setSaving(true);
+        console.log('Sauvegarde des permissions pour utilisateur:', utilisateurForPermissions.id);
+        
         // Sauvegarder les permissions dans la base
         await UserPermissionsService.updateUserPermissions(
           utilisateurForPermissions.id,
           modulePermissions
         );
         
-        // Mettre à jour l'utilisateur localement
-        const utilisateurModifie: UtilisateurStock = {
-          ...utilisateurForPermissions,
-          modulePermissions,
-        };
-        onUpdateUtilisateur(utilisateurModifie);
+        console.log('Permissions sauvegardées avec succès pour utilisateur:', utilisateurForPermissions.id);
+        
+        // Note: on ne met pas à jour l'utilisateur via onUpdateUtilisateur car:
+        // 1. Les permissions sont déjà sauvegardées dans user_custom_permissions
+        // 2. La table users n'est pas modifiée pour les permissions
+        // 3. Cela évite l'erreur RLS sur la mise à jour de users
         
         setOpenDialogPermissions(false);
         setProfilForPermissions(null);
         setUtilisateurForPermissions(null);
+        enqueueSnackbar('Permissions mises à jour avec succès', { variant: 'success' });
       } catch (error: any) {
         console.error('Erreur lors de la sauvegarde des permissions:', error);
-        alert('Erreur lors de la sauvegarde des permissions: ' + error.message);
+        enqueueSnackbar('Erreur lors de la sauvegarde des permissions: ' + (error.message || 'Erreur inconnue'), { variant: 'error' });
+        // Ne pas fermer le dialogue en cas d'erreur pour permettre à l'utilisateur de réessayer
+      } finally {
+        setSaving(false);
       }
     } else if (profilForPermissions) {
       // C'est un profil personnalisé
       try {
+        setSaving(true);
+        console.log('Sauvegarde des permissions pour profil:', profilForPermissions.id);
+        
         // Sauvegarder les permissions du profil personnalisé dans la base
         await UserPermissionsService.updateCustomProfile(profilForPermissions.id, {
           permissions: modulePermissions,
         });
+        
+        console.log('Permissions sauvegardées avec succès pour profil:', profilForPermissions.id);
         
         // Mettre à jour le profil localement
         const profilModifie: ProfilUtilisateur = {
@@ -324,16 +383,24 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         setOpenDialogPermissions(false);
         setProfilForPermissions(null);
         setUtilisateurForPermissions(null);
+        enqueueSnackbar('Permissions du profil mises à jour avec succès', { variant: 'success' });
       } catch (error: any) {
         console.error('Erreur lors de la sauvegarde des permissions du profil:', error);
-        alert('Erreur lors de la sauvegarde des permissions: ' + error.message);
+        enqueueSnackbar('Erreur lors de la sauvegarde des permissions: ' + (error.message || 'Erreur inconnue'), { variant: 'error' });
+        // Ne pas fermer le dialogue en cas d'erreur pour permettre à l'utilisateur de réessayer
+      } finally {
+        setSaving(false);
       }
+    } else {
+      console.error('Aucun utilisateur ou profil sélectionné pour la sauvegarde des permissions');
+      enqueueSnackbar('Erreur: Aucun utilisateur ou profil sélectionné', { variant: 'error' });
     }
   };
 
   const handleResetToDefaultPermissions = async () => {
     if (utilisateurForPermissions) {
       try {
+        setSaving(true);
         await UserPermissionsService.resetToDefaultPermissions(utilisateurForPermissions.id);
         
         // Recharger les permissions
@@ -353,10 +420,33 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         };
         
         setProfilForPermissions(profilTemp);
-        alert('Permissions réinitialisées aux valeurs par défaut du rôle');
+        enqueueSnackbar('Permissions réinitialisées aux valeurs par défaut du rôle', { variant: 'success' });
       } catch (error: any) {
         console.error('Erreur lors de la réinitialisation:', error);
-        alert('Erreur lors de la réinitialisation: ' + error.message);
+        enqueueSnackbar('Erreur lors de la réinitialisation: ' + error.message, { variant: 'error' });
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
+  const handleDeleteClick = (utilisateur: UtilisateurStock) => {
+    setUserToDelete(utilisateur);
+    setOpenDeleteDialog(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (userToDelete) {
+      try {
+        setDeleting(true);
+        await onDeleteUtilisateur(userToDelete.id);
+        setOpenDeleteDialog(false);
+        setUserToDelete(null);
+        enqueueSnackbar('Utilisateur supprimé avec succès', { variant: 'success' });
+      } catch (error: any) {
+        enqueueSnackbar(error.message || 'Erreur lors de la suppression de l\'utilisateur', { variant: 'error' });
+      } finally {
+        setDeleting(false);
       }
     }
   };
@@ -404,9 +494,9 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
   };
 
   return (
-    <Box>
+    <Box data-testid="gestion-utilisateurs-root">
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
+        <Typography variant="h4" gutterBottom data-testid="gestion-utilisateurs-title">
           Gestion des Utilisateurs et Permissions
         </Typography>
         
@@ -415,12 +505,14 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
             variant={activeTab === 'utilisateurs' ? 'contained' : 'text'}
             onClick={() => setActiveTab('utilisateurs')}
             sx={{ mr: 2 }}
+            data-testid="gestion-utilisateurs-switch-users"
           >
             Utilisateurs ({utilisateurs.length})
           </Button>
           <Button
             variant={activeTab === 'profils' ? 'contained' : 'text'}
             onClick={() => setActiveTab('profils')}
+            data-testid="gestion-utilisateurs-switch-profils"
           >
             Profils ({profils.length})
           </Button>
@@ -439,6 +531,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 variant="contained"
                 startIcon={<Add />}
                 onClick={() => setOpenDialogUtilisateur(true)}
+                data-testid="btn-create-user"
               >
                 Nouvel Utilisateur
               </Button>
@@ -451,6 +544,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 placeholder="Rechercher par nom, email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                inputProps={{ 'data-testid': 'users-search-input' }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -467,6 +561,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                   label="Filtrer par statut"
                   onChange={(e) => setFilterStatus(e.target.value as any)}
                   startAdornment={<FilterList />}
+                  inputProps={{ 'data-testid': 'users-status-filter' }}
                 >
                   <MenuItem value="all">Tous</MenuItem>
                   <MenuItem value="new">Nouveaux (7 jours)</MenuItem>
@@ -478,7 +573,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
             </Box>
 
             <TableContainer component={Paper}>
-              <Table>
+              <Table data-testid="users-table">
                 <TableHead>
                   <TableRow>
                     <TableCell>Nom</TableCell>
@@ -609,16 +704,20 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                         </TableCell>
                         <TableCell align="right">
                           <Box display="flex" gap={0.5} justifyContent="flex-end">
-                            {onViewUserDetail && (
-                              <IconButton
-                                size="small"
-                                color="info"
-                                onClick={() => onViewUserDetail(utilisateur.id)}
-                                title="Voir les détails de l'utilisateur"
-                              >
-                                <Info />
-                              </IconButton>
-                            )}
+                            <IconButton
+                              size="small"
+                              color="info"
+                              onClick={() => {
+                                if (onViewUserDetail) {
+                                  onViewUserDetail(utilisateur.id);
+                                } else {
+                                  enqueueSnackbar('Fonction de détails non disponible', { variant: 'warning' });
+                                }
+                              }}
+                              title="Voir les détails de l'utilisateur"
+                            >
+                              <Info />
+                            </IconButton>
                             <IconButton
                               size="small"
                               color="primary"
@@ -629,16 +728,22 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                             </IconButton>
                             <IconButton
                               size="small"
-                              color="secondary"
                               onClick={() => handleOpenPermissionsDialog(utilisateur)}
                               title="Configurer les permissions"
+                              sx={{ 
+                                color: 'success.main',
+                                '&:hover': {
+                                  backgroundColor: 'success.light',
+                                  color: 'success.dark',
+                                }
+                              }}
                             >
                               <Security />
                             </IconButton>
                             <IconButton
                               size="small"
                               color="error"
-                              onClick={() => onDeleteUtilisateur(utilisateur.id)}
+                              onClick={() => handleDeleteClick(utilisateur)}
                               title="Supprimer l'utilisateur"
                             >
                               <Delete />
@@ -668,6 +773,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 variant="contained"
                 startIcon={<Add />}
                 onClick={() => setOpenDialogProfil(true)}
+                data-testid="btn-create-profile"
               >
                 Nouveau Profil
               </Button>
@@ -853,13 +959,13 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialogUtilisateur(false)}>Annuler</Button>
+          <Button onClick={() => setOpenDialogUtilisateur(false)} disabled={saving}>Annuler</Button>
           <Button
             onClick={editingUtilisateur ? handleUpdateUtilisateur : handleCreateUtilisateur}
             variant="contained"
-            disabled={!formUtilisateur.nom || !formUtilisateur.prenom || !formUtilisateur.email}
+            disabled={!formUtilisateur.nom || !formUtilisateur.prenom || !formUtilisateur.email || saving}
           >
-            {editingUtilisateur ? 'Modifier' : 'Créer'}
+            {saving ? <CircularProgress size={20} /> : editingUtilisateur ? 'Modifier' : 'Créer'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -917,13 +1023,13 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialogProfil(false)}>Annuler</Button>
+          <Button onClick={() => setOpenDialogProfil(false)} disabled={saving}>Annuler</Button>
           <Button
             onClick={editingProfil ? handleUpdateProfil : handleCreateProfil}
             variant="contained"
-            disabled={!formProfil.nom}
+            disabled={!formProfil.nom || saving}
           >
-            {editingProfil ? 'Modifier' : 'Créer'}
+            {saving ? <CircularProgress size={20} /> : editingProfil ? 'Modifier' : 'Créer'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -931,7 +1037,13 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
       {/* Dialog Permissions Modules */}
       <Dialog 
         open={openDialogPermissions} 
-        onClose={() => setOpenDialogPermissions(false)} 
+        onClose={() => {
+          if (!loadingPermissions && !saving) {
+            setOpenDialogPermissions(false);
+            setProfilForPermissions(null);
+            setUtilisateurForPermissions(null);
+          }
+        }}
         maxWidth="lg" 
         fullWidth
         PaperProps={{
@@ -939,12 +1051,15 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
         }}
       >
         <DialogTitle>
-          Configuration des Permissions - {profilForPermissions?.nom}
+          Configuration des Permissions {profilForPermissions ? `- ${profilForPermissions.nom}` : ''}
         </DialogTitle>
         <DialogContent>
           {loadingPermissions ? (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+            <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px" gap={2}>
               <CircularProgress />
+              <Typography variant="body2" color="text.secondary">
+                Chargement des permissions...
+              </Typography>
             </Box>
           ) : profilForPermissions ? (
             <>
@@ -952,6 +1067,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 profil={profilForPermissions}
                 onSave={handleSavePermissions}
                 currentUserRole={currentUserRole}
+                saving={saving}
               />
               {utilisateurForPermissions && (
                 <Box mt={2}>
@@ -960,20 +1076,91 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                     color="secondary"
                     onClick={handleResetToDefaultPermissions}
                     fullWidth
+                    disabled={saving}
                   >
                     Réinitialiser aux permissions par défaut du rôle
                   </Button>
                 </Box>
               )}
             </>
-          ) : null}
+          ) : (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+              <Alert severity="error">
+                Impossible de charger les permissions. Veuillez réessayer.
+              </Alert>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setOpenDialogPermissions(false);
-            setProfilForPermissions(null);
-            setUtilisateurForPermissions(null);
-          }}>Fermer</Button>
+          <Button 
+            onClick={() => {
+              setOpenDialogPermissions(false);
+              setProfilForPermissions(null);
+              setUtilisateurForPermissions(null);
+            }} 
+            disabled={saving || loadingPermissions}
+          >
+            Fermer
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de confirmation de suppression */}
+      <Dialog open={openDeleteDialog} onClose={() => !deleting && setOpenDeleteDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Warning color="error" />
+            <Typography variant="h6" color="error">
+              Confirmer la suppression
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {userToDelete && (
+            <>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  Cette action est irréversible. L'utilisateur et toutes ses données associées seront définitivement supprimés.
+                </Typography>
+              </Alert>
+              <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
+                <Avatar sx={{ bgcolor: 'primary.main', width: 56, height: 56 }}>
+                  {userToDelete.prenom.charAt(0)}{userToDelete.nom.charAt(0)}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6">
+                    {userToDelete.prenom} {userToDelete.nom}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {userToDelete.email}
+                  </Typography>
+                  <Chip
+                    label={getRoleLabel(userToDelete.role)}
+                    color="primary"
+                    size="small"
+                    sx={{ mt: 1 }}
+                  />
+                </Box>
+              </Box>
+              <Typography variant="body1" color="text.secondary">
+                Êtes-vous sûr de vouloir supprimer cet utilisateur ? Cette action ne peut pas être annulée.
+              </Typography>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDeleteDialog(false)} disabled={deleting}>
+            Annuler
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            startIcon={deleting ? <CircularProgress size={16} /> : <Delete />}
+            disabled={deleting}
+          >
+            {deleting ? 'Suppression...' : 'Supprimer définitivement'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

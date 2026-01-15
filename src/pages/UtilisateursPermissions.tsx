@@ -12,28 +12,21 @@ import {
   DialogContent,
   useMediaQuery,
   useTheme,
-  Badge,
 } from '@mui/material';
 import GestionUtilisateursComponent from '../components/stock/GestionUtilisateurs';
 import VueDetailleeUtilisateur from '../components/utilisateurs/VueDetailleeUtilisateur';
 import StatistiquesUtilisateurs from '../components/utilisateurs/StatistiquesUtilisateurs';
 import VisualisationPermissionsProfil from '../components/utilisateurs/VisualisationPermissionsProfil';
-import AccountRecoveryTab from '../components/utilisateurs/AccountRecoveryTab';
 import GestionNotifications from '../components/utilisateurs/GestionNotifications';
 import { UtilisateurStock, ProfilUtilisateur } from '../types/permissions';
 import { User } from '../types/auth';
 import { UserPermissionsService, ExtendedUser } from '../services/userPermissionsService';
 import { getMyClinicId } from '../services/clinicService';
+import { canManageUsers, isAdminRole } from '../utils/permissions';
 
 interface UtilisateursPermissionsProps {
   user?: User | null;
 }
-
-// Helper pour vérifier si un rôle est admin
-const isAdminRole = (role: string | undefined): boolean => {
-  if (!role) return false;
-  return role === 'admin' || role === 'CLINIC_ADMIN' || role === 'ADMIN';
-};
 
 const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user }) => {
   const [utilisateurs, setUtilisateurs] = useState<UtilisateurStock[]>([]);
@@ -44,13 +37,12 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [openUserDetail, setOpenUserDetail] = useState(false);
-  const [pendingRecoveryCount, setPendingRecoveryCount] = useState(0);
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Vérifier si l'utilisateur actuel est administrateur
-  const isAdmin = isAdminRole(user?.role as string);
+  const isAdmin = canManageUsers(user ?? null);
 
   // Charger les utilisateurs depuis Supabase
   useEffect(() => {
@@ -129,28 +121,6 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
     }
   }, [isAdmin]);
 
-  // Charger les compteurs de notifications
-  useEffect(() => {
-    const loadNotificationCounts = async () => {
-      if (!clinicId) return;
-      
-      try {
-        const recoveryCount = await UserPermissionsService.getPendingRecoveryRequestsCount(clinicId);
-        setPendingRecoveryCount(recoveryCount);
-      } catch (err) {
-        console.error('Erreur lors du chargement des notifications:', err);
-      }
-    };
-
-    if (clinicId && isAdmin) {
-      loadNotificationCounts();
-      // Rafraîchir toutes les 30 secondes
-      const interval = setInterval(loadNotificationCounts, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [clinicId, isAdmin]);
-
-
   const handleCreateUtilisateur = async (utilisateur: Omit<UtilisateurStock, 'id'>) => {
     // Cette fonction sera gérée par le composant GestionUtilisateurs
     // qui appellera directement le service
@@ -190,8 +160,34 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
   };
 
   const handleDeleteUtilisateur = async (utilisateurId: string) => {
-    // Cette fonction sera gérée par le composant GestionUtilisateurs
-    console.log('Suppression utilisateur:', utilisateurId);
+    try {
+      await UserPermissionsService.deleteUser(utilisateurId);
+      
+      // Recharger les utilisateurs après suppression
+      if (clinicId) {
+        const users = await UserPermissionsService.getAllUsers(clinicId);
+        const utilisateursStock: UtilisateurStock[] = users.map(u => ({
+          id: u.id,
+          nom: u.nom,
+          prenom: u.prenom,
+          email: u.email,
+          role: u.role as any,
+          profilId: u.id,
+          magasinPrincipal: 'detail' as any,
+          permissions: [],
+          modulePermissions: [],
+          isAdmin: isAdminRole(u.role as string),
+          dateConnexion: u.lastLogin ? new Date(u.lastLogin) : undefined,
+          status: u.status || (u.actif ? 'ACTIVE' : 'SUSPENDED'),
+          isNewUser: u.createdAt ? (Date.now() - new Date(u.createdAt).getTime()) < 7 * 24 * 60 * 60 * 1000 : false,
+        }));
+        setUtilisateurs(utilisateursStock);
+      }
+    } catch (err: any) {
+      console.error('Erreur lors de la suppression de l\'utilisateur:', err);
+      setError(err.message || 'Erreur lors de la suppression de l\'utilisateur');
+      throw err; // Propager l'erreur pour que le composant enfant puisse l'afficher
+    }
   };
 
   const handleCreateProfil = async (profil: Omit<ProfilUtilisateur, 'id'>) => {
@@ -317,9 +313,9 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
   // Si l'utilisateur n'est pas admin, afficher un message d'accès refusé
   if (!isAdmin) {
     return (
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" data-testid="users-permissions-page">
         <Box sx={{ py: 4 }}>
-          <Alert severity="error">
+          <Alert severity="error" data-testid="users-permissions-access-denied">
             Accès refusé. Seul l'administrateur peut accéder à la gestion des utilisateurs et permissions.
           </Alert>
         </Box>
@@ -329,7 +325,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
 
   if (loading) {
     return (
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" data-testid="users-permissions-page">
         <Box sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
           <CircularProgress />
         </Box>
@@ -339,7 +335,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
 
   if (error) {
     return (
-      <Container maxWidth="lg">
+      <Container maxWidth="lg" data-testid="users-permissions-page">
         <Box sx={{ py: 4 }}>
           <Alert severity="error">{error}</Alert>
         </Box>
@@ -379,9 +375,9 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
   };
 
   return (
-    <Container maxWidth="xl">
+    <Container maxWidth="xl" data-testid="users-permissions-page">
       <Box sx={{ py: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
+        <Typography variant="h4" component="h1" gutterBottom data-testid="users-permissions-title">
           Utilisateurs et Permissions
         </Typography>
 
@@ -400,6 +396,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             onChange={(e, newValue) => setActiveTab(newValue)}
             variant={isMobile ? 'scrollable' : 'standard'}
             scrollButtons={isMobile ? 'auto' : false}
+            data-testid="users-permissions-tabs"
             sx={{
               width: '100%',
               '& .MuiTabs-scrollButtons': {
@@ -410,23 +407,8 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             }}
           >
             <Tab 
-              label={
-                <Badge badgeContent={0} color="error" invisible>
-                  {isMobile ? "Utilisateurs" : "Gestion des Utilisateurs"}
-                </Badge>
-              }
-              sx={{ 
-                minWidth: { xs: 'auto', md: 180 },
-                textTransform: 'none',
-                fontSize: { xs: '0.875rem', md: '1rem' },
-              }}
-            />
-            <Tab 
-              label={
-                <Badge badgeContent={pendingRecoveryCount} color="error" invisible={pendingRecoveryCount === 0}>
-                  {isMobile ? "Récupération" : "Récupération de compte"}
-                </Badge>
-              }
+              label={isMobile ? "Utilisateurs" : "Gestion des Utilisateurs"}
+              data-testid="users-permissions-tab-users"
               sx={{ 
                 minWidth: { xs: 'auto', md: 180 },
                 textTransform: 'none',
@@ -435,6 +417,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             />
             <Tab 
               label={isMobile ? "Stats" : "Statistiques et Rapports"}
+              data-testid="users-permissions-tab-stats"
               sx={{ 
                 minWidth: { xs: 'auto', md: 180 },
                 textTransform: 'none',
@@ -443,6 +426,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             />
             <Tab 
               label={isMobile ? "Permissions" : "Visualisation des Permissions"}
+              data-testid="users-permissions-tab-permissions"
               sx={{ 
                 minWidth: { xs: 'auto', md: 180 },
                 textTransform: 'none',
@@ -451,6 +435,7 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
             />
             <Tab 
               label={isMobile ? "Notifications" : "Gestion Notifications"}
+              data-testid="users-permissions-tab-notifications"
               sx={{ 
                 minWidth: { xs: 'auto', md: 180 },
                 textTransform: 'none',
@@ -476,19 +461,15 @@ const UtilisateursPermissions: React.FC<UtilisateursPermissionsProps> = ({ user 
           />
         )}
 
-        {activeTab === 1 && user && (
-          <AccountRecoveryTab user={user} />
-        )}
-
-        {activeTab === 2 && clinicId && (
+        {activeTab === 1 && clinicId && (
           <StatistiquesUtilisateurs clinicId={clinicId} />
         )}
 
-        {activeTab === 3 && (
+        {activeTab === 2 && (
           <VisualisationPermissionsProfil />
         )}
 
-        {activeTab === 4 && user && (
+        {activeTab === 3 && user && (
           <GestionNotifications user={user as ExtendedUser} />
         )}
 

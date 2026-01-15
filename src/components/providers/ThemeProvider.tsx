@@ -47,23 +47,59 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:49',message:'ThemeProvider mounted',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   // Récupérer le thème initial depuis localStorage ou préférences système
   const getInitialTheme = (): ThemeMode => {
-    const storedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      return storedTheme;
-    }
+    try {
+      const storedTheme = localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode | null;
+      if (storedTheme === 'light' || storedTheme === 'dark') {
+        return storedTheme;
+      }
 
-    // Vérifier les préférences système
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
+      // Vérifier les préférences système
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
 
-    return 'light';
+      return 'light';
+    } catch (error: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:63',message:'ERROR: getInitialTheme failed',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      return 'light';
+    }
   };
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
-  const [theme, setTheme] = useState<Theme>(createHealthcareTheme(themeMode));
+  let initialTheme: ThemeMode;
+  try {
+    initialTheme = getInitialTheme();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:72',message:'Initial theme determined',data:{theme:initialTheme},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+  } catch (error: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:76',message:'ERROR: Failed to get initial theme',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    initialTheme = 'light';
+  }
+
+  let themeInstance: Theme;
+  try {
+    themeInstance = createHealthcareTheme(initialTheme);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:84',message:'Theme created successfully',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+  } catch (error: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ThemeProvider.tsx:88',message:'ERROR: Failed to create theme',data:{error:error?.message,stack:error?.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    throw error;
+  }
+
+  const [themeMode, setThemeMode] = useState<ThemeMode>(initialTheme);
+  const [theme, setTheme] = useState<Theme>(themeInstance);
 
   // Appliquer le thème au document (classe CSS)
   const applyThemeToDocument = useCallback((mode: ThemeMode) => {

@@ -317,82 +317,117 @@ export const PatientForm: React.FC<PatientFormProps> = ({
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.nom.trim()) {
+    if (!formData.nom || !formData.nom.trim()) {
       newErrors.nom = 'Le nom est requis';
     }
-    if (!formData.prenom.trim()) {
+    if (!formData.prenom || !formData.prenom.trim()) {
       newErrors.prenom = 'Le prénom est requis';
     }
     if (!formData.date_naissance) {
       newErrors.date_naissance = 'La date de naissance est requise';
     }
-    if (!formData.personne_urgence.trim()) {
+    if (!formData.personne_urgence || !formData.personne_urgence.trim()) {
       newErrors.personne_urgence = 'La personne d\'urgence est requise';
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const isValid = Object.keys(newErrors).length === 0;
+    
+    if (!isValid) {
+      console.warn('❌ Erreurs de validation:', newErrors);
+    }
+    
+    return isValid;
   };
 
   // Gérer la soumission du formulaire
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      try {
-        // Injecter les signes vitaux dans les notes pour conserver l'information
-        const vitalsSummaryParts: string[] = [];
-        if (vitalSigns.temperature) vitalsSummaryParts.push(`Temp: ${vitalSigns.temperature}°C`);
-        if (vitalSigns.systolique || vitalSigns.diastolique) vitalsSummaryParts.push(`TA: ${vitalSigns.systolique || '?'} / ${vitalSigns.diastolique || '?'} mmHg`);
-        if (vitalSigns.frequence_cardiaque) vitalsSummaryParts.push(`FC: ${vitalSigns.frequence_cardiaque} bpm`);
-        if (vitalSigns.frequence_respiratoire) vitalsSummaryParts.push(`FR: ${vitalSigns.frequence_respiratoire} /min`);
-        if (vitalSigns.saturation) vitalsSummaryParts.push(`SpO2: ${vitalSigns.saturation}%`);
-        if (vitalSigns.poids) vitalsSummaryParts.push(`Poids: ${vitalSigns.poids} kg`);
-        if (vitalSigns.taille) vitalsSummaryParts.push(`Taille: ${vitalSigns.taille} cm`);
-        if (vitalSigns.imc) vitalsSummaryParts.push(`IMC: ${vitalSigns.imc}`);
-
-        const vitalsSummary = vitalsSummaryParts.length > 0 ? `\n[Signes Vitaux] ${vitalsSummaryParts.join(' | ')}` : '';
-        
-        // Nettoyer les données avant l'envoi (enlever les champs vides pour éviter les erreurs)
-        // Ajouter les codes téléphone aux numéros
-        const cleanedData: PatientFormData = {
-          ...formData,
-          notes: (formData.notes || '') + vitalsSummary,
-          // Ajouter les codes téléphone aux numéros (seulement si le numéro existe)
-          telephone: formData.telephone?.trim() ? `${phoneCode}${formData.telephone.trim()}` : undefined,
-          telephone_proche: formData.telephone_proche?.trim() ? `${phoneProcheCode}${formData.telephone_proche.trim()}` : undefined,
-          // Nettoyer les champs vides pour les sections facultatives - utiliser null au lieu de undefined pour Supabase
-          accompagnant_nom: formData.accompagnant_nom?.trim() || null,
-          accompagnant_prenoms: formData.accompagnant_prenoms?.trim() || null,
-          accompagnant_filiation: formData.accompagnant_filiation?.trim() || null,
-          accompagnant_telephone: formData.accompagnant_telephone?.trim() ? `${accompagnantPhoneCode}${formData.accompagnant_telephone.trim()}` : null,
-          accompagnant_quartier: formData.accompagnant_quartier?.trim() || null,
-          accompagnant_profession: formData.accompagnant_profession?.trim() || null,
-          personne_prevenir_option: formData.personne_prevenir_option || null,
-          personne_prevenir_nom: formData.personne_prevenir_nom?.trim() || null,
-          personne_prevenir_prenoms: formData.personne_prevenir_prenoms?.trim() || null,
-          personne_prevenir_filiation: formData.personne_prevenir_filiation?.trim() || null,
-          personne_prevenir_telephone: formData.personne_prevenir_telephone?.trim() ? `${personnePrevenirPhoneCode}${formData.personne_prevenir_telephone.trim()}` : null,
-          personne_prevenir_quartier: formData.personne_prevenir_quartier?.trim() || null,
-          personne_prevenir_profession: formData.personne_prevenir_profession?.trim() || null,
-        };
-        
-        // Soumettre le formulaire et obtenir le patient créé/modifié
-        const createdOrUpdatedPatient = await onSubmit(cleanedData);
-        
-        // Télécharger les fichiers après la création/modification
-        const patientId = createdOrUpdatedPatient?.id || patient?.id;
-        if (patientId && uploadedFiles.length > 0) {
-          try {
-            await uploadFiles(patientId);
-          } catch (fileError) {
-            console.error('Erreur lors du téléchargement des fichiers:', fileError);
-            // Ne pas bloquer la création du patient si le téléchargement de fichiers échoue
-          }
+    e.stopPropagation();
+    
+    console.log('🔄 Soumission du formulaire déclenchée');
+    
+    // Valider le formulaire
+    const isValid = validateForm();
+    console.log('✅ Validation:', isValid, 'Erreurs:', errors);
+    
+    if (!isValid) {
+      console.warn('❌ Validation échouée, affichage des erreurs');
+      // Faire défiler vers la première erreur
+      const firstErrorField = Object.keys(errors)[0];
+      if (firstErrorField) {
+        const element = document.querySelector(`[name="${firstErrorField}"]`) || 
+                       document.getElementById(firstErrorField);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          (element as HTMLElement).focus();
         }
-      } catch (error) {
-        console.error('Erreur lors de la soumission:', error);
-        throw error; // Propager l'erreur pour que le parent puisse l'afficher
       }
+      return;
+    }
+    
+    try {
+      console.log('📝 Préparation des données...');
+      
+      // Injecter les signes vitaux dans les notes pour conserver l'information
+      const vitalsSummaryParts: string[] = [];
+      if (vitalSigns.temperature) vitalsSummaryParts.push(`Temp: ${vitalSigns.temperature}°C`);
+      if (vitalSigns.systolique || vitalSigns.diastolique) vitalsSummaryParts.push(`TA: ${vitalSigns.systolique || '?'} / ${vitalSigns.diastolique || '?'} mmHg`);
+      if (vitalSigns.frequence_cardiaque) vitalsSummaryParts.push(`FC: ${vitalSigns.frequence_cardiaque} bpm`);
+      if (vitalSigns.frequence_respiratoire) vitalsSummaryParts.push(`FR: ${vitalSigns.frequence_respiratoire} /min`);
+      if (vitalSigns.saturation) vitalsSummaryParts.push(`SpO2: ${vitalSigns.saturation}%`);
+      if (vitalSigns.poids) vitalsSummaryParts.push(`Poids: ${vitalSigns.poids} kg`);
+      if (vitalSigns.taille) vitalsSummaryParts.push(`Taille: ${vitalSigns.taille} cm`);
+      if (vitalSigns.imc) vitalsSummaryParts.push(`IMC: ${vitalSigns.imc}`);
+
+      const vitalsSummary = vitalsSummaryParts.length > 0 ? `\n[Signes Vitaux] ${vitalsSummaryParts.join(' | ')}` : '';
+      
+      // Nettoyer les données avant l'envoi (enlever les champs vides pour éviter les erreurs)
+      // Ajouter les codes téléphone aux numéros
+      const cleanedData: PatientFormData = {
+        ...formData,
+        notes: (formData.notes || '') + vitalsSummary,
+        // Ajouter les codes téléphone aux numéros (seulement si le numéro existe)
+        telephone: formData.telephone?.trim() ? `${phoneCode}${formData.telephone.trim()}` : undefined,
+        telephone_proche: formData.telephone_proche?.trim() ? `${phoneProcheCode}${formData.telephone_proche.trim()}` : undefined,
+        // Nettoyer les champs vides pour les sections facultatives - utiliser null au lieu de undefined pour Supabase
+        accompagnant_nom: formData.accompagnant_nom?.trim() || null,
+        accompagnant_prenoms: formData.accompagnant_prenoms?.trim() || null,
+        accompagnant_filiation: formData.accompagnant_filiation?.trim() || null,
+        accompagnant_telephone: formData.accompagnant_telephone?.trim() ? `${accompagnantPhoneCode}${formData.accompagnant_telephone.trim()}` : null,
+        accompagnant_quartier: formData.accompagnant_quartier?.trim() || null,
+        accompagnant_profession: formData.accompagnant_profession?.trim() || null,
+        personne_prevenir_option: formData.personne_prevenir_option || null,
+        personne_prevenir_nom: formData.personne_prevenir_nom?.trim() || null,
+        personne_prevenir_prenoms: formData.personne_prevenir_prenoms?.trim() || null,
+        personne_prevenir_filiation: formData.personne_prevenir_filiation?.trim() || null,
+        personne_prevenir_telephone: formData.personne_prevenir_telephone?.trim() ? `${personnePrevenirPhoneCode}${formData.personne_prevenir_telephone.trim()}` : null,
+        personne_prevenir_quartier: formData.personne_prevenir_quartier?.trim() || null,
+        personne_prevenir_profession: formData.personne_prevenir_profession?.trim() || null,
+      };
+      
+      console.log('✅ Données nettoyées, soumission...');
+      
+      // Soumettre le formulaire et obtenir le patient créé/modifié
+      const createdOrUpdatedPatient = await onSubmit(cleanedData);
+      
+      console.log('✅ Patient créé/modifié:', createdOrUpdatedPatient?.id);
+      
+      // Télécharger les fichiers après la création/modification
+      const patientId = createdOrUpdatedPatient?.id || patient?.id;
+      if (patientId && uploadedFiles.length > 0) {
+        try {
+          console.log('📎 Téléchargement des fichiers...');
+          await uploadFiles(patientId);
+          console.log('✅ Fichiers téléchargés');
+        } catch (fileError) {
+          console.error('❌ Erreur lors du téléchargement des fichiers:', fileError);
+          // Ne pas bloquer la création du patient si le téléchargement de fichiers échoue
+        }
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de la soumission:', error);
+      throw error; // Propager l'erreur pour que le parent puisse l'afficher
     }
   };
 
@@ -450,7 +485,12 @@ export const PatientForm: React.FC<PatientFormProps> = ({
   };
 
   return (
-    <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 800, mx: 'auto' }}>
+    <Box 
+      component="form" 
+      onSubmit={handleSubmit} 
+      sx={{ maxWidth: 800, mx: 'auto' }}
+      noValidate
+    >
       <Typography variant="h6" gutterBottom>
         {patient ? 'Modifier le patient' : 'Nouveau patient'}
       </Typography>
@@ -1309,6 +1349,30 @@ export const PatientForm: React.FC<PatientFormProps> = ({
           type="submit"
           variant="contained"
           disabled={loading}
+          onClick={(e) => {
+            // Ne pas empêcher la soumission normale du formulaire
+            // Le formulaire se soumettra normalement via onSubmit={handleSubmit}
+            // On ajoute juste un log pour le débogage
+            console.log('🔘 Bouton Créer cliqué');
+            
+            // Vérifier que le formulaire est valide avant de permettre la soumission
+            const form = e.currentTarget.closest('form');
+            if (form) {
+              // La validation sera faite dans handleSubmit
+              // On ne fait que vérifier visuellement
+              const requiredFields = form.querySelectorAll('[required]');
+              let hasEmptyRequired = false;
+              requiredFields.forEach((field: any) => {
+                if (!field.value || field.value.trim() === '') {
+                  hasEmptyRequired = true;
+                }
+              });
+              
+              if (hasEmptyRequired) {
+                console.warn('⚠️ Certains champs requis sont vides');
+              }
+            }
+          }}
         >
           {loading ? 'Enregistrement...' : (patient ? 'Modifier' : 'Créer')}
         </Button>

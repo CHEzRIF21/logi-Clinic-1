@@ -14,6 +14,12 @@ export default defineConfig({
     open: true,
     host: true,
   },
+  preview: {
+    // Port stable pour E2E (évite le "Port in use, trying another one..." du mode dev)
+    port: 4173,
+    strictPort: true,
+    host: true,
+  },
   optimizeDeps: {
     include: [
       'react', 
