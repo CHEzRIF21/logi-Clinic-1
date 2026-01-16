@@ -13,18 +13,31 @@ import {
   Paper,
   Button,
   Alert,
-  Divider
+  Divider,
+  Chip,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { Description, History, Science, Add } from '@mui/icons-material';
+import { Description, History, Science, Add, Upload, Visibility } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
 import { ConsultationService, LabRequest } from '../../../services/consultationService';
-import { LabRequestWizard } from '../LabRequestWizard';
 import { LaboratoireIntegrationService } from '../../../services/laboratoireIntegrationService';
 import { PatientBilansHistoryDialog } from './PatientBilansHistoryDialog';
+import { EnregistrerBilanAntérieurDialog } from './EnregistrerBilanAntérieurDialog';
+import { supabase } from '../../../services/supabase';
 
 interface WorkflowStep7BilansProps {
   patient: Patient;
   consultationId: string;
+}
+
+interface BilanAntérieur {
+  id: string;
+  date_bilan: string;
+  type_examen: string;
+  tests: string;
+  statut: string;
+  fichier_url?: string;
 }
 
 export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
@@ -32,13 +45,15 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
   consultationId
 }) => {
   const [labRequests, setLabRequests] = useState<LabRequest[]>([]);
+  const [bilansAntérieurs, setBilansAntérieurs] = useState<BilanAntérieur[]>([]);
   const [loading, setLoading] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [bilanDialogOpen, setBilanDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   useEffect(() => {
     loadLabRequests();
-  }, [consultationId]);
+    loadBilansAntérieurs();
+  }, [consultationId, patient.id]);
 
   const loadLabRequests = async () => {
     try {
@@ -52,22 +67,38 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
     }
   };
 
-  const handleCreateLabRequest = async (request: Partial<LabRequest>) => {
+  const loadBilansAntérieurs = async () => {
     try {
-      // Utiliser le service d'intégration pour créer la prescription de labo
-      await LaboratoireIntegrationService.createPrescriptionFromConsultation(
-        consultationId,
-        patient.id,
-        request.type_examen || 'Analyse demandée',
-        request.details || ''
-      );
-      
-      await loadLabRequests();
-      setWizardOpen(false);
+      // Charger les prescriptions de laboratoire du patient (bilans antérieurs)
+      const { data, error } = await supabase
+        .from('lab_prescriptions')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('date_prescription', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const bilans: BilanAntérieur[] = (data || []).map((prescription: any) => ({
+        id: prescription.id,
+        date_bilan: prescription.date_prescription,
+        type_examen: prescription.type_examen,
+        tests: prescription.details || '',
+        statut: prescription.statut,
+        fichier_url: prescription.details?.includes('Fichier joint:') 
+          ? prescription.details.split('Fichier joint:')[1]?.trim()
+          : undefined
+      }));
+
+      setBilansAntérieurs(bilans);
     } catch (error) {
-      console.error('Erreur lors de la création de la demande:', error);
-      throw error;
+      console.error('Erreur lors du chargement des bilans antérieurs:', error);
     }
+  };
+
+  const handleBilanSaved = () => {
+    loadBilansAntérieurs();
+    loadLabRequests();
   };
 
   return (
@@ -94,10 +125,10 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
               <Button
                 variant="contained"
                 startIcon={<Add />}
-                onClick={() => setWizardOpen(true)}
+                onClick={() => setBilanDialogOpen(true)}
                 size="small"
               >
-                Créer une demande
+                Enregistrer un bilan antérieur
               </Button>
               <Button
                 variant="outlined"
@@ -122,7 +153,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {labRequests.length === 0 ? (
+                {bilansAntérieurs.length === 0 && labRequests.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} align="center">
                       <Typography color="text.secondary">
@@ -131,23 +162,78 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  labRequests.slice(0, 5).map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell>
-                        {new Date(request.created_at).toLocaleDateString('fr-FR')}
-                      </TableCell>
-                      <TableCell>{request.type_examen || '-'}</TableCell>
-                      <TableCell>
-                        {Array.isArray(request.tests) ? request.tests.length : 0} test(s)
-                      </TableCell>
-                      <TableCell>{request.statut || '-'}</TableCell>
-                      <TableCell>
-                        <Button size="small" startIcon={<Science />}>
-                          Voir détails
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  <>
+                    {/* Afficher les bilans antérieurs enregistrés */}
+                    {bilansAntérieurs.map((bilan) => (
+                      <TableRow key={bilan.id}>
+                        <TableCell>
+                          {new Date(bilan.date_bilan).toLocaleDateString('fr-FR')}
+                        </TableCell>
+                        <TableCell>{bilan.type_examen}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {bilan.tests}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={bilan.statut}
+                            size="small"
+                            color={
+                              bilan.statut === 'termine' ? 'success' :
+                              bilan.statut === 'preleve' ? 'info' :
+                              bilan.statut === 'prescrit' ? 'warning' : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Box display="flex" gap={1}>
+                            {bilan.fichier_url && (
+                              <Tooltip title="Voir le fichier">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => window.open(bilan.fichier_url, '_blank')}
+                                >
+                                  <Visibility fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                            <Button size="small" startIcon={<Science />}>
+                              Détails
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {/* Afficher les demandes de laboratoire de la consultation actuelle */}
+                    {labRequests.slice(0, 5).map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell>
+                          {new Date(request.created_at || '').toLocaleDateString('fr-FR')}
+                        </TableCell>
+                        <TableCell>{request.type_examen || '-'}</TableCell>
+                        <TableCell>
+                          {Array.isArray(request.tests) ? request.tests.length : 0} test(s)
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={request.statut || '-'}
+                            size="small"
+                            color={
+                              request.statut === 'termine' ? 'success' :
+                              request.statut === 'preleve' ? 'info' :
+                              request.statut === 'prescrit' ? 'warning' : 'default'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button size="small" startIcon={<Science />}>
+                            Voir détails
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </>
                 )}
               </TableBody>
             </Table>
@@ -172,12 +258,11 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
           </Alert>
         </Box>
 
-        <LabRequestWizard
-          open={wizardOpen}
-          onClose={() => setWizardOpen(false)}
-          onSave={handleCreateLabRequest}
-          consultationId={consultationId}
+        <EnregistrerBilanAntérieurDialog
+          open={bilanDialogOpen}
+          onClose={() => setBilanDialogOpen(false)}
           patientId={patient.id}
+          onSave={handleBilanSaved}
         />
 
         <PatientBilansHistoryDialog

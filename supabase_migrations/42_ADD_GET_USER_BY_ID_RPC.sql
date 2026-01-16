@@ -3,10 +3,15 @@
 -- ============================================
 -- Cette fonction permet de récupérer un utilisateur par son ID en bypassant RLS
 -- pour éviter les problèmes d'accès dans VueDetailleeUtilisateur
--- Version corrigée: plus permissive pour les utilisateurs de la même clinique
+-- Version corrigée: accepte p_current_user_id pour gérer les cas où auth.uid() est NULL
 -- ============================================
 
-CREATE OR REPLACE FUNCTION get_user_by_id(p_user_id UUID)
+DROP FUNCTION IF EXISTS get_user_by_id(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION get_user_by_id(
+  p_user_id UUID,
+  p_current_user_id UUID DEFAULT NULL
+)
 RETURNS TABLE (
   id UUID,
   email VARCHAR(255),
@@ -35,15 +40,27 @@ DECLARE
   v_current_user_role VARCHAR(50);
   v_current_clinic_id UUID;
   v_target_user_clinic_id UUID;
+  v_current_user_id UUID;
 BEGIN
   -- Récupérer auth.uid()
   v_current_auth_uid := auth.uid();
   
-  -- Récupérer les informations de l'utilisateur actuel via auth_user_id
-  IF v_current_auth_uid IS NOT NULL THEN
-    SELECT u.role, u.clinic_id INTO v_current_user_role, v_current_clinic_id
+  -- Déterminer l'ID utilisateur actuel (paramètre ou auth.uid())
+  IF p_current_user_id IS NOT NULL THEN
+    v_current_user_id := p_current_user_id;
+  ELSIF v_current_auth_uid IS NOT NULL THEN
+    -- Récupérer l'ID utilisateur depuis auth_user_id
+    SELECT u.id INTO v_current_user_id
     FROM users u
     WHERE u.auth_user_id = v_current_auth_uid
+    LIMIT 1;
+  END IF;
+  
+  -- Récupérer les informations de l'utilisateur actuel
+  IF v_current_user_id IS NOT NULL THEN
+    SELECT u.role, u.clinic_id INTO v_current_user_role, v_current_clinic_id
+    FROM users u
+    WHERE u.id = v_current_user_id
     LIMIT 1;
   END IF;
   
@@ -57,12 +74,12 @@ BEGIN
   -- 2. Clinic admin peut voir les utilisateurs de sa clinique
   -- 3. Staff de la même clinique peut voir les autres utilisateurs de la clinique
   -- 4. Un utilisateur peut voir son propre profil
+  -- 5. Si aucune vérification ne fonctionne, permettre l'accès si les deux utilisateurs sont dans la même clinique
   IF v_current_user_role = 'SUPER_ADMIN' OR
-     (v_current_user_role IN ('CLINIC_ADMIN', 'admin') AND v_current_clinic_id = v_target_user_clinic_id) OR
+     (v_current_user_role IN ('CLINIC_ADMIN', 'admin', 'ADMIN') AND v_current_clinic_id = v_target_user_clinic_id) OR
      (v_current_clinic_id IS NOT NULL AND v_current_clinic_id = v_target_user_clinic_id) OR
-     (v_current_auth_uid IS NOT NULL AND EXISTS (
-       SELECT 1 FROM users u2 WHERE u2.id = p_user_id AND u2.auth_user_id = v_current_auth_uid
-     ))
+     (v_current_user_id IS NOT NULL AND v_current_user_id = p_user_id) OR
+     (v_current_clinic_id IS NOT NULL AND v_target_user_clinic_id IS NOT NULL AND v_current_clinic_id = v_target_user_clinic_id)
   THEN
     -- Retourner les données de l'utilisateur
     RETURN QUERY
@@ -94,4 +111,4 @@ END;
 $$;
 
 -- Commentaire pour documentation
-COMMENT ON FUNCTION get_user_by_id(UUID) IS 'Récupère un utilisateur par son ID en bypassant RLS. Vérifie les permissions : Super Admin peut voir tous, Clinic Admin peut voir sa clinique, Staff de la même clinique peut voir les autres utilisateurs.';
+COMMENT ON FUNCTION get_user_by_id(UUID, UUID) IS 'Récupère un utilisateur par son ID en bypassant RLS. Vérifie les permissions : Super Admin peut voir tous, Clinic Admin peut voir sa clinique, Staff de la même clinique peut voir les autres utilisateurs. Accepte p_current_user_id pour gérer les cas où auth.uid() est NULL.';

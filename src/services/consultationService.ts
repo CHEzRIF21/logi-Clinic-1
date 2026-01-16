@@ -328,9 +328,33 @@ export class ConsultationService {
   }
 
   /**
+   * Récupérer les dernières constantes médicales du patient depuis les consultations précédentes
+   */
+  static async getPatientLatestConstantes(patientId: string): Promise<ConsultationConstantes | null> {
+    try {
+      const { data, error } = await supabase
+        .from('consultation_constantes')
+        .select('*')
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        throw error;
+      }
+      return data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des constantes du patient:', error);
+      return null;
+    }
+  }
+
+  /**
    * Sauvegarder les constantes
    */
-  static async saveConstantes(consultationId: string, patientId: string, data: Partial<ConsultationConstantes>, userId: string): Promise<void> {
+  static async saveConstantes(consultationId: string, patientId: string, data: Partial<ConsultationConstantes>, userId: string, syncToPatient: boolean = false): Promise<void> {
     const clinicId = await getMyClinicId();
     
     const { error } = await supabase
@@ -345,6 +369,10 @@ export class ConsultationService {
       }, { onConflict: 'consult_id' });
 
     if (error) throw error;
+
+    // Si syncToPatient est activé, on peut mettre à jour une table de constantes du patient
+    // Pour l'instant, on garde juste les constantes dans consultation_constantes
+    // Les dernières constantes seront récupérées via getPatientLatestConstantes
   }
 
   /**

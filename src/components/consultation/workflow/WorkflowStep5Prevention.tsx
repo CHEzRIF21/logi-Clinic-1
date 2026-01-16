@@ -30,10 +30,8 @@ import { Vaccines, BugReport, Add, Warning } from '@mui/icons-material';
 import { Patient } from '../../../services/supabase';
 import { VaccinationService, PatientVaccination, Vaccine, VaccineSchedule } from '../../../services/vaccinationService';
 import { DeparasitageService, Deparasitage } from '../../../services/deparasitageService';
-import { FacturationService } from '../../../services/facturationService';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Checkbox, FormControlLabel } from '@mui/material';
 
 interface WorkflowStep5PreventionProps {
   patient: Patient;
@@ -52,16 +50,16 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
   const [vaccinationDialogOpen, setVaccinationDialogOpen] = useState(false);
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   const [allSchedules, setAllSchedules] = useState<VaccineSchedule[]>([]); // Tous les schedules pour l'affichage
-  const [schedules, setSchedules] = useState<VaccineSchedule[]>([]); // Schedules du vaccin sélectionné dans le formulaire
   const [newVaccination, setNewVaccination] = useState({
-    vaccine_id: '',
+    vaccine_libelle: '', // Nom du vaccin (saisie libre)
     dose_ordre: 1,
     date_administration: new Date().toISOString().split('T')[0],
+    date_rappel: '', // Date de rappel
+    statut: 'valide' as 'valide' | 'annule',
     lieu: '',
     numero_lot: '',
     vaccinateur: ''
   });
-  const [creerFacture, setCreerFacture] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -82,29 +80,6 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
       setAllSchedules(flattenedSchedules);
     } catch (error) {
       console.error('Erreur lors du chargement des vaccins:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (newVaccination.vaccine_id) {
-      loadSchedules(newVaccination.vaccine_id);
-    } else {
-      setSchedules([]);
-    }
-  }, [newVaccination.vaccine_id]);
-
-  const loadSchedules = async (vaccineId: string) => {
-    try {
-      const schedulesList = await VaccinationService.getVaccineSchedules(vaccineId);
-      setSchedules(schedulesList);
-      // Si des schedules existent, définir la dose minimale par défaut
-      if (schedulesList.length > 0) {
-        const minDose = Math.min(...schedulesList.map(s => s.dose_ordre));
-        setNewVaccination(prev => ({ ...prev, dose_ordre: minDose }));
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des schedules:', error);
-      setSchedules([]);
     }
   };
 
@@ -161,59 +136,44 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
   };
 
   const handleAddVaccination = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:162',message:'handleAddVaccination entry',data:{vaccineId:newVaccination.vaccine_id,dateAdmin:newVaccination.date_administration,hasVaccineId:!!newVaccination.vaccine_id,hasDateAdmin:!!newVaccination.date_administration,patientId:patient.id},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'E,G'})}).catch(()=>{});
-    // #endregion
-    
-    if (!newVaccination.vaccine_id || !newVaccination.date_administration) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:165',message:'Validation failed - missing fields',data:{hasVaccineId:!!newVaccination.vaccine_id,hasDateAdmin:!!newVaccination.date_administration},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'G'})}).catch(()=>{});
-      // #endregion
-      alert('Veuillez sélectionner un vaccin et une date d\'administration');
+    if (!newVaccination.vaccine_libelle || !newVaccination.date_administration) {
+      alert('Veuillez saisir le nom du vaccin et la date d\'administration');
       return;
     }
 
     setLoading(true);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:169',message:'Starting vaccination record',data:{vaccineId:newVaccination.vaccine_id,doseOrdre:newVaccination.dose_ordre,dateAdmin:newVaccination.date_administration},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
     try {
-      const schedule = schedules.find(s => s.vaccine_id === newVaccination.vaccine_id && s.dose_ordre === newVaccination.dose_ordre);
-      const selectedVaccine = vaccines.find(v => v.id === newVaccination.vaccine_id);
+      // Trouver ou créer le vaccin à partir du libellé
+      const vaccine = await VaccinationService.findOrCreateVaccine(newVaccination.vaccine_libelle);
+      
+      // Recharger la liste des vaccins pour l'affichage
+      await loadVaccines();
       
       // Enregistrer la vaccination
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:174',message:'Before VaccinationService.recordDose',data:{patientId:patient.id,vaccineId:newVaccination.vaccine_id,scheduleId:schedule?.id,doseOrdre:newVaccination.dose_ordre},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       const vaccinationRecorded = await VaccinationService.recordDose({
         patient_id: patient.id,
-        vaccine_id: newVaccination.vaccine_id,
-        schedule_id: schedule?.id || null,
+        vaccine_id: vaccine.id,
+        schedule_id: null, // Pas de schedule pour les enregistrements directs
         dose_ordre: newVaccination.dose_ordre,
         date_administration: newVaccination.date_administration,
         lieu: newVaccination.lieu || undefined,
         numero_lot: newVaccination.numero_lot || undefined,
         vaccinateur: newVaccination.vaccinateur || undefined,
-        statut: 'valide'
+        statut: newVaccination.statut
       } as any);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:185',message:'After VaccinationService.recordDose',data:{hasRecorded:!!vaccinationRecorded,recordedId:vaccinationRecorded?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
 
-      // Planifier un rappel si nécessaire
-      if (schedule?.delai_rappel_jours && schedule.delai_rappel_jours > 0) {
-        const plannedDate = new Date(newVaccination.date_administration);
-        plannedDate.setDate(plannedDate.getDate() + schedule.delai_rappel_jours);
+      // Planifier un rappel si une date de rappel est fournie
+      if (newVaccination.date_rappel) {
         try {
           await VaccinationService.scheduleReminder({
             patient_id: patient.id,
-            vaccine_id: newVaccination.vaccine_id,
-            schedule_id: schedule.id,
+            vaccine_id: vaccine.id,
+            schedule_id: null,
             dose_ordre: newVaccination.dose_ordre + 1,
-            planned_at: plannedDate.toISOString(),
+            planned_at: new Date(newVaccination.date_rappel).toISOString(),
             channel: 'sms',
             statut: 'planifie',
-            details: 'Rappel vaccination automatique'
+            details: 'Rappel vaccination'
           } as any);
         } catch (reminderError) {
           console.warn('Erreur lors de la planification du rappel:', reminderError);
@@ -221,104 +181,29 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
         }
       }
 
-      // Créer une facture si demandé
-      if (creerFacture) {
-        try {
-          // Récupérer le service facturable de type vaccination
-          const servicesVaccination = await FacturationService.getServicesFacturables('vaccination');
-          let serviceFacturable = servicesVaccination.find(s => s.nom.toLowerCase().includes('vaccination') || s.nom.toLowerCase().includes('vaccin'));
-          
-          // Si aucun service spécifique trouvé, utiliser le premier service de vaccination ou créer une ligne générique
-          if (!serviceFacturable && servicesVaccination.length > 0) {
-            serviceFacturable = servicesVaccination[0];
-          }
-
-          const montantVaccination = serviceFacturable?.tarif_base || 0;
-          const libelleVaccination = selectedVaccine 
-            ? `Vaccination - ${selectedVaccine.libelle} - Dose ${newVaccination.dose_ordre}`
-            : `Vaccination - Dose ${newVaccination.dose_ordre}`;
-
-          // Récupérer l'ID de l'utilisateur actuel
-          const userData = localStorage.getItem('user');
-          let caissierId: string | undefined;
-          if (userData) {
-            try {
-              const user = JSON.parse(userData);
-              if (user.id) {
-                caissierId = user.id;
-              }
-            } catch (e) {
-              console.warn('Erreur lors de la récupération de l\'ID utilisateur:', e);
-            }
-          }
-
-          // Créer la facture
-          await FacturationService.createFacture({
-            patient_id: patient.id,
-            lignes: [{
-              service_facturable_id: serviceFacturable?.id,
-              code_service: serviceFacturable?.code || 'VACC',
-              libelle: libelleVaccination,
-              quantite: 1,
-              prix_unitaire: montantVaccination,
-              remise_ligne: 0,
-              montant_ligne: montantVaccination
-            }],
-            type_facture: 'normale',
-            service_origine: 'vaccination',
-            reference_externe: vaccinationRecorded.id,
-            notes: `Facture générée automatiquement pour la vaccination enregistrée le ${format(new Date(), 'dd/MM/yyyy', { locale: fr })}`
-          }, caissierId);
-
-          // Ne pas afficher d'alerte bloquante, juste recharger les données
-        } catch (factureError) {
-          console.error('Erreur lors de la création de la facture:', factureError);
-          // Ne pas bloquer le processus si la facture échoue
-        }
-      }
-
       // Recharger les données et fermer le dialog
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:264',message:'Before loadData',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
       await loadData();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:266',message:'After loadData',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'H'})}).catch(()=>{});
-      // #endregion
       
       // Réinitialiser le formulaire
       setNewVaccination({
-        vaccine_id: '',
+        vaccine_libelle: '',
         dose_ordre: 1,
         date_administration: new Date().toISOString().split('T')[0],
+        date_rappel: '',
+        statut: 'valide',
         lieu: '',
         numero_lot: '',
         vaccinateur: ''
       });
-      setCreerFacture(false);
       
-      // Fermer le dialog après un court délai pour permettre la mise à jour de l'UI
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:279',message:'Before closing dialog',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      setTimeout(() => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:281',message:'Closing dialog',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
-        setVaccinationDialogOpen(false);
-      }, 100);
+      // Fermer le dialog
+      setVaccinationDialogOpen(false);
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:285',message:'Error in handleAddVaccination',data:{errorMessage:error?.message,errorName:error?.name,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       console.error('Erreur lors de l\'enregistrement de la vaccination:', error);
       const errorMessage = error?.message || 'Erreur lors de l\'enregistrement de la vaccination. Veuillez réessayer.';
       alert(errorMessage);
     } finally {
       setLoading(false);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:290',message:'handleAddVaccination finally - loading set to false',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
     }
   };
 
@@ -352,46 +237,18 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
               variant="outlined"
               size="small"
               startIcon={<Add />}
-              onClick={async () => {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:320',message:'Add button clicked',data:{vaccinesCount:vaccines.length,loading,patientId:patient.id},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
-                
+              onClick={() => {
                 // Réinitialiser le formulaire avant d'ouvrir le dialog
                 setNewVaccination({
-                  vaccine_id: '',
+                  vaccine_libelle: '',
                   dose_ordre: 1,
                   date_administration: new Date().toISOString().split('T')[0],
+                  date_rappel: '',
+                  statut: 'valide',
                   lieu: '',
                   numero_lot: '',
                   vaccinateur: ''
                 });
-                setCreerFacture(false);
-                setSchedules([]);
-                
-                // S'assurer que les vaccins sont chargés avant d'ouvrir le dialogue
-                if (vaccines.length === 0) {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:323',message:'Loading vaccines before opening dialog',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'A'})}).catch(()=>{});
-                  // #endregion
-                  try {
-                    await loadVaccines();
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:327',message:'Vaccines loaded successfully',data:{vaccinesCountAfter:vaccines.length},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'A'})}).catch(()=>{});
-                    // #endregion
-                  } catch (error) {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:330',message:'Error loading vaccines',data:{errorMessage:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'A'})}).catch(()=>{});
-                    // #endregion
-                    console.error('Erreur lors du chargement des vaccins:', error);
-                    alert('Erreur lors du chargement de la liste des vaccins. Veuillez réessayer.');
-                    return;
-                  }
-                }
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:336',message:'Opening vaccination dialog',data:{vaccinesCount:vaccines.length},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
                 setVaccinationDialogOpen(true);
               }}
               disabled={loading}
@@ -440,7 +297,9 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
                           ) : '-'}
                         </TableCell>
                         <TableCell>
-                          {isVaccinEnRetard(vacc) ? (
+                          {vacc.statut === 'annule' ? (
+                            <Chip label="Annulé" color="default" size="small" />
+                          ) : isVaccinEnRetard(vacc) ? (
                             <Chip
                               icon={<Warning />}
                               label="En retard"
@@ -448,7 +307,7 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
                               size="small"
                             />
                           ) : (
-                            <Chip label="À jour" color="success" size="small" />
+                            <Chip label="Valide" color="success" size="small" />
                           )}
                         </TableCell>
                       </TableRow>
@@ -555,112 +414,87 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
           <DialogTitle>Ajouter une vaccination</DialogTitle>
           <DialogContent sx={{ flex: 1, overflow: 'auto', minHeight: '300px' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
-              {loading && vaccines.length === 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '200px', gap: 2 }}>
-                  <CircularProgress />
-                  <Typography>Chargement des vaccins...</Typography>
-                </Box>
-              ) : vaccines.length === 0 ? (
-                <Alert severity="warning">
-                  Aucun vaccin disponible. Veuillez d'abord configurer les vaccins dans le module Vaccination.
-                </Alert>
-              ) : (
-                <>
-                  <FormControl fullWidth required>
-                    <InputLabel id="vaccin-select-label">Vaccin</InputLabel>
-                    <Select
-                      labelId="vaccin-select-label"
-                      value={newVaccination.vaccine_id}
-                      label="Vaccin"
-                      onChange={(e) => {
-                        // #region agent log
-                        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:477',message:'Vaccin selected',data:{vaccineId:e.target.value},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'G'})}).catch(()=>{});
-                        // #endregion
-                        setNewVaccination({ ...newVaccination, vaccine_id: e.target.value, dose_ordre: 1 });
-                      }}
-                    >
-                      {vaccines.map((vaccine) => (
-                        <MenuItem key={vaccine.id} value={vaccine.id}>
-                          {vaccine.libelle}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+              <TextField
+                fullWidth
+                label="Vaccin"
+                value={newVaccination.vaccine_libelle}
+                onChange={(e) => setNewVaccination({ ...newVaccination, vaccine_libelle: e.target.value })}
+                placeholder="Ex: BCG, Pentavalent, Polio..."
+                required
+                helperText="Saisissez le nom du vaccin administré"
+              />
 
-                  <FormControl fullWidth required>
-                    <InputLabel id="dose-select-label">Dose</InputLabel>
-                    <Select
-                      labelId="dose-select-label"
-                      value={schedules.length > 0 ? newVaccination.dose_ordre : 1}
-                      label="Dose"
-                      onChange={(e) => setNewVaccination({ ...newVaccination, dose_ordre: parseInt(e.target.value as string, 10) })}
-                      disabled={!newVaccination.vaccine_id}
-                    >
-                      {schedules.length > 0 ? (
-                        schedules.map((schedule) => (
-                          <MenuItem key={schedule.id} value={schedule.dose_ordre}>
-                            Dose {schedule.dose_ordre} - {schedule.libelle_dose}
-                          </MenuItem>
-                        ))
-                      ) : (
-                        [1, 2, 3, 4, 5].map((dose) => (
-                          <MenuItem key={dose} value={dose}>
-                            Dose {dose}
-                          </MenuItem>
-                        ))
-                      )}
-                    </Select>
-                  </FormControl>
+              <FormControl fullWidth required>
+                <InputLabel id="dose-select-label">Dose</InputLabel>
+                <Select
+                  labelId="dose-select-label"
+                  value={newVaccination.dose_ordre}
+                  label="Dose"
+                  onChange={(e) => setNewVaccination({ ...newVaccination, dose_ordre: parseInt(e.target.value as string, 10) })}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((dose) => (
+                    <MenuItem key={dose} value={dose}>
+                      Dose {dose}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-                  <TextField
-                    fullWidth
-                    type="date"
-                    label="Date d'administration"
-                    value={newVaccination.date_administration}
-                    onChange={(e) => {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'WorkflowStep5Prevention.tsx:512',message:'Date changed',data:{dateAdmin:e.target.value},timestamp:Date.now(),sessionId:'debug-session',runId:'vaccination-fix',hypothesisId:'G'})}).catch(()=>{});
-                      // #endregion
-                      setNewVaccination({ ...newVaccination, date_administration: e.target.value });
-                    }}
-                    InputLabelProps={{ shrink: true }}
-                    required
-                  />
+              <TextField
+                fullWidth
+                type="date"
+                label="Date d'administration"
+                value={newVaccination.date_administration}
+                onChange={(e) => setNewVaccination({ ...newVaccination, date_administration: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                required
+              />
 
-                  <TextField
-                    fullWidth
-                    label="Lieu d'injection (optionnel)"
-                    value={newVaccination.lieu}
-                    onChange={(e) => setNewVaccination({ ...newVaccination, lieu: e.target.value })}
-                    placeholder="Ex: Bras gauche, Cuisse..."
-                  />
+              <TextField
+                fullWidth
+                type="date"
+                label="Date de rappel (optionnel)"
+                value={newVaccination.date_rappel}
+                onChange={(e) => setNewVaccination({ ...newVaccination, date_rappel: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                helperText="Date prévue pour le rappel de vaccination"
+              />
 
-                  <TextField
-                    fullWidth
-                    label="Numéro de lot (optionnel)"
-                    value={newVaccination.numero_lot}
-                    onChange={(e) => setNewVaccination({ ...newVaccination, numero_lot: e.target.value })}
-                  />
+              <FormControl fullWidth required>
+                <InputLabel id="statut-select-label">Statut</InputLabel>
+                <Select
+                  labelId="statut-select-label"
+                  value={newVaccination.statut}
+                  label="Statut"
+                  onChange={(e) => setNewVaccination({ ...newVaccination, statut: e.target.value as 'valide' | 'annule' })}
+                >
+                  <MenuItem value="valide">Valide</MenuItem>
+                  <MenuItem value="annule">Annulé</MenuItem>
+                </Select>
+              </FormControl>
 
-                  <TextField
-                    fullWidth
-                    label="Vaccinateur (optionnel)"
-                    value={newVaccination.vaccinateur}
-                    onChange={(e) => setNewVaccination({ ...newVaccination, vaccinateur: e.target.value })}
-                    placeholder="Nom du professionnel ayant administré le vaccin"
-                  />
+              <TextField
+                fullWidth
+                label="Lieu d'injection (optionnel)"
+                value={newVaccination.lieu}
+                onChange={(e) => setNewVaccination({ ...newVaccination, lieu: e.target.value })}
+                placeholder="Ex: Bras gauche, Cuisse..."
+              />
 
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={creerFacture}
-                        onChange={(e) => setCreerFacture(e.target.checked)}
-                      />
-                    }
-                    label="Créer automatiquement une facture dans le module Caisse"
-                  />
-                </>
-              )}
+              <TextField
+                fullWidth
+                label="Numéro de lot (optionnel)"
+                value={newVaccination.numero_lot}
+                onChange={(e) => setNewVaccination({ ...newVaccination, numero_lot: e.target.value })}
+              />
+
+              <TextField
+                fullWidth
+                label="Vaccinateur (optionnel)"
+                value={newVaccination.vaccinateur}
+                onChange={(e) => setNewVaccination({ ...newVaccination, vaccinateur: e.target.value })}
+                placeholder="Nom du professionnel ayant administré le vaccin"
+              />
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -668,7 +502,6 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
               onClick={() => {
                 if (!loading) {
                   setVaccinationDialogOpen(false);
-                  setCreerFacture(false);
                 }
               }}
               disabled={loading}
@@ -678,7 +511,7 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
             <Button
               onClick={handleAddVaccination}
               variant="contained"
-              disabled={vaccines.length === 0 || !newVaccination.vaccine_id || !newVaccination.date_administration || loading}
+              disabled={!newVaccination.vaccine_libelle || !newVaccination.date_administration || loading}
               startIcon={loading ? <CircularProgress size={20} /> : null}
             >
               {loading ? 'Enregistrement...' : 'Ajouter'}

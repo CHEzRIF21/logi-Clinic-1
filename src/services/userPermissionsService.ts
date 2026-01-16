@@ -330,11 +330,26 @@ export class UserPermissionsService {
    * Récupère un utilisateur par son ID
    */
   static async getUserById(userId: string): Promise<ExtendedUser | null> {
+    // Récupérer l'ID utilisateur actuel depuis localStorage
+    const userDataStr = localStorage.getItem('user');
+    let currentUserId: string | null = null;
+    if (userDataStr) {
+      try {
+        const userData = JSON.parse(userDataStr);
+        currentUserId = userData.id || null;
+      } catch (e) {
+        // Ignorer l'erreur de parsing
+      }
+    }
+
     // Essayer d'abord avec la fonction RPC qui bypass RLS
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_by_id', {
-        p_user_id: userId,
-      });
+      const rpcParams: any = { p_user_id: userId };
+      if (currentUserId) {
+        rpcParams.p_current_user_id = currentUserId;
+      }
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_by_id', rpcParams);
 
       if (!rpcError && rpcData && rpcData.length > 0) {
         const user = rpcData[0];
@@ -367,6 +382,8 @@ export class UserPermissionsService {
         console.warn('La fonction RPC get_user_by_id n\'existe pas. Utilisation du fallback direct.');
       } else if (rpcError) {
         console.warn('Erreur RPC get_user_by_id:', rpcError);
+      } else if (!rpcData || rpcData.length === 0) {
+        console.warn('La fonction RPC get_user_by_id n\'a retourné aucun résultat pour userId:', userId);
       }
     } catch (rpcErr: any) {
       console.warn('Erreur lors de l\'appel RPC get_user_by_id:', rpcErr);

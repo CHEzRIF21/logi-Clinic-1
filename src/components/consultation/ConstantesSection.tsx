@@ -22,6 +22,7 @@ import {
   MonitorHeart,
 } from '@mui/icons-material';
 import { ConsultationConstantes } from '../../services/consultationApiService';
+import { ConsultationService } from '../../services/consultationService';
 import { validateConstantes } from './ConstantesValidation';
 
 interface ConstantesSectionProps {
@@ -64,6 +65,7 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
   const [syncToPatient, setSyncToPatient] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Calculer l'IMC automatiquement
   useEffect(() => {
@@ -79,6 +81,42 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
   const handleChange = (field: keyof ConsultationConstantes, value: any) => {
     setConstantes((prev) => ({ ...prev, [field]: value }));
     setSaved(false);
+  };
+
+  const handleSyncFromPatient = async () => {
+    setSyncing(true);
+    try {
+      // Récupérer les dernières constantes du patient depuis les consultations précédentes
+      const latestConstantes = await ConsultationService.getPatientLatestConstantes(patientId);
+      
+      if (latestConstantes) {
+        // Charger les constantes dans le formulaire
+        setConstantes({
+          taille_cm: latestConstantes.taille_cm,
+          poids_kg: latestConstantes.poids_kg,
+          temperature_c: latestConstantes.temperature_c,
+          pouls_bpm: latestConstantes.pouls_bpm,
+          frequence_respiratoire: latestConstantes.frequence_respiratoire,
+          saturation_o2: latestConstantes.saturation_o2,
+          glycemie_mg_dl: latestConstantes.glycemie_mg_dl,
+          ta_bras_gauche_systolique: latestConstantes.ta_bras_gauche_systolique,
+          ta_bras_gauche_diastolique: latestConstantes.ta_bras_gauche_diastolique,
+          ta_bras_droit_systolique: latestConstantes.ta_bras_droit_systolique,
+          ta_bras_droit_diastolique: latestConstantes.ta_bras_droit_diastolique,
+          hauteur_uterine: latestConstantes.hauteur_uterine,
+        });
+        setImc(latestConstantes.imc);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        alert('Aucune constante médicale trouvée dans le dossier patient');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la synchronisation:', error);
+      alert('Erreur lors de la récupération des constantes du dossier patient');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -277,22 +315,33 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
           </Grid>
         </Grid>
 
-        <Box mt={3} display="flex" justifyContent="space-between" alignItems="center">
-          <FormControlLabel
-            control={
-              <Switch
-                checked={syncToPatient}
-                onChange={(e) => setSyncToPatient(e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Synchroniser au dossier patient"
-          />
+        <Box mt={3} display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
+          <Box display="flex" gap={2} alignItems="center">
+            <Button
+              variant="outlined"
+              startIcon={<Sync />}
+              onClick={handleSyncFromPatient}
+              disabled={syncing || saving}
+              size="small"
+            >
+              {syncing ? 'Synchronisation...' : 'Synchroniser au dossier patient'}
+            </Button>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={syncToPatient}
+                  onChange={(e) => setSyncToPatient(e.target.checked)}
+                  color="primary"
+                />
+              }
+              label="Appliquer au dossier patient lors de la sauvegarde"
+            />
+          </Box>
           <Button
             variant="contained"
             startIcon={<Save />}
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || syncing}
             sx={{ minWidth: 150 }}
           >
             {saving ? 'Sauvegarde...' : 'Sauvegarder'}

@@ -4,19 +4,13 @@ import {
   Card,
   CardContent,
   Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Button,
   Alert,
   Divider,
   IconButton,
   Tooltip,
 } from '@mui/material';
-import { History, InsertDriveFile, Mic, Stop } from '@mui/icons-material';
+import { History, Mic, Stop } from '@mui/icons-material';
 import { EditorRichText } from '../EditorRichText';
-import { AnamneseTemplateService } from '../../../services/anamneseTemplateService';
 import { useSpeechRecognition } from '../../../hooks/useSpeechRecognition';
 
 interface WorkflowStep2AnamneseProps {
@@ -31,9 +25,6 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
   const [anamneseText, setAnamneseText] = useState<string>(
     typeof anamnese === 'string' ? anamnese : anamnese?.texte || ''
   );
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
 
   // Hook de reconnaissance vocale
   const {
@@ -45,10 +36,6 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
     resetTranscript,
     isSupported,
   } = useSpeechRecognition('fr-FR', true, true);
-
-  useEffect(() => {
-    loadTemplates();
-  }, []);
 
   useEffect(() => {
     onAnamneseChange({ texte: anamneseText, updated_at: new Date().toISOString() });
@@ -73,30 +60,6 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
     }
   };
 
-  const loadTemplates = async () => {
-    try {
-      setLoading(true);
-      const data = await AnamneseTemplateService.getTemplates();
-      setTemplates(data);
-    } catch (error) {
-      console.error('Erreur lors du chargement des templates:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTemplateSelect = async (templateId: string) => {
-    if (!templateId) return;
-    
-    try {
-      const template = await AnamneseTemplateService.getTemplateById(templateId);
-      setAnamneseText(template.contenu);
-      setSelectedTemplateId(templateId);
-    } catch (error) {
-      console.error('Erreur lors du chargement du template:', error);
-    }
-  };
-
   return (
     <Card>
       <CardContent>
@@ -109,29 +72,8 @@ export const WorkflowStep2Anamnese: React.FC<WorkflowStep2AnamneseProps> = ({
         <Divider sx={{ my: 2 }} />
 
         <Alert severity="info" sx={{ mb: 2 }}>
-          Décrivez l'histoire narrative de la maladie. Vous pouvez utiliser des modèles de texte pour accélérer la saisie.
+          Décrivez l'histoire narrative de la maladie.
         </Alert>
-
-        <Box sx={{ mb: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>Modèles de texte</InputLabel>
-            <Select
-              value={selectedTemplateId}
-              onChange={(e) => handleTemplateSelect(e.target.value)}
-              label="Modèles de texte"
-              startAdornment={<InsertDriveFile />}
-            >
-              <MenuItem value="">
-                <em>Aucun modèle</em>
-              </MenuItem>
-              {templates.map((template) => (
-                <MenuItem key={template.id} value={template.id}>
-                  {template.nom} {template.categorie && `(${template.categorie})`}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
 
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>

@@ -24,7 +24,10 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
   patient,
   onAllergiesChange
 }) => {
-  const [allergies, setAllergies] = useState<string>(patient.allergies || '');
+  const [allergiesDetails, setAllergiesDetails] = useState<string>(patient.allergies || ''); // Champ séparé pour les détails
+  const [allergiesList, setAllergiesList] = useState<string[]>(
+    patient.allergies ? patient.allergies.split(',').map(a => a.trim()).filter(a => a) : []
+  );
   const [newAllergy, setNewAllergy] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -34,29 +37,27 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
   });
 
   useEffect(() => {
-    onAllergiesChange(allergies);
-  }, [allergies, onAllergiesChange]);
+    onAllergiesChange(allergiesDetails);
+  }, [allergiesDetails, onAllergiesChange]);
 
   const handleAddAllergy = () => {
     if (newAllergy.trim()) {
-      const allergiesList = allergies ? allergies.split(',').map(a => a.trim()) : [];
       if (!allergiesList.includes(newAllergy.trim())) {
-        const updated = [...allergiesList, newAllergy.trim()].join(', ');
-        setAllergies(updated);
+        setAllergiesList([...allergiesList, newAllergy.trim()]);
         setNewAllergy('');
       }
     }
   };
 
   const handleRemoveAllergy = (allergyToRemove: string) => {
-    const allergiesList = allergies.split(',').map(a => a.trim()).filter(a => a !== allergyToRemove);
-    setAllergies(allergiesList.join(', '));
+    setAllergiesList(allergiesList.filter(a => a !== allergyToRemove));
   };
 
   const handleSave = async () => {
     try {
       setSaving(true);
-      await PatientService.updatePatient(patient.id, { allergies });
+      // Sauvegarder uniquement le champ "Détails des allergies"
+      await PatientService.updatePatient(patient.id, { allergies: allergiesDetails });
       setSnackbar({
         open: true,
         message: 'Allergies enregistrées avec succès',
@@ -74,12 +75,13 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
     }
   };
 
-  const allergiesList = allergies ? allergies.split(',').map(a => a.trim()).filter(a => a) : [];
+  // Extraire les allergies depuis le champ "Détails des allergies" pour le banner
+  const allergiesFromDetails = allergiesDetails ? allergiesDetails.split(',').map(a => a.trim()).filter(a => a) : [];
 
   return (
     <>
       {/* Banner persistant en haut */}
-      {allergiesList.length > 0 && (
+      {allergiesFromDetails.length > 0 && (
         <Alert
           severity="error"
           icon={<Warning />}
@@ -96,7 +98,7 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
             <Typography variant="h6" component="span">
               ⚠️ ALLERGIES CONNUES :
             </Typography>
-            {allergiesList.map((allergy, index) => (
+            {allergiesFromDetails.map((allergy, index) => (
               <Chip
                 key={index}
                 label={allergy}
@@ -118,10 +120,6 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
             </Typography>
           </Box>
           <Divider sx={{ my: 2 }} />
-
-          <Alert severity="error" sx={{ mb: 2 }}>
-            Les allergies doivent être très visibles et affichées en permanence pendant toute la consultation.
-          </Alert>
 
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" gutterBottom>
@@ -172,8 +170,8 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
             multiline
             rows={3}
             label="Détails des allergies"
-            value={allergies}
-            onChange={(e) => setAllergies(e.target.value)}
+            value={allergiesDetails}
+            onChange={(e) => setAllergiesDetails(e.target.value)}
             placeholder="Liste des allergies séparées par des virgules"
           />
 

@@ -67,27 +67,39 @@ const VueDetailleeUtilisateur: React.FC<VueDetailleeUtilisateurProps> = ({
         setLoading(true);
         setError(null);
 
-        const [userData, userPermissions] = await Promise.all([
-          UserPermissionsService.getUserById(userId),
-          UserPermissionsService.getUserPermissions(userId),
-        ]);
+        // Charger d'abord l'utilisateur
+        const userData = await UserPermissionsService.getUserById(userId);
 
         if (!userData) {
-          setError('Utilisateur non trouvé');
+          console.error('Utilisateur non trouvé pour userId:', userId);
+          setError(`Utilisateur non trouvé (ID: ${userId}). Vérifiez que vous avez les permissions nécessaires.`);
+          setLoading(false);
           return;
+        }
+
+        // Charger les permissions une fois que l'utilisateur est trouvé
+        let userPermissions: ModulePermission[] = [];
+        try {
+          userPermissions = await UserPermissionsService.getUserPermissions(userId);
+        } catch (permErr: any) {
+          console.warn('Erreur lors du chargement des permissions, utilisation de permissions vides:', permErr);
+          // Ne pas bloquer l'affichage si les permissions ne peuvent pas être chargées
+          userPermissions = [];
         }
 
         setUser(userData);
         setPermissions(userPermissions);
       } catch (err: any) {
         console.error('Erreur lors du chargement des données:', err);
-        setError(err.message || 'Erreur lors du chargement des données');
+        setError(err.message || 'Erreur lors du chargement des données de l\'utilisateur');
       } finally {
         setLoading(false);
       }
     };
 
-    loadUserData();
+    if (userId) {
+      loadUserData();
+    }
   }, [userId]);
 
   const handleSavePermissions = async (newPermissions: ModulePermission[]) => {

@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   TextField,
   Grid,
@@ -55,19 +53,18 @@ export const HospitalisationForm: React.FC<HospitalisationFormProps> = ({
   };
 
   return (
-    <Card>
-      <CardContent>
-        <Box display="flex" alignItems="center" gap={2} mb={3}>
-          <LocalHospital color="primary" fontSize="large" />
-          <Box>
-            <Typography variant="h5" gutterBottom>
-              Prescription d'Hospitalisation
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Chambre, durée, prise en charge et actes infirmiers
-            </Typography>
-          </Box>
+    <Box>
+      <Box display="flex" alignItems="center" gap={2} mb={3}>
+        <LocalHospital color="primary" fontSize="large" />
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Prescription d'Hospitalisation
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Chambre, durée, prise en charge et actes infirmiers
+          </Typography>
         </Box>
+      </Box>
 
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
@@ -121,18 +118,18 @@ export const HospitalisationForm: React.FC<HospitalisationFormProps> = ({
 
         <Divider sx={{ my: 3 }} />
 
-        <Box display="flex" justifyContent="flex-end">
-          <Button
-            variant="contained"
-            startIcon={<Save />}
-            onClick={handleSave}
-            disabled={loading}
-          >
-            Enregistrer l'Hospitalisation
-          </Button>
-        </Box>
-      </CardContent>
-    </Card>
+      <Box display="flex" justifyContent="flex-end" mt={3}>
+        <Button
+          variant="contained"
+          startIcon={<Save />}
+          onClick={handleSave}
+          disabled={loading}
+          size="large"
+        >
+          {loading ? 'Enregistrement...' : 'Enregistrer l\'Hospitalisation'}
+        </Button>
+      </Box>
+    </Box>
   );
 };
 

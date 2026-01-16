@@ -61,7 +61,7 @@ export const WorkflowStep8ExamenPhysique: React.FC<WorkflowStep8ExamenPhysiquePr
 
   const handleSaveConstantes = async (data: Partial<ConsultationConstantes>, syncToPatient: boolean) => {
     try {
-      await ConsultationService.saveConstantes(consultationId, patientId, data, userId);
+      await ConsultationService.saveConstantes(consultationId, patientId, data, userId, syncToPatient);
       await loadConstantes();
     } catch (error) {
       console.error('Erreur sauvegarde constantes:', error);

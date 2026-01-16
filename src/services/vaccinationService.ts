@@ -149,6 +149,70 @@ export class VaccinationService {
     }]);
     return { numero_lot: lot.numero_lot, date_peremption: lot.date_expiration } as any;
   }
+  /**
+   * Trouve ou crée un vaccin à partir de son libellé
+   * Utile pour permettre l'enregistrement direct sans configuration préalable
+   */
+  static async findOrCreateVaccine(libelle: string, code?: string): Promise<Vaccine> {
+    if (!libelle || libelle.trim() === '') {
+      throw new Error('Le libellé du vaccin est requis');
+    }
+
+    // Chercher d'abord si le vaccin existe déjà
+    const { data: existing, error: searchError } = await supabase
+      .from('vaccines')
+      .select('*')
+      .ilike('libelle', libelle.trim())
+      .eq('actif', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (searchError) {
+      console.error('Erreur lors de la recherche du vaccin:', searchError);
+    }
+
+    if (existing) {
+      return existing as Vaccine;
+    }
+
+    // Créer un nouveau vaccin si il n'existe pas
+    const vaccineCode = code || `VACC-${libelle.trim().toUpperCase().replace(/\s+/g, '-').substring(0, 30)}`;
+    
+    const { data: newVaccine, error: createError } = await supabase
+      .from('vaccines')
+      .insert([{
+        code: vaccineCode,
+        libelle: libelle.trim(),
+        nb_doses: 1,
+        actif: true,
+      }])
+      .select('*')
+      .single();
+
+    if (createError) {
+      // Si l'erreur est due à un code dupliqué, réessayer avec un code unique
+      if (createError.code === '23505') {
+        const uniqueCode = `${vaccineCode}-${Date.now()}`;
+        const { data: retryVaccine, error: retryError } = await supabase
+          .from('vaccines')
+          .insert([{
+            code: uniqueCode,
+            libelle: libelle.trim(),
+            nb_doses: 1,
+            actif: true,
+          }])
+          .select('*')
+          .single();
+
+        if (retryError) throw retryError;
+        return retryVaccine as Vaccine;
+      }
+      throw createError;
+    }
+
+    return newVaccine as Vaccine;
+  }
+
   static async listVaccines(): Promise<Vaccine[]> {
     const { data, error } = await supabase
       .from('vaccines')
