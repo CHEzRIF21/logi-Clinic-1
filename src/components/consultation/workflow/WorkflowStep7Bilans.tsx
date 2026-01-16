@@ -180,7 +180,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
                             label={bilan.statut}
                             size="small"
                             color={
-                              bilan.statut === 'termine' ? 'success' :
+                              bilan.statut === 'termine' || bilan.statut === 'annule' ? 'success' :
                               bilan.statut === 'preleve' ? 'info' :
                               bilan.statut === 'prescrit' ? 'warning' : 'default'
                             }
@@ -222,7 +222,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
                             color={
                               request.statut === 'termine' ? 'success' :
                               request.statut === 'preleve' ? 'info' :
-                              request.statut === 'prescrit' ? 'warning' : 'default'
+                              request.statut === 'en_attente' ? 'warning' : 'default'
                             }
                           />
                         </TableCell>

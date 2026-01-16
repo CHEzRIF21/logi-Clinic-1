@@ -404,7 +404,6 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
           onClose={() => {
             if (!loading) {
               setVaccinationDialogOpen(false);
-              setCreerFacture(false);
             }
           }} 
           maxWidth="sm" 
