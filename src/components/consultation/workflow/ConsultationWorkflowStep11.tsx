@@ -18,23 +18,18 @@ import {
   TextField,
   Tabs,
   Tab,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Checkbox,
 } from '@mui/material';
 import {
   Receipt,
   CheckCircle,
-  Payment,
   AccountBalance,
+  Payment,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { Consultation } from '../../../services/consultationApiService';
 import { ConsultationBillingService } from '../../../services/consultationBillingService';
 import { ConsultationIntegrationService } from '../../../services/consultationIntegrationService';
-import { FacturationService, Paiement } from '../../../services/facturationService';
-import { supabase } from '../../../services/supabase';
-import { PAYMENT_METHODS, getPaymentMethodConfig } from '../../../constants/paymentMethods';
 
 interface ConsultationWorkflowStep11Props {
   consultation: Consultation;
@@ -51,6 +46,7 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
   onComplete,
   onFacturationComplete,
 }) => {
+  const navigate = useNavigate();
   const [billingSummary, setBillingSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -58,19 +54,13 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
   const [factureId, setFactureId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   
-  // État pour le paiement
-  const [modePaiement, setModePaiement] = useState<Paiement['mode_paiement']>('especes');
-  const [montantPaye, setMontantPaye] = useState<number>(0);
-  const [numeroTransaction, setNumeroTransaction] = useState('');
-  const [banque, setBanque] = useState('');
-  const [numeroCheque, setNumeroCheque] = useState('');
-  const [referencePriseEnCharge, setReferencePriseEnCharge] = useState('');
+  // État pour les remises et mutuelle (sans paiement)
   const [montantCouvertureMutuelle, setMontantCouvertureMutuelle] = useState<number>(0);
   const [avecMutuelle, setAvecMutuelle] = useState(false);
   const [nomMutuelle, setNomMutuelle] = useState('');
   const [remisePourcentage, setRemisePourcentage] = useState<number>(0);
   const [remiseMontant, setRemiseMontant] = useState<number>(0);
-  const [notesPaiement, setNotesPaiement] = useState('');
+  const [referencePriseEnCharge, setReferencePriseEnCharge] = useState('');
 
   const loadBillingSummary = useCallback(async () => {
     setLoading(true);
@@ -88,14 +78,6 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
     loadBillingSummary();
   }, [loadBillingSummary]);
 
-  useEffect(() => {
-    // Initialiser le montant à payer avec le total
-    if (billingSummary) {
-      const totalAvecRemise = billingSummary.total - remiseMontant - (billingSummary.total * remisePourcentage / 100);
-      const totalFinal = totalAvecRemise - montantCouvertureMutuelle;
-      setMontantPaye(Math.max(0, totalFinal));
-    }
-  }, [billingSummary, remisePourcentage, remiseMontant, montantCouvertureMutuelle]);
 
   const handleGenerateBilling = async () => {
     setProcessing(true);
@@ -170,62 +152,24 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
     }
   };
 
-  const handleProcessPayment = async () => {
-    if (!factureId || !billingSummary) {
+  const handleGoToCaisse = () => {
+    if (!factureId) {
       alert('Veuillez d\'abord générer la facture');
       return;
     }
-
-    const totalAvecRemise = billingSummary.total - remiseMontant - (billingSummary.total * remisePourcentage / 100);
-    const montantRestant = totalAvecRemise - montantCouvertureMutuelle - montantPaye;
-
-    if (montantPaye <= 0) {
-      alert('Le montant payé doit être supérieur à 0');
-      return;
-    }
-
-    setProcessing(true);
-    try {
-      const paiement: Paiement = {
-        facture_id: factureId,
-        date_paiement: new Date().toISOString(),
-        montant: montantPaye,
-        mode_paiement: modePaiement,
-        numero_transaction: numeroTransaction || undefined,
-        banque: banque || undefined,
-        numero_cheque: numeroCheque || undefined,
-        reference_prise_en_charge: referencePriseEnCharge || undefined,
-        caissier_id: userId,
-        notes: notesPaiement || undefined,
-      };
-
-      await FacturationService.enregistrerPaiement(paiement);
-
-      // Si prise en charge mutuelle, enregistrer la couverture
-      if (avecMutuelle && montantCouvertureMutuelle > 0) {
-        // TODO: Enregistrer la prise en charge mutuelle dans la table appropriée
-      }
-
-      // Recharger le résumé
-      await loadBillingSummary();
-
-      alert(`Paiement de ${montantPaye.toFixed(2)} € enregistré avec succès${montantRestant > 0 ? `. Montant restant: ${montantRestant.toFixed(2)} €` : ''}`);
-      
-      if (onFacturationComplete) {
-        onFacturationComplete();
-      }
-    } catch (error) {
-      console.error('Erreur lors de l\'enregistrement du paiement:', error);
-      alert('Erreur lors de l\'enregistrement du paiement');
-    } finally {
-      setProcessing(false);
-    }
+    // Rediriger vers la Caisse avec la facture
+    navigate('/caisse', { 
+      state: { 
+        factureId,
+        consultationId: consultation.id,
+        patientId 
+      } 
+    });
   };
 
   const total = billingSummary?.total || 0;
   const totalAvecRemise = total - remiseMontant - (total * remisePourcentage / 100);
   const totalFinal = totalAvecRemise - montantCouvertureMutuelle;
-  const montantRestant = totalFinal - montantPaye;
 
   return (
     <Card>
@@ -245,7 +189,6 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 3 }}>
           <Tab label="Résumé Facturation" icon={<Receipt />} iconPosition="start" />
           <Tab label="Remises & Mutuelle" icon={<AccountBalance />} iconPosition="start" />
-          <Tab label="Paiement" icon={<Payment />} iconPosition="start" />
         </Tabs>
 
         {/* Onglet 1: Résumé Facturation */}
@@ -343,8 +286,18 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
                       Facture complémentaire générée : <strong>{factureId}</strong>
                     </Typography>
                     <Typography variant="body2">
-                      Le patient doit effectuer le paiement pour débloquer les modules (laboratoire, imagerie, pharmacie).
+                      Le patient doit effectuer le paiement à la Caisse pour débloquer les modules (laboratoire, imagerie, pharmacie).
                     </Typography>
+                    <Box mt={2}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<Payment />}
+                        onClick={handleGoToCaisse}
+                      >
+                        Aller à la Caisse pour le paiement
+                      </Button>
+                    </Box>
                   </Alert>
                 )}
 
@@ -488,150 +441,6 @@ export const ConsultationWorkflowStep11: React.FC<ConsultationWorkflowStep11Prop
           </Box>
         )}
 
-        {/* Onglet 3: Paiement */}
-        {activeTab === 2 && (
-          <Box>
-            {!factureId ? (
-              <Alert severity="warning">
-                Veuillez d'abord générer la facture dans l'onglet "Résumé Facturation".
-              </Alert>
-            ) : (
-              <>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  <Typography variant="subtitle2">
-                    Montant total à payer: <strong>{totalFinal.toFixed(2)} €</strong>
-                  </Typography>
-                  {montantRestant > 0 && (
-                    <Typography variant="body2" color="error">
-                      Montant restant après paiement: {montantRestant.toFixed(2)} €
-                    </Typography>
-                  )}
-                </Alert>
-
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          Mode de Paiement
-                        </Typography>
-                        <RadioGroup
-                          value={modePaiement}
-                          onChange={(e) => setModePaiement(e.target.value as Paiement['mode_paiement'])}
-                        >
-                          {PAYMENT_METHODS.map((method) => (
-                            <FormControlLabel
-                              key={method.value}
-                              value={method.value}
-                              control={<Radio />}
-                              label={method.label}
-                            />
-                          ))}
-                        </RadioGroup>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-
-                  <Grid item xs={12} md={6}>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          Détails du Paiement
-                        </Typography>
-                        <Grid container spacing={2}>
-                          <Grid item xs={12}>
-                            <TextField
-                              fullWidth
-                              label="Montant payé (€) *"
-                              type="number"
-                              value={montantPaye}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value) || 0;
-                                setMontantPaye(Math.max(0, val));
-                              }}
-                              inputProps={{ min: 0, step: 0.01 }}
-                            />
-                          </Grid>
-
-                          {(() => {
-                            const methodConfig = getPaymentMethodConfig(modePaiement);
-                            return methodConfig?.requiresTransactionNumber && (
-                              <Grid item xs={12}>
-                                <TextField
-                                  fullWidth
-                                  label="Numéro de transaction"
-                                  value={numeroTransaction}
-                                  onChange={(e) => setNumeroTransaction(e.target.value)}
-                                  required
-                                />
-                              </Grid>
-                            );
-                          })()}
-
-                          {(modePaiement === 'virement' || modePaiement === 'cheque') && (
-                            <Grid item xs={12}>
-                              <TextField
-                                fullWidth
-                                label="Banque"
-                                value={banque}
-                                onChange={(e) => setBanque(e.target.value)}
-                              />
-                            </Grid>
-                          )}
-
-                          {modePaiement === 'cheque' && (
-                            <Grid item xs={12}>
-                              <TextField
-                                fullWidth
-                                label="Numéro de chèque"
-                                value={numeroCheque}
-                                onChange={(e) => setNumeroCheque(e.target.value)}
-                              />
-                            </Grid>
-                          )}
-
-                          {modePaiement === 'prise_en_charge' && (
-                            <Grid item xs={12}>
-                              <TextField
-                                fullWidth
-                                label="Référence prise en charge"
-                                value={referencePriseEnCharge}
-                                onChange={(e) => setReferencePriseEnCharge(e.target.value)}
-                              />
-                            </Grid>
-                          )}
-
-                          <Grid item xs={12}>
-                            <TextField
-                              fullWidth
-                              multiline
-                              rows={3}
-                              label="Notes (optionnel)"
-                              value={notesPaiement}
-                              onChange={(e) => setNotesPaiement(e.target.value)}
-                            />
-                          </Grid>
-                        </Grid>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                </Grid>
-
-                <Box display="flex" justifyContent="flex-end" mt={3}>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    startIcon={<Payment />}
-                    onClick={handleProcessPayment}
-                    disabled={processing || montantPaye <= 0}
-                  >
-                    {processing ? 'Enregistrement...' : `Enregistrer le paiement de ${montantPaye.toFixed(2)} €`}
-                  </Button>
-                </Box>
-              </>
-            )}
-          </Box>
-        )}
       </CardContent>
     </Card>
   );

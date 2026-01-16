@@ -12,6 +12,9 @@ import PatientApiService from '../services/patientApiService';
 import { Patient } from '../services/supabase';
 import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';
+import { PaymentNotification } from '../components/shared/PaymentNotification';
+import { PaymentStatusCell } from '../components/shared/PaymentStatusCell';
+import { PaymentGateWrapper } from '../components/shared/PaymentGateWrapper';
 import LabDashboard from '../components/laboratoire/LabDashboard';
 import LabDashboardModern from '../components/laboratoire/LabDashboardModern';
 import PaillasseNumerique from '../components/laboratoire/PaillasseNumerique';
@@ -404,6 +407,16 @@ const Laboratoire: React.FC = () => {
           {selectedPatient && (
             <Box sx={{ mt: 2 }}>
               <PatientCard patient={selectedPatient} compact />
+              {/* Notification de statut de paiement si consultation_id existe */}
+              {prescriptions.length > 0 && prescriptions[0].consultation_id && (
+                <Box sx={{ mt: 2 }}>
+                  <PaymentNotification
+                    consultationId={prescriptions[0].consultation_id}
+                    patientId={selectedPatient.id}
+                    showNotification={true}
+                  />
+                </Box>
+              )}
             </Box>
           )}
           {error && <Typography color="error" sx={{ mt: 1 }}>{error}</Typography>}
@@ -747,6 +760,10 @@ const Laboratoire: React.FC = () => {
                     )}
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    {/* Badge de statut de paiement */}
+                    {rx.consultation_id && (
+                      <PaymentStatusCell consultationId={rx.consultation_id} size="small" />
+                    )}
                     <Typography 
                       variant="body2" 
                       sx={{ 

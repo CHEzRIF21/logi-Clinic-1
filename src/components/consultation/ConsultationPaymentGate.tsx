@@ -82,6 +82,12 @@ export const ConsultationPaymentGate: React.FC<ConsultationPaymentGateProps> = (
         onAuthorized?.();
       } else {
         onBlocked?.();
+        // Redirection automatique après 3 secondes si bloqué
+        if (status.factureId) {
+          setTimeout(() => {
+            handleGoToCashier();
+          }, 3000);
+        }
       }
     } catch (error) {
       console.error('Erreur vérification statut paiement:', error);
@@ -173,15 +179,21 @@ export const ConsultationPaymentGate: React.FC<ConsultationPaymentGateProps> = (
             </Typography>
           </Box>
 
-          <Alert severity="warning" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             <Typography variant="body1" fontWeight="bold">
+              Paiement requis - Redirection vers la Caisse
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
               {paymentStatus.reason}
             </Typography>
             {paymentStatus.montantRestant && paymentStatus.montantRestant > 0 && (
               <Typography variant="body2" sx={{ mt: 1 }}>
-                Montant restant à payer: {paymentStatus.montantRestant.toLocaleString('fr-FR')} FCFA
+                Montant restant à payer: {paymentStatus.montantRestant.toLocaleString('fr-FR')} XOF
               </Typography>
             )}
+            <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+              Redirection automatique dans 3 secondes...
+            </Typography>
           </Alert>
 
           <Box display="flex" gap={2} flexWrap="wrap">

@@ -9,6 +9,8 @@ import ImagerieApiService from '../services/imagerieApiService';
 import { Patient } from '../services/supabase';
 import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';
+import { PaymentNotification } from '../components/shared/PaymentNotification';
+import { PaymentStatusCell } from '../components/shared/PaymentStatusCell';
 import jsPDF from 'jspdf';
 
 const types: ImagerieType[] = ['Radiographie', 'Scanner', 'IRM', 'Échographie', 'Autre'];
@@ -266,6 +268,16 @@ const Imagerie: React.FC = () => {
                   {selectedPatient && (
                     <Box sx={{ mb: 2 }}>
                       <PatientCard patient={selectedPatient} compact />
+                      {/* Notification de statut de paiement si consultation_id existe */}
+                      {examens.length > 0 && examens[0].consultation_id && (
+                        <Box sx={{ mt: 2 }}>
+                          <PaymentNotification
+                            consultationId={examens[0].consultation_id}
+                            patientId={selectedPatient.id}
+                            showNotification={true}
+                          />
+                        </Box>
+                      )}
                     </Box>
                   )}
                   <FormControl fullWidth sx={{ mb: 2 }}>
@@ -352,7 +364,17 @@ const Imagerie: React.FC = () => {
                 </Box>
                 <List>
                   {examens.map(ex => (
-                    <ListItem key={ex.id} button selected={selectedExamen?.id === ex.id} onClick={() => handleSelectExamen(ex)}>
+                    <ListItem 
+                      key={ex.id} 
+                      button 
+                      selected={selectedExamen?.id === ex.id} 
+                      onClick={() => handleSelectExamen(ex)}
+                      secondaryAction={
+                        ex.consultation_id ? (
+                          <PaymentStatusCell consultationId={ex.consultation_id} size="small" />
+                        ) : null
+                      }
+                    >
                       <ListItemText
                         primary={`${ex.type_examen} • ${new Date(ex.date_examen).toLocaleString()}`}
                         secondary={`Patient: ${ex.patient_id} • Médecin: ${ex.medecin_referent || '-'} • Statut: ${ex.statut}`}

@@ -62,6 +62,7 @@ import { supabase } from '../services/supabase';
 
 const Consultations: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [openPatientSelector, setOpenPatientSelector] = useState(false);
@@ -553,6 +554,23 @@ const Consultations: React.FC = () => {
     
     return (
       <Box sx={{ height: '100vh', overflow: 'auto' }}>
+        {/* Notification de statut de paiement */}
+        <Box sx={{ p: 2, bgcolor: 'background.paper' }}>
+          <PaymentNotification
+            consultationId={currentConsultation.id}
+            patientId={selectedPatient.id}
+            onPaymentConfirmed={() => {
+              setPaymentAuthorized(true);
+              setSnackbar({
+                open: true,
+                message: '✅ Paiement confirmé ! Accès à la consultation autorisé.',
+                severity: 'success',
+              });
+            }}
+            showNotification={true}
+          />
+        </Box>
+
         <ConsultationPaymentGate
           consultationId={currentConsultation.id}
           onAuthorized={() => setPaymentAuthorized(true)}

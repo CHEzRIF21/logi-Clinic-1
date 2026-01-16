@@ -28,6 +28,7 @@ import TableauBordFacturation from '../components/facturation/TableauBordFactura
 import GestionTickets from '../components/facturation/GestionTickets';
 import RapportsFinanciers from '../components/facturation/RapportsFinanciers';
 import ConsultationsEnAttente from '../components/facturation/ConsultationsEnAttente';
+import { PaiementsEnAttente } from '../components/caisse/PaiementsEnAttente';
 import { usePermissions } from '../hooks/usePermissions';
 
 interface TabPanelProps {
@@ -91,6 +92,11 @@ const Caisse: React.FC = () => {
               iconPosition="start"
             />
             <Tab
+              icon={<Payment />}
+              label="Paiements en Attente"
+              iconPosition="start"
+            />
+            <Tab
               icon={<List />}
               label="Tickets en Attente"
               iconPosition="start"
@@ -131,27 +137,31 @@ const Caisse: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={1}>
-          <GestionTickets />
+          <PaiementsEnAttente />
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          <ConsultationsEnAttente />
+          <GestionTickets />
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
-          <CreationFacture />
+          <ConsultationsEnAttente />
         </TabPanel>
 
         <TabPanel value={activeTab} index={4}>
-          <GestionPaiements />
+          <CreationFacture />
         </TabPanel>
 
         <TabPanel value={activeTab} index={5}>
+          <GestionPaiements />
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={6}>
           <JournalCaisse />
         </TabPanel>
 
         {canAccessFinancialReports() && (
-          <TabPanel value={activeTab} index={6}>
+          <TabPanel value={activeTab} index={7}>
             <RapportsFinanciers />
           </TabPanel>
         )}

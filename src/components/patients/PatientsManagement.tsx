@@ -11,11 +11,12 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material';
-import { Add, People, Person, MedicalServices, History } from '@mui/icons-material';
+import { Add, People, Person, MedicalServices, History, Receipt } from '@mui/icons-material';
 import { PatientsTable } from './PatientsTable';
 import { PatientForm } from './PatientForm';
 import { PatientDetailsDialog } from './PatientDetailsDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+import { PatientRegistrationWithBilling } from './PatientRegistrationWithBilling';
 import { Patient, PatientFormData } from '../../services/supabase';
 import { usePatients } from '../../hooks/usePatients';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -41,6 +42,7 @@ export const PatientsManagement: React.FC = () => {
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [openDetailsDialog, setOpenDetailsDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openRegistrationWithBilling, setOpenRegistrationWithBilling] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [snackbar, setSnackbar] = useState<{
@@ -169,14 +171,25 @@ export const PatientsManagement: React.FC = () => {
           </Box>
         </Box>
         {canCreatePatient() && (
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={handleAddPatient}
-            size="medium"
-          >
-            Nouveau Patient
-          </Button>
+          <Box display="flex" gap={2}>
+            <Button
+              variant="outlined"
+              startIcon={<Add />}
+              onClick={handleAddPatient}
+              size="medium"
+            >
+              Nouveau Patient
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Receipt />}
+              onClick={() => setOpenRegistrationWithBilling(true)}
+              size="medium"
+              color="primary"
+            >
+              Enregistrer avec Facturation
+            </Button>
+          </Box>
         )}
       </ToolbarBits>
 
@@ -202,6 +215,30 @@ export const PatientsManagement: React.FC = () => {
         onViewPatient={handleViewPatient}
         onDeletePatient={handleDeletePatient}
       />
+
+      {/* Enregistrement avec facturation (plein écran) */}
+      {openRegistrationWithBilling && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'background.paper',
+            zIndex: 1300,
+            overflow: 'auto',
+          }}
+        >
+          <PatientRegistrationWithBilling
+            onComplete={(patientId, consultationId) => {
+              setOpenRegistrationWithBilling(false);
+              showSnackbar('Patient enregistré et consultation créée avec succès. Redirection vers la Caisse pour le paiement.', 'success');
+            }}
+            onCancel={() => setOpenRegistrationWithBilling(false)}
+          />
+        </Box>
+      )}
 
       {/* Formulaire d'ajout/modification */}
       <Dialog

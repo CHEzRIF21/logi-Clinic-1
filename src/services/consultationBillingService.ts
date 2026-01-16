@@ -203,6 +203,7 @@ export const ConsultationBillingService = {
   /**
    * Crée une facture initiale automatique pour une consultation
    * Utilise la fonction SQL create_initial_invoice_for_consultation
+   * IMPORTANT: La facture est créée avec statut 'en_attente' - le paiement doit être fait à la Caisse
    */
   async createInitialInvoice(
     patientId: string,
@@ -224,6 +225,7 @@ export const ConsultationBillingService = {
       }
 
       // Appeler la fonction SQL pour créer la facture initiale
+      // Cette fonction crée la facture avec statut 'en_attente' (jamais 'payee')
       const { data, error } = await supabase.rpc('create_initial_invoice_for_consultation', {
         p_consultation_id: consultationId,
         p_patient_id: patientId,
@@ -235,6 +237,23 @@ export const ConsultationBillingService = {
       if (error) {
         console.error('Erreur création facture initiale:', error);
         throw error;
+      }
+
+      // Vérifier que la facture créée a bien le statut 'en_attente'
+      if (data) {
+        const { data: facture } = await supabase
+          .from('factures')
+          .select('id, statut')
+          .eq('id', data)
+          .single();
+
+        if (facture && facture.statut !== 'en_attente') {
+          // Forcer le statut à 'en_attente' si ce n'est pas le cas
+          await supabase
+            .from('factures')
+            .update({ statut: 'en_attente' })
+            .eq('id', data);
+        }
       }
 
       return data || null;

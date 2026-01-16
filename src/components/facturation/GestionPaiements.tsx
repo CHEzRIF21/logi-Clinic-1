@@ -38,6 +38,7 @@ import {
 import { FacturationService, Facture, Paiement } from '../../services/facturationService';
 import { useFacturationPermissions } from '../../hooks/useFacturationPermissions';
 import { PAYMENT_METHODS, getPaymentMethodLabel, getPaymentMethodConfig } from '../../constants/paymentMethods';
+import { PaymentProcessor } from '../caisse/PaymentProcessor';
 
 interface GestionPaiementsProps {
   factureId?: string;
@@ -50,13 +51,9 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
   const [factureSelectionnee, setFactureSelectionnee] = useState<Facture | null>(null);
   const [paiements, setPaiements] = useState<Paiement[]>([]);
   const [openPaiementDialog, setOpenPaiementDialog] = useState(false);
+  const [openPaymentProcessor, setOpenPaymentProcessor] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formPaiement, setFormPaiement] = useState<Partial<Paiement>>({
-    montant: 0,
-    mode_paiement: 'especes',
-    date_paiement: new Date().toISOString().split('T')[0]
-  });
 
   useEffect(() => {
     if (permissions.canPaiement) {
@@ -105,59 +102,21 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
     }
   };
 
-  const enregistrerPaiement = async () => {
+  const handleOpenPaymentProcessor = () => {
     if (!factureSelectionnee) {
       setError('Veuillez sélectionner une facture');
       return;
     }
+    setOpenPaymentProcessor(true);
+  };
 
-    if (!formPaiement.montant || formPaiement.montant <= 0) {
-      setError('Veuillez saisir un montant valide');
-      return;
+  const handlePaymentComplete = async (facture: Facture) => {
+    // Recharger les données
+    await chargerFactures();
+    if (factureSelectionnee) {
+      await chargerPaiements(factureSelectionnee.id);
     }
-
-    if (formPaiement.montant > factureSelectionnee.montant_restant) {
-      setError(`Le montant ne peut pas dépasser le reste à payer (${factureSelectionnee.montant_restant.toLocaleString()} FCFA)`);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const userData = localStorage.getItem('user');
-      const caissierId = userData ? JSON.parse(userData).id : undefined;
-
-      await FacturationService.enregistrerPaiement({
-        facture_id: factureSelectionnee.id,
-        montant: formPaiement.montant!,
-        mode_paiement: formPaiement.mode_paiement!,
-        date_paiement: formPaiement.date_paiement || new Date().toISOString(),
-        numero_transaction: formPaiement.numero_transaction,
-        banque: formPaiement.banque,
-        numero_cheque: formPaiement.numero_cheque,
-        reference_prise_en_charge: formPaiement.reference_prise_en_charge,
-        notes: formPaiement.notes
-      }, caissierId);
-
-      // Recharger les données
-      await chargerFactures();
-      if (factureSelectionnee) {
-        await chargerPaiements(factureSelectionnee.id);
-      }
-
-      // Réinitialiser le formulaire
-      setFormPaiement({
-        montant: 0,
-        mode_paiement: 'especes',
-        date_paiement: new Date().toISOString().split('T')[0]
-      });
-      setOpenPaiementDialog(false);
-    } catch (err: any) {
-      setError('Erreur lors de l\'enregistrement du paiement: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+    setOpenPaymentProcessor(false);
   };
 
   const getStatutColor = (statut: string) => {
@@ -186,7 +145,7 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
             <Button
               variant="contained"
               startIcon={<Add />}
-              onClick={() => setOpenPaiementDialog(true)}
+              onClick={handleOpenPaymentProcessor}
               disabled={!factureSelectionnee}
             >
               Enregistrer un Paiement
@@ -317,126 +276,17 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
         </CardContent>
       </Card>
 
-      {/* Dialog pour enregistrer un paiement */}
-      <Dialog open={openPaiementDialog} onClose={() => setOpenPaiementDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Enregistrer un Paiement</DialogTitle>
-        <DialogContent>
-          {factureSelectionnee && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Reste à payer: <strong>{factureSelectionnee.montant_restant.toLocaleString()} FCFA</strong>
-            </Alert>
-          )}
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Montant (FCFA)"
-                type="number"
-                value={formPaiement.montant}
-                onChange={(e) => setFormPaiement({ ...formPaiement, montant: parseFloat(e.target.value) || 0 })}
-                inputProps={{ min: 0, max: factureSelectionnee?.montant_restant }}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>Mode de Paiement</InputLabel>
-                <Select
-                  value={formPaiement.mode_paiement}
-                  onChange={(e) => setFormPaiement({ ...formPaiement, mode_paiement: e.target.value as any })}
-                  label="Mode de Paiement"
-                >
-                  {PAYMENT_METHODS.map((method) => (
-                    <MenuItem key={method.value} value={method.value}>
-                      {method.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            {(() => {
-              const methodConfig = getPaymentMethodConfig(formPaiement.mode_paiement);
-              return methodConfig?.requiresTransactionNumber && (
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Numéro de Transaction"
-                    value={formPaiement.numero_transaction || ''}
-                    onChange={(e) => setFormPaiement({ ...formPaiement, numero_transaction: e.target.value })}
-                    required
-                  />
-                </Grid>
-              );
-            })()}
-            {formPaiement.mode_paiement === 'virement' && (
-              <>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Banque"
-                    value={formPaiement.banque}
-                    onChange={(e) => setFormPaiement({ ...formPaiement, banque: e.target.value })}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="Numéro de Transaction"
-                    value={formPaiement.numero_transaction}
-                    onChange={(e) => setFormPaiement({ ...formPaiement, numero_transaction: e.target.value })}
-                  />
-                </Grid>
-              </>
-            )}
-            {formPaiement.mode_paiement === 'cheque' && (
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Numéro de Chèque"
-                  value={formPaiement.numero_cheque}
-                  onChange={(e) => setFormPaiement({ ...formPaiement, numero_cheque: e.target.value })}
-                />
-              </Grid>
-            )}
-            {formPaiement.mode_paiement === 'prise_en_charge' && (
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Référence Prise en Charge"
-                  value={formPaiement.reference_prise_en_charge}
-                  onChange={(e) => setFormPaiement({ ...formPaiement, reference_prise_en_charge: e.target.value })}
-                />
-              </Grid>
-            )}
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Date de Paiement"
-                type="date"
-                value={formPaiement.date_paiement}
-                onChange={(e) => setFormPaiement({ ...formPaiement, date_paiement: e.target.value })}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Notes"
-                multiline
-                rows={3}
-                value={formPaiement.notes}
-                onChange={(e) => setFormPaiement({ ...formPaiement, notes: e.target.value })}
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenPaiementDialog(false)}>Annuler</Button>
-          <Button onClick={enregistrerPaiement} variant="contained" disabled={loading}>
-            Enregistrer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* PaymentProcessor pour enregistrer un paiement */}
+      {factureSelectionnee && (
+        <PaymentProcessor
+          factureId={factureSelectionnee.id}
+          open={openPaymentProcessor}
+          onClose={() => setOpenPaymentProcessor(false)}
+          onPaymentComplete={handlePaymentComplete}
+          consultationId={factureSelectionnee.consultation_id}
+          patientId={factureSelectionnee.patient_id}
+        />
+      )}
     </Box>
   );
 };

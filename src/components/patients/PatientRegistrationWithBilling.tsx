@@ -22,6 +22,7 @@ import {
   MedicalServices,
   Payment,
   CheckCircle,
+  Receipt,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { PatientForm } from './PatientForm';
@@ -32,13 +33,15 @@ import { ConfigurationService } from '../../services/configurationService';
 import { Patient, PatientFormData } from '../../services/supabase';
 import { supabase } from '../../services/supabase';
 import { getMyClinicId } from '../../services/clinicService';
+import { SelectionActesFacturables } from './SelectionActesFacturables';
+import { Acte, ActesService } from '../../services/actesService';
 
 interface PatientRegistrationWithBillingProps {
   onComplete?: (patientId: string, consultationId: string) => void;
   onCancel?: () => void;
 }
 
-const steps = ['Enregistrement Patient', 'Type Consultation', 'Confirmation'];
+const steps = ['Enregistrement Patient', 'Type Consultation', 'Actes à Facturer', 'Confirmation'];
 
 export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBillingProps> = ({
   onComplete,
@@ -55,6 +58,9 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [medecins, setMedecins] = useState<Array<{ id: string; nom: string; prenom: string }>>([]);
+  const [paymentRequired, setPaymentRequired] = useState<boolean>(false);
+  const [actesSelectionnes, setActesSelectionnes] = useState<Acte[]>([]);
+  const [consultationId, setConsultationId] = useState<string | null>(null);
 
   React.useEffect(() => {
     loadMedecins();
@@ -135,41 +141,93 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
         );
       }
 
-      // Vérifier si le paiement est obligatoire et créer la facture initiale
-      const paymentRequired = await ConfigurationService.isPaymentRequiredBeforeConsultation();
-      
-      if (paymentRequired) {
-        const factureId = await ConsultationBillingService.createInitialInvoice(
-          createdPatient.id,
-          consultation.id,
-          typeConsultation,
-          serviceConsulte || undefined,
-          isUrgent
-        );
+      // Stocker l'ID de la consultation pour l'utiliser plus tard
+      setConsultationId(consultation.id);
 
-        if (factureId) {
-          setActiveStep(2);
-          // Rediriger vers la caisse après 2 secondes
-          setTimeout(() => {
-            navigate('/caisse', { 
-              state: { 
-                consultationId: consultation.id, 
-                factureId,
-                patientId: createdPatient.id 
-              } 
-            });
-          }, 2000);
-        } else {
-          setActiveStep(2);
-        }
-      } else {
-        setActiveStep(2);
-      }
-
-      onComplete?.(createdPatient.id, consultation.id);
+      // Passer à l'étape de sélection des actes
+      setActiveStep(2);
     } catch (err: any) {
       console.error('Erreur création consultation:', err);
       setError('Erreur lors de la création de la consultation: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateInvoiceAndComplete = async () => {
+    if (!createdPatient || actesSelectionnes.length === 0) {
+      setError('Veuillez sélectionner au moins un acte à facturer');
+      return;
+    }
+
+    if (!consultationId) {
+      setError('Consultation non créée. Veuillez revenir en arrière.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Récupérer l'utilisateur actuel
+      const userData = localStorage.getItem('user');
+      const userId = userData ? JSON.parse(userData).id : null;
+      if (!userId) {
+        throw new Error('Utilisateur non connecté');
+      }
+
+      // Vérifier si le paiement est obligatoire
+      const isPaymentRequired = await ConfigurationService.isPaymentRequiredBeforeConsultation();
+      setPaymentRequired(isPaymentRequired);
+
+      if (isPaymentRequired && actesSelectionnes.length > 0) {
+        // Créer un panier d'actes
+        const panier = await ActesService.createPanierActes(
+          createdPatient.id,
+          actesSelectionnes,
+          consultationId
+        );
+
+        // Générer la facture depuis le panier
+        const factureId = await ActesService.genererFactureDepuisPanier(
+          panier,
+          consultationId
+        );
+
+        if (factureId) {
+          // Mettre à jour la consultation avec la facture initiale
+          await ConsultationService.updateConsultation(
+            consultationId,
+            {
+              facture_initial_id: factureId,
+              statut_paiement: 'en_attente',
+            } as any,
+            userId
+          );
+
+          setActiveStep(3);
+          // Redirection automatique vers la Caisse pour le paiement
+          setTimeout(() => {
+            navigate('/caisse', {
+              state: {
+                consultationId,
+                factureId,
+                patientId: createdPatient.id,
+                message: 'Facture générée. Veuillez effectuer le paiement pour accéder à la consultation.',
+              },
+            });
+          }, 2000);
+        } else {
+          setActiveStep(3);
+        }
+      } else {
+        setActiveStep(3);
+      }
+
+      onComplete?.(createdPatient.id, consultationId);
+    } catch (err: any) {
+      console.error('Erreur génération facture:', err);
+      setError('Erreur lors de la génération de la facture: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -294,14 +352,46 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                   disabled={loading || !medecinId}
                   startIcon={loading ? <CircularProgress size={20} /> : <MedicalServices />}
                 >
-                  {loading ? 'Création...' : 'Créer la Consultation'}
+                  {loading ? 'Création...' : 'Continuer vers les Actes'}
                 </Button>
               </Box>
             </Box>
           )}
 
-          {/* Étape 3: Confirmation */}
-          {activeStep === 2 && (
+          {/* Étape 3: Sélection des Actes à Facturer */}
+          {activeStep === 2 && createdPatient && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Actes à Facturer
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Sélectionnez les actes médicaux à inclure dans la facture initiale.
+                Les actes par défaut ont été pré-sélectionnés selon le type de consultation.
+              </Typography>
+
+              <SelectionActesFacturables
+                typeConsultation={typeConsultation}
+                isUrgent={isUrgent}
+                onActesChange={setActesSelectionnes}
+                initialActes={actesSelectionnes}
+              />
+
+              <Box display="flex" justifyContent="space-between" mt={3}>
+                <Button onClick={handleBack}>Retour</Button>
+                <Button
+                  variant="contained"
+                  onClick={handleGenerateInvoiceAndComplete}
+                  disabled={loading || actesSelectionnes.length === 0}
+                  startIcon={loading ? <CircularProgress size={20} /> : <Receipt />}
+                >
+                  {loading ? 'Génération...' : 'Générer la Facture et Finaliser'}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* Étape 4: Confirmation */}
+          {activeStep === 3 && (
             <Box textAlign="center">
               <CheckCircle color="success" sx={{ fontSize: 60, mb: 2 }} />
               <Typography variant="h5" gutterBottom>
@@ -317,8 +407,16 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 )}
               </Typography>
 
-              <Alert severity="info" sx={{ mb: 3 }}>
-                Une facture initiale a été générée. Le patient doit effectuer le paiement à la caisse avant d'accéder à la consultation.
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  ⚠️ Paiement requis avant consultation
+                </Typography>
+                <Typography variant="body2">
+                  Une facture provisoire a été générée automatiquement. 
+                  Le patient doit effectuer le paiement à la Caisse avant d'accéder à la consultation.
+                  <br />
+                  <strong>La consultation sera bloquée jusqu'au paiement.</strong>
+                </Typography>
               </Alert>
 
               <Box display="flex" justifyContent="center" gap={2}>
