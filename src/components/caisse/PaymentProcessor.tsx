@@ -26,8 +26,6 @@ import {
   Paper,
   Chip,
   CircularProgress,
-  Alert,
-  Typography,
 } from '@mui/material';
 import {
   Payment,
@@ -310,7 +308,7 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
                             <TableCell align="right">
                               {ligne.prix_unitaire.toLocaleString()} XOF
                             </TableCell>
-                            <TableCell align="right" fontWeight="bold">
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                               {ligne.montant_ligne.toLocaleString()} XOF
                             </TableCell>
                           </TableRow>
@@ -479,7 +477,7 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
                                 size="small"
                               />
                             </TableCell>
-                            <TableCell align="right" fontWeight="bold">
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                               {paiement.montant.toLocaleString()} XOF
                             </TableCell>
                             <TableCell>

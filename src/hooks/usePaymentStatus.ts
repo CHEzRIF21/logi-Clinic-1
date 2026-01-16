@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ConsultationBillingService } from '../services/consultationBillingService';
 import { supabase } from '../services/supabase';
 
@@ -20,32 +20,7 @@ export const usePaymentStatus = (consultationId: string | null) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!consultationId) {
-      setPaymentStatus(null);
-      setLoading(false);
-      return;
-    }
-
-    checkPaymentStatus();
-    setupRealtimeSubscription();
-
-    return () => {
-      // Nettoyer l'abonnement à la déconnexion
-      const subscription = supabase
-        .channel(`payment-status-${consultationId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'factures' }, () => {
-          checkPaymentStatus();
-        })
-        .subscribe();
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    };
-  }, [consultationId]);
-
-  const checkPaymentStatus = async () => {
+  const checkPaymentStatus = useCallback(async () => {
     if (!consultationId) return;
 
     try {
@@ -80,11 +55,17 @@ export const usePaymentStatus = (consultationId: string | null) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [consultationId]);
 
-  const setupRealtimeSubscription = () => {
-    if (!consultationId) return;
+  useEffect(() => {
+    if (!consultationId) {
+      setPaymentStatus(null);
+      setLoading(false);
+      return;
+    }
 
+    checkPaymentStatus();
+    
     // S'abonner aux changements de factures liées à cette consultation
     const channel = supabase
       .channel(`payment-status-${consultationId}`)
@@ -116,9 +97,10 @@ export const usePaymentStatus = (consultationId: string | null) => {
       .subscribe();
 
     return () => {
+      // Nettoyer l'abonnement à la déconnexion
       channel.unsubscribe();
     };
-  };
+  }, [consultationId, checkPaymentStatus]);
 
   return {
     paymentStatus,

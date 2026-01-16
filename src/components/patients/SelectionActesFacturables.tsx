@@ -334,7 +334,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                         <TableCell align="right">
                           {acte.prix_unitaire.toLocaleString()} XOF
                         </TableCell>
-                        <TableCell align="right" fontWeight="bold">
+                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                           {(acte.prix_unitaire * acte.quantite).toLocaleString()} XOF
                         </TableCell>
                         <TableCell align="center">

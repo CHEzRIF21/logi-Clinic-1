@@ -57,8 +57,9 @@ import PatientCard from '../components/shared/PatientCard';
 import { ConsultationStartDialog } from '../components/consultation/ConsultationStartDialog';
 import { ConsultationWorkflow } from '../components/consultation/ConsultationWorkflow';
 import { ConsultationPaymentGate } from '../components/consultation/ConsultationPaymentGate';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { PaymentNotification } from '../components/shared/PaymentNotification';
 
 const Consultations: React.FC = () => {
   const navigate = useNavigate();

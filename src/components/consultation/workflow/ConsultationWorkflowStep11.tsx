@@ -19,6 +19,7 @@ import {
   Tabs,
   Tab,
   Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Receipt,
