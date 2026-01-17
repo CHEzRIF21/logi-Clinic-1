@@ -85,12 +85,30 @@ export class ActesService {
     }));
 
     // Créer la facture avec statut 'en_attente'
+    console.log('📝 Création facture depuis panier:', {
+      patient_id: panier.patient_id,
+      consultation_id: consultationId,
+      nombre_lignes: lignes.length,
+      montant_total: lignes.reduce((sum, l) => sum + l.montant_ligne, 0),
+      service_origine: 'enregistrement',
+    });
+
     const facture = await FacturationService.createFacture({
       patient_id: panier.patient_id,
       consultation_id: consultationId,
       lignes,
       type_facture: 'normale',
       service_origine: 'enregistrement',
+    });
+
+    console.log('✅ Facture créée:', {
+      id: facture.id,
+      numero_facture: facture.numero_facture,
+      statut: facture.statut,
+      montant_total: facture.montant_total,
+      montant_restant: facture.montant_restant,
+      service_origine: facture.service_origine,
+      consultation_id: facture.consultation_id,
     });
 
     return facture.id;

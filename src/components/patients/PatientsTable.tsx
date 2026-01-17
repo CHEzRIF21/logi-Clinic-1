@@ -38,9 +38,11 @@ import {
   LocationOn,
   Bloodtype,
   Info,
+  Receipt,
 } from '@mui/icons-material';
 import { usePatients } from '../../hooks/usePatients';
 import { Patient } from '../../services/supabase';
+import { QuickActesFacturablesDialog } from './QuickActesFacturablesDialog';
 
 interface PatientsTableProps {
   onEditPatient: (patient: Patient) => void;
@@ -68,6 +70,8 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState('Tous');
   const [statusFilter, setStatusFilter] = useState('Tous');
+  const [openActesDialog, setOpenActesDialog] = useState(false);
+  const [selectedPatientForActes, setSelectedPatientForActes] = useState<Patient | null>(null);
 
   // Gérer la recherche
   const handleSearch = (query: string) => {
@@ -118,6 +122,24 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
   // Obtenir la couleur du statut
   const getStatusColor = (status: string) => {
     return status === 'Nouveau' ? 'warning' : 'success';
+  };
+
+  // Gérer l'ouverture du dialog d'actes facturables
+  const handleOpenActesDialog = (patient: Patient) => {
+    setSelectedPatientForActes(patient);
+    setOpenActesDialog(true);
+  };
+
+  // Gérer la fermeture du dialog
+  const handleCloseActesDialog = () => {
+    setOpenActesDialog(false);
+    setSelectedPatientForActes(null);
+  };
+
+  // Gérer le succès de la création d'actes
+  const handleActesSuccess = () => {
+    // Recharger les patients si nécessaire
+    loadPatients();
   };
 
   if (loading && patients.length === 0) {
@@ -357,6 +379,15 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
                         <Edit />
                       </IconButton>
                     </Tooltip>
+                    <Tooltip title="Actes à Facturer">
+                      <IconButton
+                        size="small"
+                        color="success"
+                        onClick={() => handleOpenActesDialog(patient)}
+                      >
+                        <Receipt />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Supprimer">
                       <IconButton
                         size="small"
@@ -387,6 +418,14 @@ export const PatientsTable: React.FC<PatientsTableProps> = ({
           </Typography>
         </Box>
       )}
+
+      {/* Dialog pour créer rapidement des actes facturables */}
+      <QuickActesFacturablesDialog
+        open={openActesDialog}
+        onClose={handleCloseActesDialog}
+        patient={selectedPatientForActes}
+        onSuccess={handleActesSuccess}
+      />
     </Box>
   );
 };

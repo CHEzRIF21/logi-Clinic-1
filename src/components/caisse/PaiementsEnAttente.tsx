@@ -63,38 +63,83 @@ export const PaiementsEnAttente: React.FC = () => {
         return;
       }
 
-      // Utiliser directement la vue factures_en_attente ou récupérer toutes les factures en attente
-      // Cela inclut toutes les factures avec consultation_id ou sans
+      // Étape 1: Récupérer les IDs des patients de cette clinique
+      const { data: patientsData, error: patientsError } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', clinicId);
+
+      if (patientsError) {
+        console.error('Erreur récupération patients:', patientsError);
+        enqueueSnackbar('Erreur lors de la récupération des patients', { variant: 'error' });
+        return;
+      }
+
+      const patientIds = (patientsData || []).map(p => p.id);
+      
+      if (patientIds.length === 0) {
+        console.log('Aucun patient trouvé pour cette clinique');
+        setFactures([]);
+        return;
+      }
+
+      // Étape 2: Récupérer toutes les factures en attente pour ces patients
+      // Cela inclut toutes les factures : avec consultation_id, service_origine='enregistrement', etc.
       const { data: facturesData, error } = await supabase
         .from('factures')
         .select(`
           *,
           consultations(id, statut_paiement)
         `)
+        .in('patient_id', patientIds)
         .in('statut', ['en_attente', 'partiellement_payee'])
         .gt('montant_restant', 0)
         .order('date_facture', { ascending: false });
 
       if (error) {
         console.error('Erreur récupération factures:', error);
+        console.error('Détails erreur:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        });
+        
         // Fallback : utiliser le service
-        const facturesEnAttente = await FacturationService.getFactures({
-          statut: 'en_attente',
-        });
-        const facturesPartielles = await FacturationService.getFactures({
-          statut: 'partiellement_payee',
-        });
-        const allFactures = [...facturesEnAttente, ...facturesPartielles];
-        allFactures.sort((a, b) => 
-          new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
-        );
-        setFactures(allFactures);
+        try {
+          const facturesEnAttente = await FacturationService.getFactures({
+            statut: 'en_attente',
+          });
+          const facturesPartielles = await FacturationService.getFactures({
+            statut: 'partiellement_payee',
+          });
+          const allFactures = [...facturesEnAttente, ...facturesPartielles];
+          // Filtrer par patientIds
+          const filteredFactures = allFactures.filter(f => patientIds.includes(f.patient_id));
+          filteredFactures.sort((a, b) => 
+            new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
+          );
+          console.log(`✅ Récupération via service: ${filteredFactures.length} factures trouvées`);
+          setFactures(filteredFactures);
+        } catch (fallbackError: any) {
+          console.error('Erreur fallback:', fallbackError);
+          enqueueSnackbar('Erreur lors du chargement des factures', { variant: 'error' });
+        }
       } else {
         // Filtrer et formater les factures
         const allFactures = (facturesData || []).map((f: any) => ({
           ...f,
           consultation_id: f.consultation_id || f.consultations?.[0]?.id,
         }));
+        
+        console.log(`✅ ${allFactures.length} factures récupérées pour clinic_id: ${clinicId}`);
+        console.log('Répartition par service_origine:', 
+          allFactures.reduce((acc: any, f: any) => {
+            const origin = f.service_origine || 'non défini';
+            acc[origin] = (acc[origin] || 0) + 1;
+            return acc;
+          }, {})
+        );
+        
         setFactures(allFactures);
       }
     } catch (error: any) {

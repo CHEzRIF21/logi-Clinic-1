@@ -302,30 +302,55 @@ export class FacturationService {
       statut = 'en_attente';
     }
     
+    // Préparer les données de la facture
+    const factureData = {
+      patient_id: formData.patient_id,
+      date_facture: formData.date_facture || new Date().toISOString(),
+      date_echeance: formData.date_echeance,
+      montant_ht: montantHT - montantRemise,
+      montant_remise: montantRemise,
+      montant_total: montantTotal,
+      montant_paye: montantPayeInitial,
+      montant_restant: montantRestant,
+      statut: statut,
+      type_facture: formData.type_facture || 'normale',
+      service_origine: formData.service_origine || 'autre',
+      reference_externe: formData.reference_externe,
+      consultation_id: formData.consultation_id,
+      caissier_id: caissierId,
+      notes: formData.notes
+    };
+
+    console.log('📝 Création facture dans createFacture:', {
+      patient_id: factureData.patient_id,
+      consultation_id: factureData.consultation_id,
+      service_origine: factureData.service_origine,
+      statut: factureData.statut,
+      montant_total: factureData.montant_total,
+      montant_restant: factureData.montant_restant,
+      nombre_lignes: formData.lignes.length,
+    });
+
     // Créer la facture
     const { data: facture, error: factureError } = await supabase
       .from('factures')
-      .insert([{
-        patient_id: formData.patient_id,
-        date_facture: formData.date_facture || new Date().toISOString(),
-        date_echeance: formData.date_echeance,
-        montant_ht: montantHT - montantRemise,
-        montant_remise: montantRemise,
-        montant_total: montantTotal,
-        montant_paye: montantPayeInitial,
-        montant_restant: montantRestant,
-        statut: statut,
-        type_facture: formData.type_facture || 'normale',
-        service_origine: formData.service_origine || 'autre',
-        reference_externe: formData.reference_externe,
-        consultation_id: formData.consultation_id,
-        caissier_id: caissierId,
-        notes: formData.notes
-      }])
+      .insert([factureData])
       .select()
       .single();
     
-    if (factureError) throw factureError;
+    if (factureError) {
+      console.error('❌ Erreur création facture:', factureError);
+      throw factureError;
+    }
+
+    console.log('✅ Facture créée avec succès:', {
+      id: facture.id,
+      numero_facture: facture.numero_facture,
+      statut: facture.statut,
+      service_origine: facture.service_origine,
+      consultation_id: facture.consultation_id,
+      montant_restant: facture.montant_restant,
+    });
     
     // Créer les lignes de facture
     const lignesAvecFactureId = formData.lignes.map((ligne, index) => ({

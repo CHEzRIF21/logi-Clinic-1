@@ -187,7 +187,7 @@ export const PatientsManagement: React.FC = () => {
               size="medium"
               color="primary"
             >
-              Enregistrer avec Facturation
+              Actes a Facturer
             </Button>
           </Box>
         )}
