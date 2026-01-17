@@ -194,7 +194,7 @@ export class PatientService {
         console.log(`Patient existant trouvé (ID: ${existingPatient.id}), mise à jour au lieu de création`);
         
         // Fusionner les données : garder les valeurs existantes si les nouvelles sont vides/null/undefined
-        const mergedData: Partial<PatientFormData> = {};
+        const mergedData: any = {};
         
         // Pour chaque champ du formulaire, fusionner intelligemment
         Object.keys(patientData).forEach(key => {
@@ -204,9 +204,9 @@ export class PatientService {
           // Si la nouvelle valeur est définie et non vide, l'utiliser
           // Sinon, garder la valeur existante
           if (newValue !== undefined && newValue !== null && newValue !== '') {
-            mergedData[key as keyof PatientFormData] = newValue;
+            mergedData[key] = newValue;
           } else if (existingValue !== undefined && existingValue !== null) {
-            mergedData[key as keyof PatientFormData] = existingValue;
+            mergedData[key] = existingValue;
           }
         });
         

@@ -209,6 +209,7 @@ export interface FactureFormData {
   service_origine?: string;
   reference_externe?: string;
   consultation_id?: string;
+  montant_paye?: number;
   credit_partenaire?: {
     partenaire_id?: string;
     type_partenaire?: string; // ex: 'assurance'
