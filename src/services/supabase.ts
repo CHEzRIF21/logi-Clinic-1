@@ -113,7 +113,7 @@ export interface Patient {
   prise_medicaments_reguliers?: boolean;
   medicaments_reguliers?: string;
   date_enregistrement: string;
-  service_initial?: 'Médecine générale' | 'Maternité' | 'Pédiatrie' | 'Autres';
+  service_initial?: 'Médecine générale' | 'Maternité' | 'Pédiatrie' | 'Laboratoire' | 'Imagerie Médicale' | 'Pharmacie' | 'Vaccination' | 'Autres';
   statut?: 'Nouveau' | 'Connu';
   notes?: string;
   // Accompagnant
@@ -157,7 +157,7 @@ export interface PatientFormData {
   antecedents_medicaux?: string;
   prise_medicaments_reguliers?: boolean;
   medicaments_reguliers?: string;
-  service_initial?: 'Médecine générale' | 'Maternité' | 'Pédiatrie' | 'Autres';
+  service_initial?: 'Médecine générale' | 'Maternité' | 'Pédiatrie' | 'Laboratoire' | 'Imagerie Médicale' | 'Pharmacie' | 'Vaccination' | 'Autres';
   statut?: 'Nouveau' | 'Connu';
   notes?: string;
   // Accompagnant

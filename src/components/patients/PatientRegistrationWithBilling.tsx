@@ -25,23 +25,23 @@ import {
   Receipt,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { PatientForm } from './PatientForm';
 import { PatientService } from '../../services/patientService';
 import { ConsultationService } from '../../services/consultationService';
 import { ConsultationBillingService } from '../../services/consultationBillingService';
 import { ConfigurationService } from '../../services/configurationService';
-import { Patient, PatientFormData } from '../../services/supabase';
+import { Patient } from '../../services/supabase';
 import { supabase } from '../../services/supabase';
 import { getMyClinicId } from '../../services/clinicService';
 import { SelectionActesFacturables } from './SelectionActesFacturables';
 import { Acte, ActesService } from '../../services/actesService';
+import PatientSelector from '../shared/PatientSelector';
 
 interface PatientRegistrationWithBillingProps {
   onComplete?: (patientId: string, consultationId: string) => void;
   onCancel?: () => void;
 }
 
-const steps = ['Enregistrement Patient', 'Type Consultation', 'Actes à Facturer', 'Confirmation'];
+const steps = ['Sélection Patient', 'Type Consultation', 'Actes à Facturer', 'Confirmation'];
 
 export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBillingProps> = ({
   onComplete,
@@ -49,8 +49,8 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
 }) => {
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
-  const [patientData, setPatientData] = useState<PatientFormData | null>(null);
-  const [createdPatient, setCreatedPatient] = useState<Patient | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [openPatientSelector, setOpenPatientSelector] = useState(false);
   const [typeConsultation, setTypeConsultation] = useState<'generale' | 'specialisee' | 'urgence'>('generale');
   const [serviceConsulte, setServiceConsulte] = useState('');
   const [medecinId, setMedecinId] = useState<string>('');
@@ -65,6 +65,13 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   React.useEffect(() => {
     loadMedecins();
   }, []);
+
+  // Ouvrir automatiquement le sélecteur de patient au démarrage
+  React.useEffect(() => {
+    if (activeStep === 0 && !selectedPatient) {
+      setOpenPatientSelector(true);
+    }
+  }, [activeStep, selectedPatient]);
 
   const loadMedecins = async () => {
     try {
@@ -86,27 +93,16 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
     }
   };
 
-  const handlePatientSubmit = async (data: PatientFormData): Promise<Patient> => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const patient = await PatientService.createPatient(data);
-      setCreatedPatient(patient);
-      setPatientData(data);
-      setActiveStep(1);
-      return patient;
-    } catch (err: any) {
-      setError('Erreur lors de la création du patient: ' + err.message);
-      throw err; // Re-throw to satisfy the Promise<Patient> return type
-    } finally {
-      setLoading(false);
-    }
+  const handlePatientSelect = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setOpenPatientSelector(false);
+    setError(null);
+    // Ne pas changer d'étape automatiquement, laisser l'utilisateur cliquer sur "Continuer"
   };
 
   const handleCreateConsultation = async () => {
-    if (!createdPatient || !medecinId) {
-      setError('Patient et médecin sont requis');
+    if (!selectedPatient) {
+      setError('Veuillez sélectionner un patient');
       return;
     }
 
@@ -123,7 +119,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
 
       // Créer la consultation
       const consultation = await ConsultationService.createConsultation(
-        createdPatient.id,
+        selectedPatient.id,
         userId
       );
 
@@ -155,7 +151,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   };
 
   const handleGenerateInvoiceAndComplete = async () => {
-    if (!createdPatient || actesSelectionnes.length === 0) {
+    if (!selectedPatient || actesSelectionnes.length === 0) {
       setError('Veuillez sélectionner au moins un acte à facturer');
       return;
     }
@@ -183,7 +179,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
       if (isPaymentRequired && actesSelectionnes.length > 0) {
         // Créer un panier d'actes
         const panier = await ActesService.createPanierActes(
-          createdPatient.id,
+          selectedPatient.id,
           actesSelectionnes,
           consultationId
         );
@@ -212,7 +208,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
               state: {
                 consultationId,
                 factureId,
-                patientId: createdPatient.id,
+                patientId: selectedPatient.id,
                 message: 'Facture générée. Veuillez effectuer le paiement pour accéder à la consultation.',
               },
             });
@@ -224,7 +220,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
         setActiveStep(3);
       }
 
-      onComplete?.(createdPatient.id, consultationId);
+      onComplete?.(selectedPatient.id, consultationId);
     } catch (err: any) {
       console.error('Erreur génération facture:', err);
       setError('Erreur lors de la génération de la facture: ' + err.message);
@@ -236,9 +232,14 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   const handleBack = () => {
     if (activeStep > 0) {
       setActiveStep(activeStep - 1);
+      setError(null);
     } else {
       onCancel?.();
     }
+  };
+
+  const handleCancel = () => {
+    onCancel?.();
   };
 
   return (
@@ -249,10 +250,10 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
             <Person color="primary" sx={{ fontSize: 40 }} />
             <Box>
               <Typography variant="h4" gutterBottom>
-                Enregistrement Patient avec Consultation
+                Consultation avec Facturation
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Enregistrez un nouveau patient et créez immédiatement une consultation avec facturation
+                Sélectionnez un patient et créez une consultation avec facturation
               </Typography>
             </Box>
           </Box>
@@ -271,23 +272,57 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
             </Alert>
           )}
 
-          {/* Étape 1: Enregistrement Patient */}
+          {/* Étape 1: Sélection Patient */}
           {activeStep === 0 && (
             <Box>
               <Typography variant="h6" gutterBottom>
-                Informations du Patient
+                Sélectionner un Patient
               </Typography>
-              <PatientForm
-                patient={null}
-                onSubmit={handlePatientSubmit}
-                onCancel={onCancel}
-                loading={loading}
-              />
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Veuillez sélectionner le patient concerné pour cette consultation avec facturation.
+              </Typography>
+              {selectedPatient ? (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  Patient sélectionné : <strong>{selectedPatient.prenom} {selectedPatient.nom}</strong>
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Aucun patient sélectionné. Cliquez sur "Sélectionner un patient" pour continuer.
+                </Alert>
+              )}
+              <Box display="flex" justifyContent="flex-end" mt={3}>
+                <Button
+                  variant="contained"
+                  onClick={() => setOpenPatientSelector(true)}
+                  startIcon={<Person />}
+                >
+                  {selectedPatient ? 'Changer de patient' : 'Sélectionner un patient'}
+                </Button>
+              </Box>
+              <Box display="flex" justifyContent="space-between" mt={3}>
+                <Button onClick={handleCancel}>Annuler</Button>
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    if (selectedPatient) {
+                      setActiveStep(1);
+                      setError(null);
+                    } else {
+                      setError('Veuillez sélectionner un patient pour continuer');
+                      setOpenPatientSelector(true);
+                    }
+                  }}
+                  disabled={!selectedPatient}
+                  startIcon={<MedicalServices />}
+                >
+                  Continuer
+                </Button>
+              </Box>
             </Box>
           )}
 
           {/* Étape 2: Type Consultation */}
-          {activeStep === 1 && createdPatient && (
+          {activeStep === 1 && selectedPatient && (
             <Box>
               <Typography variant="h6" gutterBottom>
                 Type de Consultation
@@ -345,11 +380,16 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
               </Box>
 
               <Box display="flex" justifyContent="space-between" mt={3}>
-                <Button onClick={handleBack}>Retour</Button>
+                <Button 
+                  onClick={handleBack}
+                  disabled={loading}
+                >
+                  Retour
+                </Button>
                 <Button
                   variant="contained"
                   onClick={handleCreateConsultation}
-                  disabled={loading || !medecinId}
+                  disabled={loading || !selectedPatient}
                   startIcon={loading ? <CircularProgress size={20} /> : <MedicalServices />}
                 >
                   {loading ? 'Création...' : 'Continuer vers les Actes'}
@@ -359,7 +399,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
           )}
 
           {/* Étape 3: Sélection des Actes à Facturer */}
-          {activeStep === 2 && createdPatient && (
+          {activeStep === 2 && selectedPatient && (
             <Box>
               <Typography variant="h6" gutterBottom>
                 Actes à Facturer
@@ -377,11 +417,16 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
               />
 
               <Box display="flex" justifyContent="space-between" mt={3}>
-                <Button onClick={handleBack}>Retour</Button>
+                <Button 
+                  onClick={handleBack}
+                  disabled={loading}
+                >
+                  Retour
+                </Button>
                 <Button
                   variant="contained"
                   onClick={handleGenerateInvoiceAndComplete}
-                  disabled={loading || actesSelectionnes.length === 0}
+                  disabled={loading || actesSelectionnes.length === 0 || !consultationId}
                   startIcon={loading ? <CircularProgress size={20} /> : <Receipt />}
                 >
                   {loading ? 'Génération...' : 'Générer la Facture et Finaliser'}
@@ -398,9 +443,9 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 Consultation Créée avec Succès
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                {createdPatient && (
+                {selectedPatient && (
                   <>
-                    Patient: <strong>{createdPatient.nom} {createdPatient.prenom}</strong>
+                    Patient: <strong>{selectedPatient.prenom} {selectedPatient.nom}</strong>
                     <br />
                     Type: <strong>{typeConsultation === 'generale' ? 'Consultation Générale' : typeConsultation === 'specialisee' ? 'Consultation Spécialisée' : 'Consultation Urgence'}</strong>
                   </>
@@ -431,18 +476,42 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 <Button
                   variant="outlined"
                   onClick={() => {
+                    // Réinitialiser tout pour recommencer
                     setActiveStep(0);
-                    setCreatedPatient(null);
-                    setPatientData(null);
+                    setSelectedPatient(null);
+                    setTypeConsultation('generale');
+                    setServiceConsulte('');
+                    setMedecinId('');
+                    setIsUrgent(false);
+                    setActesSelectionnes([]);
+                    setConsultationId(null);
+                    setError(null);
+                    setOpenPatientSelector(true);
                   }}
                 >
-                  Nouveau Patient
+                  Nouvelle Consultation
                 </Button>
               </Box>
             </Box>
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog de sélection de patient */}
+      <PatientSelector
+        open={openPatientSelector}
+        onClose={() => {
+          setOpenPatientSelector(false);
+          // Ne pas annuler automatiquement, laisser l'utilisateur décider
+        }}
+        onSelect={handlePatientSelect}
+        title="Sélectionner un patient pour la consultation"
+        allowCreate={true}
+        onCreateNew={() => {
+          setOpenPatientSelector(false);
+          navigate('/patients?action=create');
+        }}
+      />
     </Box>
   );
 };

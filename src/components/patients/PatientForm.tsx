@@ -983,6 +983,10 @@ export const PatientForm: React.FC<PatientFormProps> = ({
               <MenuItem value="Médecine générale">Médecine générale</MenuItem>
               <MenuItem value="Maternité">Maternité</MenuItem>
               <MenuItem value="Pédiatrie">Pédiatrie</MenuItem>
+              <MenuItem value="Laboratoire">Laboratoire</MenuItem>
+              <MenuItem value="Imagerie Médicale">Imagerie Médicale</MenuItem>
+              <MenuItem value="Pharmacie">Pharmacie</MenuItem>
+              <MenuItem value="Vaccination">Vaccination</MenuItem>
               <MenuItem value="Autres">Autres</MenuItem>
             </Select>
           </FormControl>

@@ -286,6 +286,20 @@ export class FacturationService {
     }, 0) || 0;
     
     const montantTotal = montantHT - montantRemise;
+    const montantPayeInitial = formData.montant_paye || 0;
+    const montantRestant = montantTotal - montantPayeInitial;
+    
+    // Déterminer le statut correct
+    let statut: 'en_attente' | 'partiellement_payee' | 'payee' | 'en_credit' = 'en_attente';
+    if (formData.type_facture === 'credit') {
+      statut = 'en_credit';
+    } else if (montantRestant <= 0 && montantPayeInitial > 0) {
+      statut = 'payee';
+    } else if (montantRestant > 0 && montantPayeInitial > 0) {
+      statut = 'partiellement_payee';
+    } else {
+      statut = 'en_attente';
+    }
     
     // Créer la facture
     const { data: facture, error: factureError } = await supabase
@@ -297,10 +311,11 @@ export class FacturationService {
         montant_ht: montantHT - montantRemise,
         montant_remise: montantRemise,
         montant_total: montantTotal,
-        montant_restant: montantTotal,
-        statut: formData.type_facture === 'credit' ? 'en_credit' : 'en_attente',
+        montant_paye: montantPayeInitial,
+        montant_restant: montantRestant,
+        statut: statut,
         type_facture: formData.type_facture || 'normale',
-        service_origine: formData.service_origine,
+        service_origine: formData.service_origine || 'autre',
         reference_externe: formData.reference_externe,
         consultation_id: formData.consultation_id,
         caissier_id: caissierId,
@@ -404,17 +419,27 @@ export class FacturationService {
     dateDebut?: string;
     dateFin?: string;
     patientId?: string;
+    clinicId?: string;
   }): Promise<Facture[]> {
+    // Utiliser la vue factures_en_attente si on cherche des factures en attente
+    // Sinon utiliser la table factures directement
+    const useView = filters?.statut && ['en_attente', 'partiellement_payee'].includes(filters.statut);
+    
     let query = supabase
-      .from('factures')
+      .from(useView ? 'factures_en_attente' : 'factures')
       .select('*')
       .order('date_facture', { ascending: false });
     
-    if (filters?.statut) {
+    if (filters?.statut && !useView) {
       query = query.eq('statut', filters.statut);
     }
     if (filters?.patientId) {
       query = query.eq('patient_id', filters.patientId);
+    }
+    if (filters?.clinicId) {
+      // Si on utilise la vue, on doit joindre avec patients pour filtrer par clinic_id
+      // Sinon, on peut filtrer directement si la table factures a clinic_id
+      // Pour l'instant, on filtre via patient_id si nécessaire
     }
     if (filters?.dateDebut) {
       query = query.gte('date_facture', filters.dateDebut);
@@ -424,8 +449,23 @@ export class FacturationService {
     }
     
     const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
+    if (error) {
+      console.error('Erreur récupération factures:', error);
+      // Si la vue n'existe pas, essayer avec la table directement
+      if (useView && error.message?.includes('does not exist')) {
+        console.warn('Vue factures_en_attente non trouvée, utilisation de la table factures');
+        return this.getFactures({ ...filters, statut: filters.statut });
+      }
+      throw error;
+    }
+    
+    // Filtrer par montant_restant > 0 pour s'assurer qu'on ne récupère que les factures à payer
+    const factures = (data || []).filter((f: Facture) => {
+      if (useView) return true; // La vue filtre déjà
+      return !filters?.statut || f.montant_restant > 0;
+    });
+    
+    return factures;
   }
   
   static async annulerFacture(id: string, motif?: string): Promise<void> {

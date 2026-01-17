@@ -25,6 +25,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Add,
@@ -32,6 +36,7 @@ import {
   Receipt,
   ShoppingCart,
   CheckCircle,
+  AddCircle,
 } from '@mui/icons-material';
 import { ActesService, Acte } from '../../services/actesService';
 import { FacturationService, ServiceFacturable } from '../../services/facturationService';
@@ -56,6 +61,20 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   const [loading, setLoading] = useState(false);
   const [filtreType, setFiltreType] = useState<string>('tous');
   const [recherche, setRecherche] = useState('');
+  const [openCustomActeDialog, setOpenCustomActeDialog] = useState(false);
+  const [customActe, setCustomActe] = useState<{
+    code: string;
+    libelle: string;
+    prix_unitaire: number;
+    type_service: 'consultation' | 'pharmacie' | 'laboratoire' | 'maternite' | 'vaccination' | 'imagerie' | 'autre';
+    quantite: number;
+  }>({
+    code: '',
+    libelle: '',
+    prix_unitaire: 0,
+    type_service: 'autre',
+    quantite: 1,
+  });
 
   useEffect(() => {
     loadActesDisponibles();
@@ -118,6 +137,54 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
 
   const handleRemoveActe = (code: string) => {
     setActesSelectionnes(actesSelectionnes.filter(a => a.code !== code));
+  };
+
+  const handleAddCustomActe = () => {
+    // Validation
+    if (!customActe.libelle || customActe.libelle.trim() === '') {
+      enqueueSnackbar('Le libellé est requis', { variant: 'error' });
+      return;
+    }
+    if (!customActe.prix_unitaire || customActe.prix_unitaire <= 0) {
+      enqueueSnackbar('Le prix unitaire doit être supérieur à 0', { variant: 'error' });
+      return;
+    }
+
+    // Générer un code si non fourni
+    let code = customActe.code.trim();
+    if (!code) {
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const libelleCode = customActe.libelle.substring(0, 3).toUpperCase().replace(/\s/g, '');
+      code = `CUSTOM-${libelleCode}-${timestamp}`;
+    }
+
+    // Vérifier si l'acte n'est pas déjà dans le panier
+    const existe = actesSelectionnes.find(a => a.code === code);
+    if (existe) {
+      enqueueSnackbar('Un acte avec ce code existe déjà dans le panier', { variant: 'info' });
+      return;
+    }
+
+    const nouvelActe: Acte = {
+      code,
+      libelle: customActe.libelle.trim(),
+      quantite: customActe.quantite || 1,
+      prix_unitaire: customActe.prix_unitaire,
+      type_service: customActe.type_service,
+    };
+
+    setActesSelectionnes([...actesSelectionnes, nouvelActe]);
+    enqueueSnackbar('Acte personnalisé ajouté au panier', { variant: 'success' });
+    
+    // Réinitialiser le formulaire et fermer le dialog
+    setCustomActe({
+      code: '',
+      libelle: '',
+      prix_unitaire: 0,
+      type_service: 'autre',
+      quantite: 1,
+    });
+    setOpenCustomActeDialog(false);
   };
 
   const handleQuantiteChange = (code: string, quantite: number) => {
@@ -205,9 +272,19 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
           </Grid>
 
           {/* Liste des actes disponibles */}
-          <Typography variant="subtitle1" gutterBottom>
-            Actes Disponibles
-          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="subtitle1">
+              Actes Disponibles
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<AddCircle />}
+              onClick={() => setOpenCustomActeDialog(true)}
+              size="small"
+            >
+              Ajouter un acte personnalisé
+            </Button>
+          </Box>
           {loading ? (
             <Box display="flex" justifyContent="center" p={3}>
               <CircularProgress />
@@ -373,6 +450,97 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog pour ajouter un acte personnalisé */}
+      <Dialog
+        open={openCustomActeDialog}
+        onClose={() => setOpenCustomActeDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Ajouter un Acte Personnalisé
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Code de l'acte (optionnel)"
+                  value={customActe.code}
+                  onChange={(e) => setCustomActe({ ...customActe, code: e.target.value })}
+                  placeholder="Laissé vide pour génération automatique"
+                  helperText="Si vide, un code sera généré automatiquement"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Libellé de l'acte *"
+                  value={customActe.libelle}
+                  onChange={(e) => setCustomActe({ ...customActe, libelle: e.target.value })}
+                  required
+                  placeholder="Ex: Consultation spécialisée, Examen complémentaire..."
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Prix unitaire (XOF) *"
+                  type="number"
+                  value={customActe.prix_unitaire || ''}
+                  onChange={(e) => setCustomActe({ ...customActe, prix_unitaire: parseFloat(e.target.value) || 0 })}
+                  required
+                  inputProps={{ min: 0, step: 1 }}
+                  helperText="Montant en francs CFA"
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Quantité"
+                  type="number"
+                  value={customActe.quantite || 1}
+                  onChange={(e) => setCustomActe({ ...customActe, quantite: parseInt(e.target.value) || 1 })}
+                  inputProps={{ min: 1, step: 1 }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>Type de service</InputLabel>
+                  <Select
+                    value={customActe.type_service}
+                    onChange={(e) => setCustomActe({ ...customActe, type_service: e.target.value as any })}
+                    label="Type de service"
+                  >
+                    <MenuItem value="consultation">Consultation</MenuItem>
+                    <MenuItem value="laboratoire">Laboratoire</MenuItem>
+                    <MenuItem value="imagerie">Imagerie</MenuItem>
+                    <MenuItem value="pharmacie">Pharmacie</MenuItem>
+                    <MenuItem value="maternite">Maternité</MenuItem>
+                    <MenuItem value="vaccination">Vaccination</MenuItem>
+                    <MenuItem value="autre">Autre</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCustomActeDialog(false)}>
+            Annuler
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddCustomActe}
+            startIcon={<Add />}
+            disabled={!customActe.libelle || customActe.prix_unitaire <= 0}
+          >
+            Ajouter au panier
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

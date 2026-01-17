@@ -20,6 +20,10 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
+  Fade,
+  Zoom,
+  Skeleton,
+  alpha,
 } from '@mui/material';
 import {
   Payment,
@@ -27,11 +31,16 @@ import {
   Search,
   CheckCircle,
   Warning,
+  Refresh,
+  TrendingUp,
+  AttachMoney,
+  ReceiptLong,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { FacturationService, Facture } from '../../services/facturationService';
 import { PaymentProcessor } from './PaymentProcessor';
 import { getMyClinicId } from '../../services/clinicService';
+import { supabase } from '../../services/supabase';
 
 export const PaiementsEnAttente: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
@@ -54,20 +63,40 @@ export const PaiementsEnAttente: React.FC = () => {
         return;
       }
 
-      // Charger les factures en attente et partiellement payées
-      const facturesEnAttente = await FacturationService.getFactures({
-        statut: 'en_attente',
-      });
-      const facturesPartielles = await FacturationService.getFactures({
-        statut: 'partiellement_payee',
-      });
+      // Utiliser directement la vue factures_en_attente ou récupérer toutes les factures en attente
+      // Cela inclut toutes les factures avec consultation_id ou sans
+      const { data: facturesData, error } = await supabase
+        .from('factures')
+        .select(`
+          *,
+          consultations(id, statut_paiement)
+        `)
+        .in('statut', ['en_attente', 'partiellement_payee'])
+        .gt('montant_restant', 0)
+        .order('date_facture', { ascending: false });
 
-      const allFactures = [...facturesEnAttente, ...facturesPartielles];
-      // Trier par date (plus récentes en premier)
-      allFactures.sort((a, b) => 
-        new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
-      );
-      setFactures(allFactures);
+      if (error) {
+        console.error('Erreur récupération factures:', error);
+        // Fallback : utiliser le service
+        const facturesEnAttente = await FacturationService.getFactures({
+          statut: 'en_attente',
+        });
+        const facturesPartielles = await FacturationService.getFactures({
+          statut: 'partiellement_payee',
+        });
+        const allFactures = [...facturesEnAttente, ...facturesPartielles];
+        allFactures.sort((a, b) => 
+          new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
+        );
+        setFactures(allFactures);
+      } else {
+        // Filtrer et formater les factures
+        const allFactures = (facturesData || []).map((f: any) => ({
+          ...f,
+          consultation_id: f.consultation_id || f.consultations?.[0]?.id,
+        }));
+        setFactures(allFactures);
+      }
     } catch (error: any) {
       console.error('Erreur chargement factures:', error);
       enqueueSnackbar('Erreur lors du chargement des factures', { variant: 'error' });
@@ -111,159 +140,356 @@ export const PaiementsEnAttente: React.FC = () => {
 
   return (
     <Box>
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-            <Typography variant="h5" display="flex" alignItems="center" gap={1}>
-              <Payment color="primary" />
-              Paiements en Attente
-            </Typography>
-            <Button
-              variant="outlined"
-              onClick={loadFacturesEnAttente}
-              disabled={loading}
-            >
-              Actualiser
-            </Button>
-          </Box>
+      <Fade in={true} timeout={500}>
+        <Card 
+          sx={{ 
+            mb: 3,
+            background: (theme) => 
+              theme.palette.mode === 'dark'
+                ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`
+                : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+            border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+            boxShadow: (theme) => 
+              theme.palette.mode === 'dark'
+                ? '0 8px 32px rgba(0, 0, 0, 0.3)'
+                : '0 4px 20px rgba(0, 0, 0, 0.08)',
+            transition: 'all 0.3s ease-in-out',
+            '&:hover': {
+              boxShadow: (theme) => 
+                theme.palette.mode === 'dark'
+                  ? '0 12px 40px rgba(0, 0, 0, 0.4)'
+                  : '0 8px 30px rgba(0, 0, 0, 0.12)',
+            },
+          }}
+        >
+          <CardContent>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+              <Box display="flex" alignItems="center" gap={2}>
+                <Box
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 2,
+                    background: (theme) => 
+                      `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                    boxShadow: (theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+                  }}
+                >
+                  <Payment sx={{ color: 'white', fontSize: 28 }} />
+                </Box>
+                <Box>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    Paiements en Attente
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Gérez les factures en attente de paiement
+                  </Typography>
+                </Box>
+              </Box>
+              <Button
+                variant="outlined"
+                onClick={loadFacturesEnAttente}
+                disabled={loading}
+                startIcon={<Refresh />}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  px: 3,
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: 2,
+                  },
+                }}
+              >
+                Actualiser
+              </Button>
+            </Box>
 
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={4}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="body2" color="text.secondary">
-                    Nombre de factures
-                  </Typography>
-                  <Typography variant="h4" color="primary">
-                    {nombreFactures}
-                  </Typography>
-                </CardContent>
-              </Card>
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={4}>
+                <Zoom in={true} timeout={600}>
+                  <Card 
+                    variant="outlined"
+                    sx={{
+                      height: '100%',
+                      background: (theme) => 
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.main, 0.1)
+                          : alpha(theme.palette.primary.main, 0.05),
+                      border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                      transition: 'all 0.3s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4,
+                        borderColor: (theme) => theme.palette.primary.main,
+                      },
+                    }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={2} mb={1}>
+                        <ReceiptLong color="primary" />
+                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                          Nombre de factures
+                        </Typography>
+                      </Box>
+                      <Typography variant="h3" color="primary" fontWeight="bold">
+                        {loading ? <Skeleton width={60} /> : nombreFactures}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Zoom>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <Zoom in={true} timeout={800}>
+                  <Card 
+                    variant="outlined"
+                    sx={{
+                      height: '100%',
+                      background: (theme) => 
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.warning.main, 0.1)
+                          : alpha(theme.palette.warning.main, 0.05),
+                      border: (theme) => `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                      transition: 'all 0.3s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4,
+                        borderColor: (theme) => theme.palette.warning.main,
+                      },
+                    }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={2} mb={1}>
+                        <AttachMoney color="warning" />
+                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                          Montant total en attente
+                        </Typography>
+                      </Box>
+                      <Typography variant="h3" color="warning.main" fontWeight="bold">
+                        {loading ? <Skeleton width={120} /> : `${totalEnAttente.toLocaleString()} XOF`}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Zoom>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <Zoom in={true} timeout={1000}>
+                  <Card 
+                    variant="outlined"
+                    sx={{
+                      height: '100%',
+                      background: (theme) => 
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.success.main, 0.1)
+                          : alpha(theme.palette.success.main, 0.05),
+                      border: (theme) => `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                      transition: 'all 0.3s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4,
+                        borderColor: (theme) => theme.palette.success.main,
+                      },
+                    }}
+                  >
+                    <CardContent>
+                      <Box display="flex" alignItems="center" gap={2} mb={1}>
+                        <TrendingUp color="success" />
+                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                          Montant moyen
+                        </Typography>
+                      </Box>
+                      <Typography variant="h3" color="success.main" fontWeight="bold">
+                        {loading ? (
+                          <Skeleton width={100} />
+                        ) : (
+                          `${nombreFactures > 0 
+                            ? Math.round(totalEnAttente / nombreFactures).toLocaleString() 
+                            : '0'} XOF`
+                        )}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Zoom>
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={4}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="body2" color="text.secondary">
-                    Montant total en attente
-                  </Typography>
-                  <Typography variant="h4" color="warning.main">
-                    {totalEnAttente.toLocaleString()} XOF
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="body2" color="text.secondary">
-                    Montant moyen
-                  </Typography>
-                  <Typography variant="h4" color="text.primary">
-                    {nombreFactures > 0 
-                      ? Math.round(totalEnAttente / nombreFactures).toLocaleString() 
-                      : '0'} XOF
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
 
-          <TextField
-            fullWidth
-            placeholder="Rechercher par numéro de facture ou ID patient..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ mb: 2 }}
-          />
-        </CardContent>
-      </Card>
+            <TextField
+              fullWidth
+              placeholder="Rechercher par numéro de facture ou ID patient..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ 
+                mb: 2,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2,
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    boxShadow: 1,
+                  },
+                  '&.Mui-focused': {
+                    boxShadow: 2,
+                  },
+                },
+              }}
+            />
+          </CardContent>
+        </Card>
+      </Fade>
 
       {loading ? (
-        <Box display="flex" justifyContent="center" p={4}>
-          <CircularProgress />
-        </Box>
+        <Fade in={loading} timeout={300}>
+          <Box display="flex" flexDirection="column" gap={2} p={4}>
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rectangular" height={80} sx={{ borderRadius: 2 }} />
+            ))}
+          </Box>
+        </Fade>
       ) : filteredFactures.length === 0 ? (
-        <Alert severity="info">
-          {searchTerm 
-            ? 'Aucune facture ne correspond à votre recherche'
-            : 'Aucune facture en attente de paiement'}
-        </Alert>
+        <Fade in={true} timeout={500}>
+          <Alert 
+            severity="info" 
+            sx={{ 
+              borderRadius: 2,
+              '& .MuiAlert-icon': {
+                fontSize: 28,
+              },
+            }}
+          >
+            {searchTerm 
+              ? 'Aucune facture ne correspond à votre recherche'
+              : 'Aucune facture en attente de paiement'}
+          </Alert>
+        </Fade>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell><strong>Numéro Facture</strong></TableCell>
-                <TableCell><strong>Date</strong></TableCell>
-                <TableCell><strong>Patient</strong></TableCell>
-                <TableCell align="right"><strong>Total</strong></TableCell>
-                <TableCell align="right"><strong>Payé</strong></TableCell>
-                <TableCell align="right"><strong>Reste</strong></TableCell>
-                <TableCell align="center"><strong>Statut</strong></TableCell>
-                <TableCell align="center"><strong>Actions</strong></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredFactures.map((facture) => (
-                <TableRow key={facture.id} hover>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="bold">
-                      {facture.numero_facture}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(facture.date_facture).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {facture.patient_id.substring(0, 8)}...
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" fontWeight="bold">
-                      {facture.montant_total.toLocaleString()} XOF
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="success.main">
-                      {facture.montant_paye.toLocaleString()} XOF
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="warning.main" fontWeight="bold">
-                      {facture.montant_restant.toLocaleString()} XOF
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={facture.statut}
-                      color={getStatutColor(facture.statut) as any}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      startIcon={<Payment />}
-                      onClick={() => handlePayNow(facture)}
-                    >
-                      Payer maintenant
-                    </Button>
-                  </TableCell>
+        <Fade in={true} timeout={500}>
+          <TableContainer 
+            component={Paper}
+            sx={{
+              borderRadius: 2,
+              boxShadow: (theme) => 
+                theme.palette.mode === 'dark'
+                  ? '0 8px 32px rgba(0, 0, 0, 0.3)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.08)',
+              overflow: 'hidden',
+            }}
+          >
+            <Table>
+              <TableHead>
+                <TableRow
+                  sx={{
+                    background: (theme) => 
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.primary.main, 0.05),
+                  }}
+                >
+                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Numéro Facture</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Patient</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Total</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Payé</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Reste</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', py: 2 }}>Statut</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 'bold', py: 2 }}>Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {filteredFactures.map((facture, index) => (
+                  <Fade key={facture.id} in={true} timeout={300} style={{ transitionDelay: `${index * 50}ms` }}>
+                    <TableRow 
+                      hover
+                      sx={{
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          background: (theme) => 
+                            theme.palette.mode === 'dark'
+                              ? alpha(theme.palette.primary.main, 0.1)
+                              : alpha(theme.palette.primary.main, 0.05),
+                          transform: 'scale(1.01)',
+                        },
+                      }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="bold" color="primary">
+                          {facture.numero_facture}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {new Date(facture.date_facture).toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {facture.patient_id.substring(0, 8)}...
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight="bold">
+                          {facture.montant_total.toLocaleString()} XOF
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="success.main" fontWeight="medium">
+                          {facture.montant_paye.toLocaleString()} XOF
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="warning.main" fontWeight="bold">
+                          {facture.montant_restant.toLocaleString()} XOF
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={facture.statut.replace('_', ' ')}
+                          color={getStatutColor(facture.statut) as any}
+                          size="small"
+                          sx={{
+                            fontWeight: 'medium',
+                            textTransform: 'capitalize',
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          size="small"
+                          startIcon={<Payment />}
+                          onClick={() => handlePayNow(facture)}
+                          sx={{
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 'medium',
+                            px: 2,
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                              transform: 'translateY(-2px)',
+                              boxShadow: 4,
+                            },
+                          }}
+                        >
+                          Payer maintenant
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </Fade>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Fade>
       )}
 
       {selectedFacture && (

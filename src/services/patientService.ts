@@ -176,23 +176,48 @@ export class PatientService {
       }
       dataToInsert.clinic_id = clinicId;
 
-      // Vérifier qu'un patient avec le même nom et prénom n'existe pas déjà dans cette clinique
+      // Vérifier qu'un patient avec le même nom, prénom ET date de naissance existe déjà dans cette clinique
       const nomNormalise = dataToInsert.nom.trim().toUpperCase();
       const prenomNormalise = dataToInsert.prenom.trim().toUpperCase();
       
-      const { data: existingPatientByName } = await supabase
+      const { data: existingPatient } = await supabase
         .from('patients')
-        .select('id, identifiant, nom, prenom, date_naissance')
+        .select('*')
         .eq('clinic_id', clinicId)
         .ilike('nom', nomNormalise)
         .ilike('prenom', prenomNormalise)
+        .eq('date_naissance', dataToInsert.date_naissance)
         .maybeSingle();
 
-      if (existingPatientByName) {
-        throw new Error(
-          `Un patient avec le nom "${dataToInsert.nom}" et le prénom "${dataToInsert.prenom}" existe déjà dans cette clinique (Identifiant: ${existingPatientByName.identifiant}). ` +
-          `Un patient ne peut pas avoir deux dossiers d'enregistrement dans la même clinique.`
-        );
+      // Si un patient existe avec le même nom, prénom et date de naissance, mettre à jour au lieu de créer
+      if (existingPatient) {
+        console.log(`Patient existant trouvé (ID: ${existingPatient.id}), mise à jour au lieu de création`);
+        
+        // Fusionner les données : garder les valeurs existantes si les nouvelles sont vides/null/undefined
+        const mergedData: Partial<PatientFormData> = {};
+        
+        // Pour chaque champ du formulaire, fusionner intelligemment
+        Object.keys(patientData).forEach(key => {
+          const newValue = (patientData as any)[key];
+          const existingValue = (existingPatient as any)[key];
+          
+          // Si la nouvelle valeur est définie et non vide, l'utiliser
+          // Sinon, garder la valeur existante
+          if (newValue !== undefined && newValue !== null && newValue !== '') {
+            mergedData[key as keyof PatientFormData] = newValue;
+          } else if (existingValue !== undefined && existingValue !== null) {
+            mergedData[key as keyof PatientFormData] = existingValue;
+          }
+        });
+        
+        // S'assurer que les champs requis sont présents
+        if (!mergedData.nom) mergedData.nom = existingPatient.nom;
+        if (!mergedData.prenom) mergedData.prenom = existingPatient.prenom;
+        if (!mergedData.date_naissance) mergedData.date_naissance = existingPatient.date_naissance;
+        if (!mergedData.identifiant) mergedData.identifiant = existingPatient.identifiant;
+        
+        // Mettre à jour le patient existant
+        return await this.updatePatient(existingPatient.id, mergedData);
       }
 
       console.log('Données à insérer:', JSON.stringify(dataToInsert, null, 2));
@@ -328,19 +353,45 @@ export class PatientService {
   // Mettre à jour un patient
   static async updatePatient(id: string, patientData: Partial<PatientFormData>): Promise<Patient> {
     try {
+      // Récupérer le patient actuel pour fusionner les données
+      const { data: currentPatient, error: fetchError } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !currentPatient) {
+        throw new Error('Patient non trouvé');
+      }
+
+      // Fusionner intelligemment les données : garder les nouvelles valeurs si elles sont définies et non vides
+      const mergedData: any = { ...currentPatient };
+      
+      Object.keys(patientData).forEach(key => {
+        const newValue = (patientData as any)[key];
+        const currentValue = (currentPatient as any)[key];
+        
+        // Si la nouvelle valeur est définie et non vide, l'utiliser
+        // Sinon, garder la valeur existante
+        if (newValue !== undefined && newValue !== null && newValue !== '') {
+          mergedData[key] = newValue;
+        } else if (currentValue !== undefined && currentValue !== null) {
+          mergedData[key] = currentValue;
+        }
+      });
+
+      // Ne pas mettre à jour les champs système
+      delete mergedData.id;
+      delete mergedData.created_at;
+      delete mergedData.clinic_id; // Ne pas modifier le clinic_id
+      mergedData.updated_at = new Date().toISOString();
+
       // Si le nom ou prénom est modifié, vérifier qu'il n'y a pas de doublon dans la même clinique
       if (patientData.nom || patientData.prenom) {
         const clinicId = await getMyClinicId();
         if (clinicId) {
-          // Récupérer le patient actuel pour obtenir les valeurs complètes
-          const { data: currentPatient } = await supabase
-            .from('patients')
-            .select('nom, prenom')
-            .eq('id', id)
-            .single();
-
-          const nomAVerifier = (patientData.nom || currentPatient?.nom || '').trim().toUpperCase();
-          const prenomAVerifier = (patientData.prenom || currentPatient?.prenom || '').trim().toUpperCase();
+          const nomAVerifier = (mergedData.nom || '').trim().toUpperCase();
+          const prenomAVerifier = (mergedData.prenom || '').trim().toUpperCase();
 
           if (nomAVerifier && prenomAVerifier) {
             const { data: existingPatientByName } = await supabase
@@ -354,7 +405,7 @@ export class PatientService {
 
             if (existingPatientByName) {
               throw new Error(
-                `Un patient avec le nom "${patientData.nom || currentPatient?.nom}" et le prénom "${patientData.prenom || currentPatient?.prenom}" existe déjà dans cette clinique (Identifiant: ${existingPatientByName.identifiant}). ` +
+                `Un patient avec le nom "${mergedData.nom}" et le prénom "${mergedData.prenom}" existe déjà dans cette clinique (Identifiant: ${existingPatientByName.identifiant}). ` +
                 `Un patient ne peut pas avoir deux dossiers d'enregistrement dans la même clinique.`
               );
             }
@@ -364,7 +415,7 @@ export class PatientService {
 
       const { data, error } = await supabase
         .from('patients')
-        .update(patientData)
+        .update(mergedData)
         .eq('id', id)
         .select()
         .single();
