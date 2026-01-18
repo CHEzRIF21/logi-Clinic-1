@@ -93,7 +93,7 @@ export const createHealthcareTheme = (mode: 'light' | 'dark' = 'light'): Theme =
     },
     text: {
       primary: mode === 'dark' ? '#f8fafc' : healthcareColors.softGray[900], // #0f172a
-      secondary: mode === 'dark' ? '#cbd5e1' : healthcareColors.softGray[600], // #475569
+      secondary: mode === 'dark' ? '#e2e8f0' : healthcareColors.softGray[600], // #475569 - Amélioré pour meilleur contraste en dark mode
     },
     error: {
       main: healthcareColors.medicalRed[600], // #dc2626 - Rouge médical maintenu dans les deux modes
@@ -454,6 +454,58 @@ export const createHealthcareTheme = (mode: 'light' | 'dark' = 'light'): Theme =
         line: {
           borderColor: mode === 'dark' ? '#334155' : healthcareColors.softGray[300],
           borderTopWidth: 2,
+        },
+      },
+    },
+    MuiTable: {
+      styleOverrides: {
+        root: {
+          backgroundColor: mode === 'dark' ? '#0f172a' : healthcareColors.cleanWhite,
+        },
+      },
+    },
+    MuiTableHead: {
+      styleOverrides: {
+        root: {
+          backgroundColor: mode === 'dark' ? '#1e293b' : healthcareColors.softGray[50],
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&:nth-of-type(odd)': {
+            backgroundColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : healthcareColors.softGray[50],
+          },
+          '&:hover': {
+            backgroundColor: mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : healthcareColors.softGray[100],
+          },
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          color: mode === 'dark' ? '#f8fafc' : healthcareColors.softGray[900],
+          borderColor: mode === 'dark' ? '#334155' : healthcareColors.softGray[200],
+          '&.MuiTableCell-head': {
+            color: mode === 'dark' ? '#f8fafc' : healthcareColors.softGray[900],
+            fontWeight: 600,
+            backgroundColor: mode === 'dark' ? '#1e293b' : healthcareColors.softGray[50],
+          },
+        },
+      },
+    },
+    MuiTypography: {
+      styleOverrides: {
+        root: {
+          // Assurer que le texte est toujours visible en dark mode
+          '&.MuiTypography-body2': {
+            color: mode === 'dark' ? '#e2e8f0' : 'inherit',
+          },
+          '&.MuiTypography-caption': {
+            color: mode === 'dark' ? '#cbd5e1' : 'inherit',
+          },
         },
       },
     },

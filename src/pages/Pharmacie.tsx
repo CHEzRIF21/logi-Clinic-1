@@ -549,23 +549,28 @@ const Pharmacie: React.FC = () => {
 
                             return (
                               <TableRow key={medicament.id} sx={{ 
-                                backgroundColor: isStockFaible ? '#ffebee' : 'inherit' 
+                                backgroundColor: (theme) => 
+                                  isStockFaible 
+                                    ? theme.palette.mode === 'dark' 
+                                      ? 'rgba(249, 115, 22, 0.15)' 
+                                      : '#ffebee'
+                                    : 'inherit' 
                               }}>
                                 <TableCell>
                                   <Box>
-                                    <Typography variant="body2" fontWeight="bold">
+                                    <Typography variant="body2" fontWeight="bold" sx={{ color: 'text.primary' }}>
                                       {medicament.nom}
                                     </Typography>
-                                    <Typography variant="caption" color="text.secondary">
+                                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                       {medicament.code} • {medicament.dci}
                                     </Typography>
-                                    <Typography variant="caption" color="text.secondary" display="block">
+                                    <Typography variant="caption" sx={{ color: 'text.secondary' }} display="block">
                                       {medicament.forme} {medicament.dosage}
                                     </Typography>
                                   </Box>
                                 </TableCell>
                                 <TableCell>
-                                  <Typography variant="body2" fontWeight="bold">
+                                  <Typography variant="body2" fontWeight="bold" sx={{ color: 'text.primary' }}>
                                     {medicament.quantiteRestante} {medicament.unite}
                                   </Typography>
                                   {isStockFaible && (

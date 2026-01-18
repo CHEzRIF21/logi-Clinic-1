@@ -199,6 +199,65 @@ html:not(.dark) body {
   background: #64748b;
 }
 
+/* Styles pour les tableaux en mode sombre - Amélioration du contraste */
+.dark .MuiTable-root {
+  background-color: #0f172a;
+}
+
+.dark .MuiTableHead-root {
+  background-color: #1e293b;
+}
+
+.dark .MuiTableHead-root .MuiTableCell-head {
+  color: #f8fafc !important;
+  font-weight: 600;
+  background-color: #1e293b;
+}
+
+.dark .MuiTableBody-root .MuiTableCell-root {
+  color: #f8fafc !important;
+  border-color: #334155;
+}
+
+.dark .MuiTableBody-root .MuiTableRow-root:nth-of-type(odd) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.dark .MuiTableBody-root .MuiTableRow-root:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Amélioration du contraste pour Typography en dark mode */
+.dark .MuiTypography-body2 {
+  color: #e2e8f0 !important;
+}
+
+.dark .MuiTypography-body1 {
+  color: #f8fafc !important;
+}
+
+.dark .MuiTypography-caption {
+  color: #cbd5e1 !important;
+}
+
+/* Assurer que les textes dans les tableaux sont toujours visibles */
+.dark .MuiTableCell-root .MuiTypography-root {
+  color: #f8fafc !important;
+}
+
+.dark .MuiTableCell-root .MuiTypography-body2 {
+  color: #e2e8f0 !important;
+}
+
+.dark .MuiTableCell-root .MuiTypography-caption {
+  color: #cbd5e1 !important;
+}
+
+/* Améliorer le contraste pour les textes secondaires en dark mode */
+.dark .MuiTypography-colorTextSecondary {
+  color: #e2e8f0 !important;
+}
+
 
 
 

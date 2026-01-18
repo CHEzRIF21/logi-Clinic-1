@@ -1292,23 +1292,28 @@ const StockMedicaments: React.FC = () => {
 
                         return (
                           <TableRow key={medicament.id} sx={{ 
-                            backgroundColor: isStockFaible ? '#ffebee' : 'inherit' 
+                            backgroundColor: (theme) => 
+                              isStockFaible 
+                                ? theme.palette.mode === 'dark' 
+                                  ? 'rgba(249, 115, 22, 0.15)' 
+                                  : '#ffebee'
+                                : 'inherit' 
                           }}>
                             <TableCell>
                               <Box>
-                                <Typography variant="body2" fontWeight="bold">
+                                <Typography variant="body2" fontWeight="bold" sx={{ color: 'text.primary' }}>
                                   {medicament.nom}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                   {medicament.code} • {medicament.dci}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary" display="block">
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }} display="block">
                                   {medicament.forme} {medicament.dosage}
                                 </Typography>
                               </Box>
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2" fontWeight="bold">
+                              <Typography variant="body2" fontWeight="bold" sx={{ color: 'text.primary' }}>
                                 {medicament.quantiteStock} {medicament.unite}
                               </Typography>
                               {isStockFaible && (
@@ -1316,31 +1321,31 @@ const StockMedicaments: React.FC = () => {
                               )}
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2">
+                              <Typography variant="body2" sx={{ color: 'text.primary' }}>
                                 {entrees} {medicament.unite}
                               </Typography>
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2">
+                              <Typography variant="body2" sx={{ color: 'text.primary' }}>
                                 {sorties} {medicament.unite}
                               </Typography>
                             </TableCell>
                             <TableCell>
                               {peremptionProche ? (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="body2" color="warning.main">
+                                  <Typography variant="body2" color="warning.main" sx={{ fontWeight: 500 }}>
                                     {new Date(peremptionProche.dateExpiration).toLocaleDateString()}
                                   </Typography>
                                   <Chip label="3 mois" color="warning" size="small" />
                                 </Box>
                               ) : (
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                                   Aucune
                                 </Typography>
                               )}
                             </TableCell>
                             <TableCell>
-                              <Typography variant="body2">
+                              <Typography variant="body2" sx={{ color: 'text.primary' }}>
                                 {medicament.seuilMinimum} {medicament.unite}
                               </Typography>
                             </TableCell>

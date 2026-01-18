@@ -299,7 +299,9 @@ const IntegrationsPanelModern: React.FC<IntegrationsPanelModernProps> = ({ presc
         </Typography>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+            <TableRow sx={{ 
+              backgroundColor: (theme) => theme.palette.mode === 'dark' ? '#1e293b' : '#f5f5f5' 
+            }}>
               <TableCell sx={{ fontWeight: 'bold' }}>Module Connecté</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Sens du Flux</TableCell>
               <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
@@ -312,7 +314,11 @@ const IntegrationsPanelModern: React.FC<IntegrationsPanelModernProps> = ({ presc
               <TableRow 
                 key={module.id} 
                 sx={{ 
-                  '&:hover': { backgroundColor: '#f5f5f5' },
+                  '&:hover': { 
+                    backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                      ? 'rgba(255, 255, 255, 0.05)' 
+                      : '#f5f5f5' 
+                  },
                   opacity: module.statut === 'inactif' ? 0.5 : 1
                 }}
               >
@@ -392,7 +398,9 @@ const IntegrationsPanelModern: React.FC<IntegrationsPanelModernProps> = ({ presc
                       px: 1,
                       py: 0.5,
                       borderRadius: 1,
-                      backgroundColor: '#f0f0f0'
+                      backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                        ? 'rgba(255, 255, 255, 0.05)' 
+                        : '#f0f0f0'
                     }}
                   >
                     {getDirectionIcon(module.direction)}
@@ -568,24 +576,51 @@ const IntegrationsPanelModern: React.FC<IntegrationsPanelModernProps> = ({ presc
           {bilanData && (
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={6} md={4}>
-                <GlassCard sx={{ p: 2, textAlign: 'center', backgroundColor: '#e8f5e9' }}>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                <GlassCard sx={{ 
+                  p: 2, 
+                  textAlign: 'center', 
+                  backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(22, 163, 74, 0.15)' 
+                    : '#e8f5e9' 
+                }}>
+                  <Typography variant="h5" sx={{ 
+                    fontWeight: 'bold', 
+                    color: (theme) => theme.palette.mode === 'dark' ? '#4ade80' : '#2e7d32' 
+                  }}>
                     {formatCurrency(bilanData.chiffre_affaires)}
                   </Typography>
-                  <Typography variant="caption">Chiffre d'affaires</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Chiffre d'affaires</Typography>
                 </GlassCard>
               </Grid>
               <Grid item xs={6} md={4}>
-                <GlassCard sx={{ p: 2, textAlign: 'center', backgroundColor: '#ffebee' }}>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#c62828' }}>
+                <GlassCard sx={{ 
+                  p: 2, 
+                  textAlign: 'center', 
+                  backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(220, 38, 38, 0.15)' 
+                    : '#ffebee' 
+                }}>
+                  <Typography variant="h5" sx={{ 
+                    fontWeight: 'bold', 
+                    color: (theme) => theme.palette.mode === 'dark' ? '#f87171' : '#c62828' 
+                  }}>
                     {formatCurrency(bilanData.cout_reactifs)}
                   </Typography>
-                  <Typography variant="caption">Coût des réactifs</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>Coût des réactifs</Typography>
                 </GlassCard>
               </Grid>
               <Grid item xs={12} md={4}>
-                <GlassCard sx={{ p: 2, textAlign: 'center', backgroundColor: '#e3f2fd' }}>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#1565c0' }}>
+                <GlassCard sx={{ 
+                  p: 2, 
+                  textAlign: 'center', 
+                  backgroundColor: (theme) => theme.palette.mode === 'dark' 
+                    ? 'rgba(59, 130, 246, 0.15)' 
+                    : '#e3f2fd' 
+                }}>
+                  <Typography variant="h5" sx={{ 
+                    fontWeight: 'bold', 
+                    color: (theme) => theme.palette.mode === 'dark' ? '#60a5fa' : '#1565c0' 
+                  }}>
                     {formatCurrency(bilanData.marge_brute)}
                   </Typography>
                   <Typography variant="caption">Marge brute ({bilanData.taux_marge}%)</Typography>
