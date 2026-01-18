@@ -12,11 +12,9 @@ import {
   Payment,
   AccountBalanceWallet,
   Assessment,
-  List,
   TrendingUp,
   Dashboard,
   History,
-  MedicalServices,
 } from '@mui/icons-material';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
@@ -25,9 +23,7 @@ import CreationFacture from '../components/facturation/CreationFacture';
 import GestionPaiements from '../components/facturation/GestionPaiements';
 import JournalCaisse from '../components/facturation/JournalCaisse';
 import TableauBordFacturation from '../components/facturation/TableauBordFacturation';
-import GestionTickets from '../components/facturation/GestionTickets';
 import RapportsFinanciers from '../components/facturation/RapportsFinanciers';
-import ConsultationsEnAttente from '../components/facturation/ConsultationsEnAttente';
 import { PaiementsEnAttente } from '../components/caisse/PaiementsEnAttente';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -97,16 +93,6 @@ const Caisse: React.FC = () => {
               iconPosition="start"
             />
             <Tab
-              icon={<List />}
-              label="Tickets en Attente"
-              iconPosition="start"
-            />
-            <Tab
-              icon={<MedicalServices />}
-              label="Consultations en Attente"
-              iconPosition="start"
-            />
-            <Tab
               icon={<Receipt />}
               label="Création Facture"
               iconPosition="start"
@@ -141,27 +127,19 @@ const Caisse: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          <GestionTickets />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={3}>
-          <ConsultationsEnAttente />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={4}>
           <CreationFacture />
         </TabPanel>
 
-        <TabPanel value={activeTab} index={5}>
+        <TabPanel value={activeTab} index={3}>
           <GestionPaiements />
         </TabPanel>
 
-        <TabPanel value={activeTab} index={6}>
+        <TabPanel value={activeTab} index={4}>
           <JournalCaisse />
         </TabPanel>
 
         {canAccessFinancialReports() && (
-          <TabPanel value={activeTab} index={7}>
+          <TabPanel value={activeTab} index={5}>
             <RapportsFinanciers />
           </TabPanel>
         )}

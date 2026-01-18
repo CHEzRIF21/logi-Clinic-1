@@ -89,7 +89,8 @@ export const PaiementsEnAttente: React.FC = () => {
         .from('factures')
         .select(`
           *,
-          consultations(id, statut_paiement)
+          consultations(id, statut_paiement),
+          patients(id, identifiant)
         `)
         .in('patient_id', patientIds)
         .in('statut', ['en_attente', 'partiellement_payee'])
@@ -104,7 +105,7 @@ export const PaiementsEnAttente: React.FC = () => {
           hint: error.hint,
         });
         
-        // Fallback : utiliser le service
+        // Fallback : utiliser le service et récupérer les identifiants des patients
         try {
           const facturesEnAttente = await FacturationService.getFactures({
             statut: 'en_attente',
@@ -115,20 +116,36 @@ export const PaiementsEnAttente: React.FC = () => {
           const allFactures = [...facturesEnAttente, ...facturesPartielles];
           // Filtrer par patientIds
           const filteredFactures = allFactures.filter(f => patientIds.includes(f.patient_id));
-          filteredFactures.sort((a, b) => 
+          
+          // Récupérer les identifiants des patients
+          const { data: patientsData } = await supabase
+            .from('patients')
+            .select('id, identifiant')
+            .in('id', [...new Set(filteredFactures.map(f => f.patient_id))]);
+          
+          const patientsMap = new Map((patientsData || []).map(p => [p.id, p.identifiant]));
+          
+          // Ajouter l'identifiant à chaque facture
+          const facturesWithIdentifiant = filteredFactures.map(f => ({
+            ...f,
+            patient_identifiant: patientsMap.get(f.patient_id) || 'N/A',
+          }));
+          
+          facturesWithIdentifiant.sort((a, b) => 
             new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
           );
-          console.log(`✅ Récupération via service: ${filteredFactures.length} factures trouvées`);
-          setFactures(filteredFactures);
+          console.log(`✅ Récupération via service: ${facturesWithIdentifiant.length} factures trouvées`);
+          setFactures(facturesWithIdentifiant);
         } catch (fallbackError: any) {
           console.error('Erreur fallback:', fallbackError);
           enqueueSnackbar('Erreur lors du chargement des factures', { variant: 'error' });
         }
       } else {
-        // Filtrer et formater les factures
+        // Filtrer et formater les factures avec l'identifiant du patient
         const allFactures = (facturesData || []).map((f: any) => ({
           ...f,
           consultation_id: f.consultation_id || f.consultations?.[0]?.id,
+          patient_identifiant: f.patients?.identifiant || 'N/A',
         }));
         
         console.log(`✅ ${allFactures.length} factures récupérées pour clinic_id: ${clinicId}`);
@@ -165,9 +182,17 @@ export const PaiementsEnAttente: React.FC = () => {
   const filteredFactures = factures.filter(facture => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
+    const factureAny = facture as any;
     return (
       facture.numero_facture.toLowerCase().includes(searchLower) ||
-      facture.patient_id.toLowerCase().includes(searchLower)
+      (factureAny.patient_identifiant && factureAny.patient_identifiant.toLowerCase().includes(searchLower)) ||
+      facture.patient_id.toLowerCase().includes(searchLower) ||
+      (facture.service_origine && facture.service_origine.toLowerCase().includes(searchLower)) ||
+      facture.montant_total.toString().includes(searchLower) ||
+      facture.montant_paye.toString().includes(searchLower) ||
+      facture.montant_restant.toString().includes(searchLower) ||
+      facture.statut.toLowerCase().includes(searchLower) ||
+      (facture.date_facture && new Date(facture.date_facture).toLocaleDateString('fr-FR').toLowerCase().includes(searchLower))
     );
   });
 
@@ -360,7 +385,7 @@ export const PaiementsEnAttente: React.FC = () => {
 
             <TextField
               fullWidth
-              placeholder="Rechercher par numéro de facture ou ID patient..."
+              placeholder="Rechercher par numéro facture, identifiant patient, type service, montant, date, statut..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
@@ -437,7 +462,8 @@ export const PaiementsEnAttente: React.FC = () => {
                 >
                   <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Numéro Facture</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Patient</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Identifiant</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Type de service</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Total</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Payé</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Reste</TableCell>
@@ -476,9 +502,21 @@ export const PaiementsEnAttente: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" color="text.secondary">
-                          {facture.patient_id.substring(0, 8)}...
+                        <Typography variant="body2" fontWeight="medium" color="primary">
+                          {(facture as any).patient_identifiant || 'N/A'}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={facture.service_origine ? facture.service_origine.replace('_', ' ') : 'Autre'}
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                          sx={{
+                            textTransform: 'capitalize',
+                            fontWeight: 'medium',
+                          }}
+                        />
                       </TableCell>
                       <TableCell align="right">
                         <Typography variant="body2" fontWeight="bold">
