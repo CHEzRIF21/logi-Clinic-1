@@ -1,14 +1,27 @@
 import { supabase, MedicamentSupabase, MedicamentFormData } from './stockSupabase';
 import { MedicamentIdGenerator } from '../utils/medicamentIdGenerator';
+import { getMyClinicId } from './clinicService';
 
 export class MedicamentService {
-  // Récupérer tous les médicaments
+  // Récupérer tous les médicaments (globaux + spécifiques à la clinique)
   static async getAllMedicaments(): Promise<MedicamentSupabase[]> {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      
+      // Récupérer les médicaments globaux (clinic_id IS NULL) ET les médicaments de la clinique
+      let query = supabase
         .from('medicaments')
-        .select('*')
-        .order('nom', { ascending: true });
+        .select('*');
+      
+      if (clinicId) {
+        // Inclure les médicaments globaux (clinic_id IS NULL) ET les médicaments de la clinique
+        query = query.or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
+      } else {
+        // Si pas de clinic_id, récupérer uniquement les médicaments globaux
+        query = query.is('clinic_id', null);
+      }
+      
+      const { data, error } = await query.order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la récupération des médicaments:', error);
@@ -64,14 +77,26 @@ export class MedicamentService {
     }
   }
 
-  // Rechercher des médicaments
+  // Rechercher des médicaments (globaux + spécifiques à la clinique)
   static async searchMedicaments(query: string): Promise<MedicamentSupabase[]> {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      
+      // Rechercher dans les médicaments globaux (clinic_id IS NULL) ET les médicaments de la clinique
+      let searchQuery = supabase
         .from('medicaments')
         .select('*')
-        .or(`nom.ilike.%${query}%,code.ilike.%${query}%,categorie.ilike.%${query}%`)
-        .order('nom', { ascending: true });
+        .or(`nom.ilike.%${query}%,code.ilike.%${query}%,categorie.ilike.%${query}%`);
+      
+      if (clinicId) {
+        // Inclure les médicaments globaux (clinic_id IS NULL) ET les médicaments de la clinique
+        searchQuery = searchQuery.or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
+      } else {
+        // Si pas de clinic_id, rechercher uniquement dans les médicaments globaux
+        searchQuery = searchQuery.is('clinic_id', null);
+      }
+      
+      const { data, error } = await searchQuery.order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la recherche des médicaments:', error);

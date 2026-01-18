@@ -100,11 +100,17 @@ interface DemandeTransfert {
 
 export type GestionTransfertsContext = 'pharmacie' | 'stock';
 
-const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ context = 'stock' }) => {
+interface GestionTransfertsProps {
+  context?: GestionTransfertsContext;
+  onTransfertValide?: () => void;
+}
+
+const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock', onTransfertValide }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [openDemande, setOpenDemande] = useState(false);
   const [openValidation, setOpenValidation] = useState(false);
   const [openReception, setOpenReception] = useState(false);
+  const [openTransfertManuel, setOpenTransfertManuel] = useState(false);
   const [selectedTransfert, setSelectedTransfert] = useState<any>(null);
   // (legacy) demandes demo non utilisées, conservées pour compatibilité UI
   const [loading, setLoading] = useState(false);
@@ -178,6 +184,11 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
   const [lignesTransfert, setLignesTransfert] = useState<LigneTransfert[]>([]);
   const [motifTransfert, setMotifTransfert] = useState('');
   const [observationsTransfert, setObservationsTransfert] = useState('');
+
+  // État pour transfert manuel (Gros → Détail direct)
+  const [lignesTransfertManuel, setLignesTransfertManuel] = useState<LigneTransfert[]>([]);
+  const [motifTransfertManuel, setMotifTransfertManuel] = useState('');
+  const [observationsTransfertManuel, setObservationsTransfertManuel] = useState('');
 
   const [validationForm, setValidationForm] = useState({
     observations: '',
@@ -379,6 +390,85 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
   };
 
   // Fonctions pour gérer les lignes de transfert multiple
+  // Fonctions pour transfert manuel
+  const ajouterLigneTransfertManuel = () => {
+    const nouvelleLigne: LigneTransfert = {
+      id: `ligne-${Date.now()}-${Math.random()}`,
+      medicament_id: '',
+      lot_id: '',
+      quantite_demandee: 0
+    };
+    setLignesTransfertManuel([...lignesTransfertManuel, nouvelleLigne]);
+  };
+
+  const supprimerLigneTransfertManuel = (ligneId: string) => {
+    setLignesTransfertManuel(lignesTransfertManuel.filter(l => l.id !== ligneId));
+  };
+
+  const mettreAJourLigneTransfertManuel = (ligneId: string, updates: Partial<LigneTransfert>) => {
+    setLignesTransfertManuel(prev => prev.map(l => 
+      l.id === ligneId ? { ...l, ...updates } : l
+    ));
+  };
+
+  const handleCreateTransfertManuel = async () => {
+    try {
+      setLoading(true);
+      
+      // Validation des lignes
+      if (lignesTransfertManuel.length === 0) {
+        alert('Veuillez ajouter au moins un médicament au transfert');
+        return;
+      }
+
+      // Vérifier que toutes les lignes sont complètes
+      const lignesIncompletes = lignesTransfertManuel.filter(l => 
+        !l.medicament_id || !l.lot_id || l.quantite_demandee <= 0
+      );
+
+      if (lignesIncompletes.length > 0) {
+        alert('Veuillez compléter toutes les lignes de transfert (médicament, lot, quantité)');
+        return;
+      }
+
+      // Préparer les données pour le transfert manuel
+      const lignesData = lignesTransfertManuel.map(l => ({
+        medicament_id: l.medicament_id,
+        lot_id: l.lot_id,
+        quantite: l.quantite_demandee
+      }));
+
+      // Créer et valider le transfert en une seule opération
+      await StockService.creerTransfertManuel({
+        lignes: lignesData,
+        utilisateur_id: currentUserId,
+        motif: motifTransfertManuel || 'Transfert manuel direct Gros → Détail',
+        observations: observationsTransfertManuel
+      });
+
+      // Réinitialiser le formulaire
+      setLignesTransfertManuel([]);
+      setMotifTransfertManuel('');
+      setObservationsTransfertManuel('');
+      setOpenTransfertManuel(false);
+
+      alert('Transfert manuel créé et validé avec succès ! Les stocks ont été mis à jour.');
+      
+      // Recharger les données
+      await loadData();
+      
+      // Appeler le callback si fourni
+      if (onTransfertValide) {
+        onTransfertValide();
+      }
+    } catch (error: any) {
+      console.error('Erreur lors du transfert manuel:', error);
+      alert(`Erreur: ${error.message || 'Impossible de créer le transfert manuel'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const ajouterLigneTransfert = () => {
     const nouvelleLigne: LigneTransfert = {
       id: `temp-${Date.now()}-${Math.random()}`,
@@ -429,6 +519,11 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
       
       alert('Validation enregistrée. Les stocks ont été mis à jour.');
       await loadData();
+      
+      // Appeler le callback si fourni
+      if (onTransfertValide) {
+        onTransfertValide();
+      }
     } catch (error: any) {
       console.error('Erreur lors de la validation du transfert:', error);
       alert(`Erreur: ${error.message || 'Impossible de valider le transfert'}`);
@@ -458,6 +553,11 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
       
       alert('Transfert refusé.');
       await loadData();
+      
+      // Appeler le callback si fourni
+      if (onTransfertValide) {
+        onTransfertValide();
+      }
     } catch (error: any) {
       console.error('Erreur lors du refus du transfert:', error);
       alert(`Erreur: ${error.message || 'Impossible de refuser le transfert'}`);
@@ -603,12 +703,51 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
       {/* Contenu des onglets */}
       {activeTab === 0 && (
         <Box>
+          {/* Section Transfert Manuel (visible uniquement pour context='stock') */}
+          {context === 'stock' && (
+            <Card sx={{ mb: 3, border: '2px solid', borderColor: 'primary.main' }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Box>
+                    <Typography variant="h6" color="primary" gutterBottom>
+                      Transfert Manuel Direct (Gros → Détail)
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Créez et validez un transfert directement sans passer par une demande
+                    </Typography>
+                  </Box>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<LocalShipping />}
+                    onClick={() => {
+                      // Initialiser avec une ligne vide pour faciliter l'ajout
+                      if (lignesTransfertManuel.length === 0) {
+                        ajouterLigneTransfertManuel();
+                      }
+                      setOpenTransfertManuel(true);
+                    }}
+                    sx={{ minWidth: 200 }}
+                  >
+                    Nouveau Transfert Manuel
+                  </Button>
+                </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Transfert Manuel :</strong> Le responsable du Magasin Gros peut créer et valider directement un transfert vers le Magasin Détail.
+                    Le stock est immédiatement mis à jour (Gros −, Détail +) sans passer par une demande.
+                  </Typography>
+                </Alert>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Demande de transfert */}
           <Card sx={{ mb: 3 }}>
         <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-                  Demande interne de ravitaillement (Magasin Détail → Magasin Gros)
+                  {context === 'stock' ? 'Demandes de Transfert en Attente' : 'Demande interne de ravitaillement (Magasin Détail → Magasin Gros)'}
             </Typography>
             {context === 'pharmacie' && (
               <Button
@@ -1118,6 +1257,221 @@ const GestionTransferts: React.FC<{ context?: GestionTransfertsContext }> = ({ c
       )}
 
       {/* Dialogs */}
+      {/* Dialog Transfert Manuel Direct */}
+      <Dialog 
+        open={openTransfertManuel} 
+        onClose={(event, reason) => {
+          if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+            setOpenTransfertManuel(false);
+          }
+        }} 
+        disableEscapeKeyDown
+        maxWidth="lg" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" color="primary">Transfert Manuel Direct (Gros → Détail)</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Add />}
+              onClick={ajouterLigneTransfertManuel}
+            >
+              Ajouter Médicament
+            </Button>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Ce transfert sera créé et validé immédiatement. Les stocks seront mis à jour automatiquement (Gros −, Détail +).
+            </Typography>
+          </Alert>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            {/* Tableau des lignes de transfert manuel */}
+            {lignesTransfertManuel.length > 0 ? (
+              <Grid item xs={12}>
+                <TableContainer component={Paper} sx={{ maxHeight: 400, overflow: 'auto' }}>
+                  <Table stickyHeader size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Médicament</TableCell>
+                        <TableCell>Lot</TableCell>
+                        <TableCell align="right">Stock Disponible</TableCell>
+                        <TableCell align="right">Quantité</TableCell>
+                        <TableCell width={50}>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {lignesTransfertManuel.map((ligne) => {
+                        const medicament = medicaments.find(m => m.id === ligne.medicament_id);
+                        const lotsDispo = getLotsDisponibles(ligne.medicament_id);
+                        const lotSelectionne = lotsDispo.find(l => l.id === ligne.lot_id);
+                        const hasError = ligne.stock_disponible !== undefined && ligne.quantite_demandee > ligne.stock_disponible;
+                        const isIncomplete = !ligne.medicament_id || !ligne.lot_id || ligne.quantite_demandee <= 0;
+                        
+                        return (
+                          <TableRow 
+                            key={ligne.id}
+                            sx={{
+                              backgroundColor: hasError ? 'error.light' : isIncomplete ? 'warning.light' : 'inherit',
+                              '&:hover': {
+                                backgroundColor: hasError ? 'error.light' : isIncomplete ? 'warning.light' : 'action.hover'
+                              }
+                            }}
+                          >
+                            <TableCell>
+                              <Autocomplete
+                                size="small"
+                                options={medicaments}
+                                getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
+                                value={medicament || null}
+                                onChange={(_, newValue) => {
+                                  if (newValue) {
+                                    mettreAJourLigneTransfertManuel(ligne.id, {
+                                      medicament_id: newValue.id,
+                                      medicament_nom: `${newValue.nom} ${newValue.dosage || ''}`,
+                                      lot_id: '', // Réinitialiser le lot
+                                      lot_numero: undefined,
+                                      stock_disponible: undefined
+                                    });
+                                  }
+                                }}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Médicament *"
+                                    error={!ligne.medicament_id}
+                                    helperText={!ligne.medicament_id ? 'Sélectionnez un médicament' : ''}
+                                  />
+                                )}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <FormControl size="small" fullWidth error={!ligne.lot_id}>
+                                <InputLabel>Lot *</InputLabel>
+                                <Select
+                                  value={ligne.lot_id || ''}
+                                  onChange={(e) => {
+                                    const lotId = e.target.value;
+                                    const lot = lotsDispo.find(l => l.id === lotId);
+                                    mettreAJourLigneTransfertManuel(ligne.id, {
+                                      lot_id: lotId,
+                                      lot_numero: lot?.numero_lot,
+                                      stock_disponible: lot?.quantite_disponible
+                                    });
+                                  }}
+                                  label="Lot *"
+                                  disabled={!ligne.medicament_id}
+                                >
+                                  {lotsDispo.map((lot) => (
+                                    <MenuItem key={lot.id} value={lot.id}>
+                                      {lot.numero_lot} (Disponible: {lot.quantite_disponible})
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" color={hasError ? 'error' : 'text.secondary'}>
+                                {ligne.stock_disponible !== undefined ? ligne.stock_disponible : '-'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                size="small"
+                                type="number"
+                                value={ligne.quantite_demandee || ''}
+                                onChange={(e) => {
+                                  const qte = Math.max(0, parseInt(e.target.value) || 0);
+                                  mettreAJourLigneTransfertManuel(ligne.id, { quantite_demandee: qte });
+                                }}
+                                error={hasError}
+                                helperText={hasError ? 'Stock insuffisant' : ''}
+                                inputProps={{ min: 0, max: ligne.stock_disponible }}
+                                fullWidth
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => supprimerLigneTransfertManuel(ligne.id)}
+                              >
+                                <Delete />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+            ) : (
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  Aucune ligne de transfert. Cliquez sur "Ajouter Médicament" pour commencer.
+                </Alert>
+              </Grid>
+            )}
+
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Motif (optionnel)"
+                value={motifTransfertManuel}
+                onChange={(e) => setMotifTransfertManuel(e.target.value)}
+                placeholder="Ex: Réapprovisionnement magasin détail, stock préventif..."
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Observations (optionnel)"
+                multiline
+                rows={2}
+                value={observationsTransfertManuel}
+                onChange={(e) => setObservationsTransfertManuel(e.target.value)}
+                placeholder="Notes supplémentaires sur ce transfert..."
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setOpenTransfertManuel(false);
+              setLignesTransfertManuel([]);
+              setMotifTransfertManuel('');
+              setObservationsTransfertManuel('');
+            }}
+            disabled={loading}
+          >
+            Annuler
+          </Button>
+          <Button
+            onClick={handleCreateTransfertManuel}
+            variant="contained"
+            color="primary"
+            disabled={
+              loading || 
+              lignesTransfertManuel.length === 0 ||
+              lignesTransfertManuel.some(l => !l.medicament_id || !l.lot_id || l.quantite_demandee <= 0) ||
+              lignesTransfertManuel.some(l => l.stock_disponible !== undefined && l.quantite_demandee > l.stock_disponible)
+            }
+            startIcon={<LocalShipping />}
+          >
+            {loading ? 'Création en cours...' : 'Créer et Valider le Transfert'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog Nouvelle Demande - Transfert Multiple */}
       <Dialog 
         open={openDemande} 

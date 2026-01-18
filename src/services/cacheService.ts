@@ -178,12 +178,20 @@ export const CacheService = {
 
     logger.debug('Cache miss: medicaments', { clinicId });
 
-    const { data, error } = await supabase
+    // Récupérer les médicaments globaux (clinic_id IS NULL) ET les médicaments spécifiques à la clinique
+    let query = supabase
       .from('medicaments')
-      .select('id, code, nom, forme, dosage, prix_unitaire, prix_unitaire_detail, categorie')
-      .eq('clinic_id', clinicId)
-      .eq('actif', true)
-      .order('nom', { ascending: true });
+      .select('id, code, nom, forme, dosage, prix_unitaire, prix_unitaire_detail, categorie');
+    
+    if (clinicId) {
+      // Inclure les médicaments globaux (clinic_id IS NULL) ET les médicaments de la clinique
+      query = query.or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
+    } else {
+      // Si pas de clinic_id, récupérer uniquement les médicaments globaux
+      query = query.is('clinic_id', null);
+    }
+    
+    const { data, error } = await query.order('nom', { ascending: true });
 
     if (error) {
       logger.error('Erreur récupération medicaments', error);

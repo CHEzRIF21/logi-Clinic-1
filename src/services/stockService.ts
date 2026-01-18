@@ -345,6 +345,204 @@ export class StockService {
     }
   }
 
+  // 2c. TRANSFERT MANUEL DIRECT (Gros → Détail) - Création et validation en une seule opération
+  static async creerTransfertManuel(data: {
+    lignes: Array<{
+      medicament_id: string;
+      lot_id: string;
+      quantite: number;
+    }>;
+    utilisateur_id: string;
+    motif?: string;
+    observations?: string;
+  }) {
+    try {
+      if (!data.lignes || data.lignes.length === 0) {
+        throw new Error('Au moins une ligne de transfert est requise');
+      }
+
+      // Vérifier la disponibilité de tous les lots
+      for (const ligne of data.lignes) {
+        const { data: lot, error: lotError } = await supabase
+          .from('lots')
+          .select('*')
+          .eq('id', ligne.lot_id)
+          .eq('magasin', 'gros')
+          .single();
+
+        if (lotError) throw lotError;
+        if (lot.quantite_disponible < ligne.quantite) {
+          throw new Error(`Stock insuffisant pour le lot ${lot.numero_lot} (disponible: ${lot.quantite_disponible}, demandé: ${ligne.quantite})`);
+        }
+      }
+
+      // Créer le transfert avec statut 'valide' directement (pas besoin de validation)
+      const numero_transfert = `TRF-MAN-${Date.now()}`;
+      const { data: transfert, error: transfertError } = await supabase
+        .from('transferts')
+        .insert({
+          numero_transfert,
+          date_transfert: new Date().toISOString(),
+          magasin_source: 'gros',
+          magasin_destination: 'detail',
+          statut: 'valide', // Transfert manuel validé directement
+          utilisateur_source_id: data.utilisateur_id,
+          utilisateur_destination_id: data.utilisateur_id, // Même utilisateur pour transfert manuel
+          motif: data.motif || 'Transfert manuel direct Gros → Détail',
+          observations: data.observations
+        })
+        .select()
+        .single();
+
+      if (transfertError) throw transfertError;
+
+      // Créer les lignes de transfert et exécuter le transfert immédiatement
+      for (const ligne of data.lignes) {
+        // Récupérer le lot gros
+        const { data: lotGros, error: lotGrosError } = await supabase
+          .from('lots')
+          .select('*')
+          .eq('id', ligne.lot_id)
+          .eq('magasin', 'gros')
+          .single();
+
+        if (lotGrosError) throw lotGrosError;
+
+        // Créer la ligne de transfert avec quantite_validee = quantite (validation immédiate)
+        const { data: ligneTransfert, error: ligneError } = await supabase
+          .from('transfert_lignes')
+          .insert({
+            transfert_id: transfert.id,
+            medicament_id: ligne.medicament_id,
+            lot_id: ligne.lot_id,
+            quantite: ligne.quantite,
+            quantite_validee: ligne.quantite // Validation immédiate
+          })
+          .select()
+          .single();
+
+        if (ligneError) throw ligneError;
+
+        // Décrémenter le stock du magasin gros
+        const { error: updateGrosError } = await supabase
+          .from('lots')
+          .update({
+            quantite_disponible: lotGros.quantite_disponible - ligne.quantite
+          })
+          .eq('id', lotGros.id);
+
+        if (updateGrosError) throw updateGrosError;
+
+        // Créer ou mettre à jour le lot dans le magasin détail
+        const { data: lotDetail, error: lotDetailError } = await supabase
+          .from('lots')
+          .select('*')
+          .eq('medicament_id', ligne.medicament_id)
+          .eq('numero_lot', lotGros.numero_lot)
+          .eq('magasin', 'detail')
+          .maybeSingle();
+
+        if (lotDetailError && lotDetailError.code !== 'PGRST116') {
+          throw lotDetailError;
+        }
+
+        if (lotDetail) {
+          // Mettre à jour le lot existant
+          const { error: updateDetailError } = await supabase
+            .from('lots')
+            .update({
+              quantite_disponible: lotDetail.quantite_disponible + ligne.quantite
+            })
+            .eq('id', lotDetail.id);
+
+          if (updateDetailError) throw updateDetailError;
+        } else {
+          // Créer un nouveau lot dans le magasin détail
+          const { error: createDetailError } = await supabase
+            .from('lots')
+            .insert({
+              medicament_id: ligne.medicament_id,
+              numero_lot: lotGros.numero_lot,
+              quantite_initiale: ligne.quantite,
+              quantite_disponible: ligne.quantite,
+              date_reception: lotGros.date_reception,
+              date_expiration: lotGros.date_expiration,
+              prix_achat: lotGros.prix_achat,
+              fournisseur: lotGros.fournisseur,
+              statut: 'actif',
+              magasin: 'detail'
+            });
+
+          if (createDetailError) {
+            // Si erreur de duplication, essayer de mettre à jour
+            if (createDetailError.code === '23505' || createDetailError.message?.includes('duplicate')) {
+              const { data: lotDetailRetry, error: retryError } = await supabase
+                .from('lots')
+                .select('*')
+                .eq('medicament_id', ligne.medicament_id)
+                .eq('numero_lot', lotGros.numero_lot)
+                .eq('magasin', 'detail')
+                .maybeSingle();
+
+              if (!retryError && lotDetailRetry) {
+                const { error: updateRetryError } = await supabase
+                  .from('lots')
+                  .update({
+                    quantite_disponible: lotDetailRetry.quantite_disponible + ligne.quantite
+                  })
+                  .eq('id', lotDetailRetry.id);
+
+                if (updateRetryError) throw updateRetryError;
+              } else {
+                throw new Error(`Le lot ${lotGros.numero_lot} existe déjà. Veuillez réessayer.`);
+              }
+            } else {
+              throw createDetailError;
+            }
+          }
+        }
+
+        // Enregistrer le mouvement de transfert
+        const { error: mouvementError } = await supabase
+          .from('mouvements_stock')
+          .insert({
+            type: 'transfert',
+            medicament_id: ligne.medicament_id,
+            lot_id: lotGros.id,
+            quantite: ligne.quantite,
+            quantite_avant: lotGros.quantite_disponible,
+            quantite_apres: lotGros.quantite_disponible - ligne.quantite,
+            motif: 'Transfert manuel direct Gros → Détail',
+            utilisateur_id: data.utilisateur_id,
+            date_mouvement: new Date().toISOString(),
+            magasin_source: 'gros',
+            magasin_destination: 'detail',
+            reference_document: transfert.numero_transfert,
+            observations: data.observations
+          });
+
+        if (mouvementError) throw mouvementError;
+      }
+
+      // Journalisation
+      await this.logStockAction({
+        entity_type: 'transfert',
+        entity_id: transfert.id,
+        action: 'CREATED_AND_VALIDATED',
+        actor_id: data.utilisateur_id,
+        old_status: null,
+        new_status: 'valide',
+        old_data: null,
+        new_data: transfert,
+      });
+
+      return { success: true, transfert };
+    } catch (error) {
+      console.error('Erreur lors du transfert manuel:', error);
+      throw error;
+    }
+  }
+
   // 3. VALIDATION + TRANSFERT (quantités accordées) → Gros (-) et Détail (+)
   // Permet la validation partielle par ligne via quantite_validee.
   static async validerTransfert(transfert_id: string, utilisateur_validateur_id: string, opts?: {

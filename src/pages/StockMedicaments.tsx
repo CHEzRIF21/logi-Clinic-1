@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -40,11 +40,14 @@ import TestFluxComplet from '../components/stock/TestFluxComplet';
 import { StockService } from '../services/stockService';
 import { MedicamentService } from '../services/medicamentService';
 import { MedicamentFormData } from '../services/stockSupabase';
+import { supabase } from '../services/supabase';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatBadge } from '../components/ui/StatBadge';
 import { medicamentsFrequents, rechercherMedicamentFrequent, MedicamentFrequent } from '../data/medicamentsFrequents';
+import ImportMedicamentsDialog from '../components/stock/ImportMedicamentsDialog';
+import { useMedicaments } from '../hooks/useMedicaments';
 import {
   Add,
   Edit,
@@ -64,6 +67,7 @@ import {
   Delete,
   CheckCircle,
   ErrorOutline,
+  CloudUpload,
 } from '@mui/icons-material';
 import Snackbar from '@mui/material/Snackbar';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -296,12 +300,64 @@ const alertesDemo: Alerte[] = [
 const StockMedicaments: React.FC = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  const [medicaments, setMedicaments] = useState<Medicament[]>(medicamentsDemo);
+  
+  // Charger automatiquement les médicaments depuis Supabase (globaux + clinique)
+  const { medicaments: medicamentsSupabase, loading: loadingMedicaments, refresh: refreshMedicaments } = useMedicaments({ autoRefresh: true });
+  
+  // Convertir les médicaments Supabase en format local pour compatibilité
+  const medicamentsLocal: Medicament[] = medicamentsSupabase.map(med => ({
+    id: med.id,
+    code: med.code,
+    nom: med.nom,
+    dci: med.dci || '',
+    forme: med.forme,
+    dosage: med.dosage,
+    unite: med.unite,
+    fournisseur: med.fournisseur,
+    quantiteStock: 0, // Sera mis à jour depuis les lots
+    seuilMinimum: med.seuil_alerte,
+    seuilMaximum: med.seuil_maximum || 0,
+    prixUnitaireEntree: med.prix_unitaire_entree || 0,
+    prixTotalEntree: 0,
+    prixUnitaireDetail: med.prix_unitaire_detail || med.prix_unitaire,
+    prixUnitaire: med.prix_unitaire_detail || med.prix_unitaire,
+    emplacement: med.emplacement || '',
+    observations: med.observations || ''
+  }));
+  
+  const [medicaments, setMedicaments] = useState<Medicament[]>(medicamentsLocal);
   const [lots, setLots] = useState<Lot[]>(lotsDemo);
   const [mouvements, setMouvements] = useState<Mouvement[]>(mouvementsDemo);
   const [alertes, setAlertes] = useState<Alerte[]>(alertesDemo);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [transfertsEnAttente, setTransfertsEnAttente] = useState(0);
+  
+  // Mettre à jour les médicaments locaux quand les médicaments Supabase changent
+  useEffect(() => {
+    if (medicamentsSupabase.length > 0) {
+      const medicamentsConvertis: Medicament[] = medicamentsSupabase.map(med => ({
+        id: med.id,
+        code: med.code,
+        nom: med.nom,
+        dci: med.dci || '',
+        forme: med.forme,
+        dosage: med.dosage,
+        unite: med.unite,
+        fournisseur: med.fournisseur,
+        quantiteStock: 0, // Sera mis à jour depuis les lots
+        seuilMinimum: med.seuil_alerte,
+        seuilMaximum: med.seuil_maximum || 0,
+        prixUnitaireEntree: med.prix_unitaire_entree || 0,
+        prixTotalEntree: 0,
+        prixUnitaireDetail: med.prix_unitaire_detail || med.prix_unitaire,
+        prixUnitaire: med.prix_unitaire_detail || med.prix_unitaire,
+        emplacement: med.emplacement || '',
+        observations: med.observations || ''
+      }));
+      setMedicaments(medicamentsConvertis);
+    }
+  }, [medicamentsSupabase]);
   const [notification, setNotification] = useState<{open: boolean; message: string; type: 'success' | 'error' | 'info'}>({
     open: false, message: '', type: 'info'
   });
@@ -321,7 +377,36 @@ const StockMedicaments: React.FC = () => {
   const [openNouveauMedicament, setOpenNouveauMedicament] = useState(false);
   const [openTransfert, setOpenTransfert] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
+  const [openImportMedicaments, setOpenImportMedicaments] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<Medicament | null>(null);
+
+  // Charger les transferts en attente
+  const loadTransfertsEnAttente = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('transferts')
+        .select('id')
+        .eq('statut', 'en_attente')
+        .eq('magasin_source', 'gros')
+        .eq('magasin_destination', 'detail');
+      
+      if (!error && data) {
+        setTransfertsEnAttente(data.length);
+      } else if (error) {
+        console.error('Erreur chargement transferts en attente:', error);
+      }
+    } catch (err) {
+      console.error('Erreur chargement transferts en attente:', err);
+    }
+  };
+
+  // Charger les transferts en attente au montage et périodiquement
+  useEffect(() => {
+    loadTransfertsEnAttente();
+    // Actualiser toutes les 30 secondes
+    const interval = setInterval(loadTransfertsEnAttente, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Chargement des données réelles depuis Supabase
   const loadRealData = async () => {
@@ -903,11 +988,30 @@ const StockMedicaments: React.FC = () => {
               </Typography>
             </Box>
           </Box>
-          <Chip
-            label="Responsable Centre (Magasin Gros)"
-            color="primary"
-            variant="outlined"
-          />
+          <Box display="flex" alignItems="center" gap={2}>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<CloudUpload />}
+              onClick={() => setOpenImportMedicaments(true)}
+              size="large"
+              sx={{ 
+                fontWeight: 600,
+                boxShadow: 3,
+                '&:hover': {
+                  boxShadow: 6,
+                  transform: 'translateY(-2px)'
+                }
+              }}
+            >
+              📦 Importer Médicaments
+            </Button>
+            <Chip
+              label="Responsable Centre (Magasin Gros)"
+              color="primary"
+              variant="outlined"
+            />
+          </Box>
         </ToolbarBits>
 
         {/* Navigation par onglets */}
@@ -943,8 +1047,24 @@ const StockMedicaments: React.FC = () => {
             >
               <Tab icon={<Dashboard />} label="Tableau de Bord" iconPosition="start" />
               <Tab icon={<Store />} label="Magasin Gros" iconPosition="start" />
+              <Tab 
+                icon={<LocalShipping />} 
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    Transferts Gros → Détail
+                    {transfertsEnAttente > 0 && (
+                      <Chip 
+                        label={transfertsEnAttente} 
+                        size="small" 
+                        color="warning"
+                        sx={{ height: 20, fontSize: '0.7rem', fontWeight: 'bold' }}
+                      />
+                    )}
+                  </Box>
+                } 
+                iconPosition="start" 
+              />
               <Tab icon={<Inventory />} label="Inventaire" iconPosition="start" />
-              <Tab icon={<LocalShipping />} label="Demandes internes" iconPosition="start" />
               <Tab icon={<Receipt />} label="Achats fournisseurs" iconPosition="start" />
               <Tab icon={<Assessment />} label="Rapports" iconPosition="start" />
               <Tab icon={<Notifications />} label="Alertes" iconPosition="start" />
@@ -958,7 +1078,7 @@ const StockMedicaments: React.FC = () => {
         {activeTab === 0 && (
           <Box>
             {/* Statistiques principales */}
-            <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(4, 1fr)' }} gap={2} mb={3}>
+            <Box display="grid" gridTemplateColumns={{ xs: '1fr', sm: '1fr 1fr', md: 'repeat(5, 1fr)' }} gap={2} mb={3}>
               <GlassCard sx={{ p: 2 }}>
                 <StatBadge label="Médicaments" value={stats.totalMedicaments} icon={<Inventory />} color="primary" />
               </GlassCard>
@@ -967,6 +1087,39 @@ const StockMedicaments: React.FC = () => {
               </GlassCard>
               <GlassCard sx={{ p: 2 }}>
                 <StatBadge label="Valeur Stock" value={stats.valeurStock.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })} icon={<AttachMoney />} color="info" />
+              </GlassCard>
+              <GlassCard 
+                sx={{ 
+                  p: 2,
+                  cursor: transfertsEnAttente > 0 ? 'pointer' : 'default',
+                  transition: 'all 0.2s',
+                  '&:hover': transfertsEnAttente > 0 ? {
+                    transform: 'translateY(-2px)',
+                    boxShadow: 4
+                  } : {}
+                }}
+                onClick={() => transfertsEnAttente > 0 && setActiveTab(2)}
+              >
+                <StatBadge 
+                  label="Transferts en Attente" 
+                  value={transfertsEnAttente} 
+                  icon={<LocalShipping />} 
+                  color="warning" 
+                />
+                {transfertsEnAttente > 0 && (
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    startIcon={<LocalShipping />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab(2);
+                    }}
+                    sx={{ mt: 1, width: '100%' }}
+                  >
+                    Gérer les Transferts
+                  </Button>
+                )}
               </GlassCard>
               <GlassCard sx={{ p: 2 }}>
                 <StatBadge label="Alertes Actives" value={stats.alertesActives} icon={<Warning />} color="warning" />
@@ -1023,6 +1176,23 @@ const StockMedicaments: React.FC = () => {
                     size="large"
                   >
                     Générer Rapport
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    startIcon={<CloudUpload />}
+                    onClick={() => setOpenImportMedicaments(true)}
+                    size="large"
+                    sx={{ 
+                      fontWeight: 600,
+                      boxShadow: 2,
+                      '&:hover': {
+                        boxShadow: 4,
+                        transform: 'translateY(-2px)'
+                      }
+                    }}
+                  >
+                    📦 Importer Médicaments
                   </Button>
                 </Box>
             </GlassCard>
@@ -1219,8 +1389,20 @@ const StockMedicaments: React.FC = () => {
           </Box>
         )}
 
-        {/* Onglet Inventaire */}
+        {/* Onglet Transferts Gros → Détail */}
         {activeTab === 2 && (
+          <GestionTransferts 
+            context="stock" 
+            onTransfertValide={() => {
+              // Recharger les données après validation
+              loadRealData();
+              loadTransfertsEnAttente();
+            }}
+          />
+        )}
+
+        {/* Onglet Inventaire */}
+        {activeTab === 3 && (
           <GestionInventaire
             magasinType="stock_central"
             magasinId="magasin-gros"
@@ -1228,11 +1410,6 @@ const StockMedicaments: React.FC = () => {
             utilisateurId="current-user-id"
             utilisateurNom="Responsable Centre"
           />
-        )}
-
-        {/* Onglet Transferts */}
-        {activeTab === 3 && (
-          <GestionTransferts context="stock" />
         )}
 
         {/* Onglet Achats fournisseurs */}
@@ -1398,20 +1575,48 @@ const StockMedicaments: React.FC = () => {
                     </Box>
                     <Grid container spacing={2}>
                       <Grid item xs={12} md={6}>
-                        <FormControl fullWidth required>
-                          <InputLabel>Médicament *</InputLabel>
-                          <Select
-                            value={line.medicamentId}
-                            onChange={(e) => handleUpdateReceptionLine(line.id, 'medicamentId', e.target.value)}
-                            label="Médicament *"
-                          >
-                            {medicaments.map(med => (
-                              <MenuItem key={med.id} value={med.id}>
-                                {med.nom} ({med.code}) - Stock: {med.quantiteStock} {med.unite}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
+                        <Autocomplete
+                          options={medicamentsSupabase.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
+                          getOptionLabel={(option) => `${option.nom} ${option.dosage ? `(${option.dosage})` : ''} - ${option.code}`}
+                          value={medicamentsSupabase.find(m => m.id === line.medicamentId) || null}
+                          onChange={(_, newValue) => {
+                            if (newValue) {
+                              handleUpdateReceptionLine(line.id, 'medicamentId', newValue.id);
+                            }
+                          }}
+                          loading={loadingMedicaments}
+                          filterOptions={(options, { inputValue }) => {
+                            if (!inputValue) return options.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                            const searchLower = inputValue.toLowerCase();
+                            return options.filter(option =>
+                              option.nom.toLowerCase().includes(searchLower) ||
+                              option.code.toLowerCase().includes(searchLower) ||
+                              (option.dci && option.dci.toLowerCase().includes(searchLower)) ||
+                              (option.dosage && option.dosage.toLowerCase().includes(searchLower))
+                            ).sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                          }}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Médicament *"
+                              required
+                              helperText="Recherchez par nom, code, DCI ou dosage"
+                            />
+                          )}
+                          renderOption={(props, option) => (
+                            <Box component="li" {...props} key={option.id}>
+                              <Box>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {option.nom}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {option.code} • {option.forme} {option.dosage} • {option.categorie}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          )}
+                          noOptionsText="Aucun médicament trouvé"
+                        />
                       </Grid>
                       <Grid item xs={12} md={6}>
                         <Button
@@ -1852,6 +2057,18 @@ const StockMedicaments: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog Import Médicaments */}
+      <ImportMedicamentsDialog
+        open={openImportMedicaments}
+        onClose={() => setOpenImportMedicaments(false)}
+        onImportComplete={() => {
+          // Recharger les médicaments après l'importation
+          refreshMedicaments();
+          loadRealData();
+          showNotification('Médicaments importés avec succès !', 'success');
+        }}
+      />
       </Box>
     </Container>
   );

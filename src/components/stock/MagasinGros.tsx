@@ -28,7 +28,8 @@ import {
   Tabs,
   Tab,
   InputAdornment,
-  Tooltip
+  Tooltip,
+  Autocomplete
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -575,24 +576,48 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                     const med = medicaments.find(m => m.id === ligne.medicament_id);
                     return (
                       <TableRow key={ligne.id}>
-                        <TableCell sx={{ minWidth: 220 }}>
-                          <FormControl fullWidth size="small">
-                            <InputLabel>Médicament</InputLabel>
-                            <Select
-                              value={ligne.medicament_id}
-                              label="Médicament"
-                              onChange={(e) => {
-                                const value = e.target.value as string;
-                                setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, medicament_id: value } : l));
-                              }}
-                            >
-                              {medicaments.map((m) => (
-                                <MenuItem key={m.id} value={m.id}>
-                                  {m.nom} ({m.code})
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
+                        <TableCell sx={{ minWidth: 300 }}>
+                          <Autocomplete
+                            size="small"
+                            options={medicaments.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
+                            getOptionLabel={(option) => `${option.nom} ${option.dosage ? `(${option.dosage})` : ''} - ${option.code}`}
+                            value={medicaments.find(m => m.id === ligne.medicament_id) || null}
+                            onChange={(_, newValue) => {
+                              if (newValue) {
+                                setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, medicament_id: newValue.id } : l));
+                              }
+                            }}
+                            filterOptions={(options, { inputValue }) => {
+                              if (!inputValue) return options.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                              const searchLower = inputValue.toLowerCase();
+                              return options.filter(option =>
+                                option.nom.toLowerCase().includes(searchLower) ||
+                                option.code.toLowerCase().includes(searchLower) ||
+                                (option.dci && option.dci.toLowerCase().includes(searchLower)) ||
+                                (option.dosage && option.dosage.toLowerCase().includes(searchLower))
+                              ).sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                            }}
+                            renderInput={(params) => (
+                              <TextField
+                                {...params}
+                                label="Médicament"
+                                placeholder="Rechercher un médicament..."
+                              />
+                            )}
+                            renderOption={(props, option) => (
+                              <Box component="li" {...props} key={option.id}>
+                                <Box>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {option.nom}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {option.code} • {option.forme} {option.dosage} • {option.categorie}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            )}
+                            noOptionsText="Aucun médicament trouvé"
+                          />
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2" color="text.secondary">
