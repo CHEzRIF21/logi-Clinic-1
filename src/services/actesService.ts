@@ -67,7 +67,8 @@ export class ActesService {
    */
   static async genererFactureDepuisPanier(
     panier: PanierActes,
-    consultationId?: string
+    consultationId?: string,
+    serviceType?: string
   ): Promise<string> {
     const clinicId = await getMyClinicId();
     if (!clinicId) {
@@ -93,12 +94,15 @@ export class ActesService {
       service_origine: 'enregistrement',
     });
 
+    // Utiliser le type de service fourni ou 'enregistrement' par défaut
+    const serviceOrigine = serviceType || 'enregistrement';
+    
     const facture = await FacturationService.createFacture({
       patient_id: panier.patient_id,
       consultation_id: consultationId,
       lignes,
       type_facture: 'normale',
-      service_origine: 'enregistrement',
+      service_origine: serviceOrigine,
     });
 
     console.log('✅ Facture créée:', {

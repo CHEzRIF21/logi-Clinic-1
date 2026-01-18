@@ -508,12 +508,15 @@ export const PaiementsEnAttente: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={facture.service_origine ? facture.service_origine.replace('_', ' ') : 'Autre'}
+                          label={facture.service_origine 
+                            ? facture.service_origine
+                                .replace(/_/g, ' ')
+                                .replace(/\b\w/g, (l) => l.toUpperCase())
+                            : 'Autre'}
                           size="small"
                           color="info"
                           variant="outlined"
                           sx={{
-                            textTransform: 'capitalize',
                             fontWeight: 'medium',
                           }}
                         />

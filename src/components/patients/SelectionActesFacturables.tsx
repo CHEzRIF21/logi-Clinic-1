@@ -47,6 +47,8 @@ interface SelectionActesFacturablesProps {
   isUrgent?: boolean;
   onActesChange: (actes: Acte[]) => void;
   initialActes?: Acte[];
+  onServiceTypeChange?: (serviceType: string) => void;
+  initialServiceType?: string;
 }
 
 export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps> = ({
@@ -54,6 +56,8 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   isUrgent = false,
   onActesChange,
   initialActes = [],
+  onServiceTypeChange,
+  initialServiceType,
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [actesDisponibles, setActesDisponibles] = useState<ServiceFacturable[]>([]);
@@ -62,17 +66,18 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   const [filtreType, setFiltreType] = useState<string>('tous');
   const [recherche, setRecherche] = useState('');
   const [openCustomActeDialog, setOpenCustomActeDialog] = useState(false);
+  const [typeServiceFacture, setTypeServiceFacture] = useState<string>(initialServiceType || 'consultation');
   const [customActe, setCustomActe] = useState<{
     code: string;
     libelle: string;
     prix_unitaire: number;
-    type_service: 'consultation' | 'pharmacie' | 'laboratoire' | 'maternite' | 'vaccination' | 'imagerie' | 'autre';
+    type_service: string;
     quantite: number;
   }>({
     code: '',
     libelle: '',
     prix_unitaire: 0,
-    type_service: 'autre',
+    type_service: 'consultation',
     quantite: 1,
   });
 
@@ -90,6 +95,13 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     onActesChange(actesSelectionnes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actesSelectionnes]);
+
+  useEffect(() => {
+    if (onServiceTypeChange) {
+      onServiceTypeChange(typeServiceFacture);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeServiceFacture]);
 
   const loadActesDisponibles = async () => {
     try {
@@ -170,7 +182,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       libelle: customActe.libelle.trim(),
       quantite: customActe.quantite || 1,
       prix_unitaire: customActe.prix_unitaire,
-      type_service: customActe.type_service,
+      type_service: customActe.type_service as any,
     };
 
     setActesSelectionnes([...actesSelectionnes, nouvelActe]);
@@ -181,7 +193,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       code: '',
       libelle: '',
       prix_unitaire: 0,
-      type_service: 'autre',
+      type_service: 'consultation',
       quantite: 1,
     });
     setOpenCustomActeDialog(false);
@@ -241,6 +253,30 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
               </Typography>
             </Box>
           </Box>
+
+          {/* Type de service pour la facture */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth required>
+                <InputLabel>Type de service *</InputLabel>
+                <Select
+                  value={typeServiceFacture}
+                  onChange={(e) => setTypeServiceFacture(e.target.value)}
+                  label="Type de service *"
+                >
+                  <MenuItem value="consultation">Consultation</MenuItem>
+                  <MenuItem value="maternite">Maternité</MenuItem>
+                  <MenuItem value="pediatrie">Pédiatrie</MenuItem>
+                  <MenuItem value="laboratoire">Laboratoire</MenuItem>
+                  <MenuItem value="imagerie_medicale">Imagerie médicale</MenuItem>
+                  <MenuItem value="urgences">Urgences</MenuItem>
+                  <MenuItem value="chirurgie">Chirurgie</MenuItem>
+                  <MenuItem value="vaccination">Vaccination</MenuItem>
+                  <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
 
           {/* Filtres */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -511,16 +547,18 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                   <InputLabel>Type de service</InputLabel>
                   <Select
                     value={customActe.type_service}
-                    onChange={(e) => setCustomActe({ ...customActe, type_service: e.target.value as any })}
+                    onChange={(e) => setCustomActe({ ...customActe, type_service: e.target.value })}
                     label="Type de service"
                   >
                     <MenuItem value="consultation">Consultation</MenuItem>
-                    <MenuItem value="laboratoire">Laboratoire</MenuItem>
-                    <MenuItem value="imagerie">Imagerie</MenuItem>
-                    <MenuItem value="pharmacie">Pharmacie</MenuItem>
                     <MenuItem value="maternite">Maternité</MenuItem>
+                    <MenuItem value="pediatrie">Pédiatrie</MenuItem>
+                    <MenuItem value="laboratoire">Laboratoire</MenuItem>
+                    <MenuItem value="imagerie_medicale">Imagerie médicale</MenuItem>
+                    <MenuItem value="urgences">Urgences</MenuItem>
+                    <MenuItem value="chirurgie">Chirurgie</MenuItem>
                     <MenuItem value="vaccination">Vaccination</MenuItem>
-                    <MenuItem value="autre">Autre</MenuItem>
+                    <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

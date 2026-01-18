@@ -59,6 +59,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   const [medecins, setMedecins] = useState<Array<{ id: string; nom: string; prenom: string }>>([]);
   const [paymentRequired, setPaymentRequired] = useState<boolean>(false);
   const [actesSelectionnes, setActesSelectionnes] = useState<Acte[]>([]);
+  const [typeServiceFacture, setTypeServiceFacture] = useState<string>('consultation');
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [factureId, setFactureId] = useState<string | null>(null);
 
@@ -198,10 +199,11 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
           consultationId
         );
 
-        // Générer la facture depuis le panier
+        // Générer la facture depuis le panier avec le type de service sélectionné
         const factureIdGeneree = await ActesService.genererFactureDepuisPanier(
           panier,
-          consultationId
+          consultationId,
+          typeServiceFacture
         );
 
         if (factureIdGeneree) {
@@ -421,6 +423,8 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 isUrgent={isUrgent || serviceConsulte === 'Urgences'}
                 onActesChange={setActesSelectionnes}
                 initialActes={actesSelectionnes}
+                onServiceTypeChange={setTypeServiceFacture}
+                initialServiceType={typeServiceFacture}
               />
 
               <Box display="flex" justifyContent="space-between" mt={3}>
