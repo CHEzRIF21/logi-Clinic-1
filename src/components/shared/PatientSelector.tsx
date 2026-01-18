@@ -183,15 +183,6 @@ const PatientSelector: React.FC<PatientSelectorProps> = ({
           >
             Rechercher
           </Button>
-          {allowCreate && onCreateNew && (
-            <Button
-              variant="outlined"
-              onClick={handleCreateNew}
-              startIcon={<Add />}
-            >
-              Nouveau Patient
-            </Button>
-          )}
         </Box>
 
         {error && (
