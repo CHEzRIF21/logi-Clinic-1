@@ -47,8 +47,7 @@ interface SelectionActesFacturablesProps {
   isUrgent?: boolean;
   onActesChange: (actes: Acte[]) => void;
   initialActes?: Acte[];
-  onServiceTypeChange?: (serviceType: string) => void;
-  initialServiceType?: string;
+  serviceConsulte?: string; // Service consulté depuis l'orientation
 }
 
 export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps> = ({
@@ -56,17 +55,32 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   isUrgent = false,
   onActesChange,
   initialActes = [],
-  onServiceTypeChange,
-  initialServiceType,
+  serviceConsulte = '',
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [actesDisponibles, setActesDisponibles] = useState<ServiceFacturable[]>([]);
   const [actesSelectionnes, setActesSelectionnes] = useState<Acte[]>(initialActes);
   const [loading, setLoading] = useState(false);
-  const [filtreType, setFiltreType] = useState<string>('tous');
   const [recherche, setRecherche] = useState('');
   const [openCustomActeDialog, setOpenCustomActeDialog] = useState(false);
-  const [typeServiceFacture, setTypeServiceFacture] = useState<string>(initialServiceType || 'consultation');
+  
+  // Mapper le service consulté vers le type de service pour la facture
+  const getTypeServiceFromServiceConsulte = (service: string): string => {
+    const mapping: { [key: string]: string } = {
+      'Consultation': 'consultation',
+      'Maternité': 'maternite',
+      'Pédiatrie': 'pediatrie',
+      'Laboratoire': 'laboratoire',
+      'Imagerie médicale': 'imagerie_medicale',
+      'Urgences': 'urgences',
+      'Chirurgie': 'chirurgie',
+      'Vaccination': 'vaccination',
+      'Soins infirmiers': 'soins_infirmiers',
+    };
+    return mapping[service] || 'consultation';
+  };
+  
+  const typeServiceFacture = getTypeServiceFromServiceConsulte(serviceConsulte);
   const [customActe, setCustomActe] = useState<{
     code: string;
     libelle: string;
@@ -77,9 +91,19 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     code: '',
     libelle: '',
     prix_unitaire: 0,
-    type_service: 'consultation',
+    type_service: typeServiceFacture,
     quantite: 1,
   });
+  
+  // Mettre à jour le type de service par défaut quand le service consulté change
+  React.useEffect(() => {
+    if (serviceConsulte) {
+      setCustomActe(prev => ({
+        ...prev,
+        type_service: getTypeServiceFromServiceConsulte(serviceConsulte)
+      }));
+    }
+  }, [serviceConsulte]);
 
   useEffect(() => {
     loadActesDisponibles();
@@ -96,12 +120,6 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actesSelectionnes]);
 
-  useEffect(() => {
-    if (onServiceTypeChange) {
-      onServiceTypeChange(typeServiceFacture);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeServiceFacture]);
 
   const loadActesDisponibles = async () => {
     try {
@@ -177,12 +195,17 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       return;
     }
 
+    // Utiliser le type de service du service consulté si disponible, sinon celui du formulaire
+    const typeServiceFinal = serviceConsulte 
+      ? getTypeServiceFromServiceConsulte(serviceConsulte)
+      : customActe.type_service;
+
     const nouvelActe: Acte = {
       code,
       libelle: customActe.libelle.trim(),
       quantite: customActe.quantite || 1,
       prix_unitaire: customActe.prix_unitaire,
-      type_service: customActe.type_service as any,
+      type_service: typeServiceFinal as any,
     };
 
     setActesSelectionnes([...actesSelectionnes, nouvelActe]);
@@ -219,24 +242,16 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     );
   };
 
+  // Filtrer les actes en fonction du service consulté et de la recherche
   const actesFiltres = actesDisponibles.filter(acte => {
-    const matchType = filtreType === 'tous' || acte.type_service === filtreType;
+    // Si un service est sélectionné, filtrer par type de service correspondant
+    const matchType = !serviceConsulte || acte.type_service === typeServiceFacture;
     const matchRecherche = !recherche || 
       acte.nom.toLowerCase().includes(recherche.toLowerCase()) ||
       acte.code.toLowerCase().includes(recherche.toLowerCase());
     return matchType && matchRecherche;
   });
 
-  const typesServices = [
-    'tous',
-    'consultation',
-    'laboratoire',
-    'imagerie',
-    'pharmacie',
-    'maternite',
-    'vaccination',
-    'autre',
-  ];
 
   return (
     <Box>
@@ -254,33 +269,9 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
             </Box>
           </Box>
 
-          {/* Type de service pour la facture */}
+          {/* Filtre de recherche */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth required>
-                <InputLabel>Type de service *</InputLabel>
-                <Select
-                  value={typeServiceFacture}
-                  onChange={(e) => setTypeServiceFacture(e.target.value)}
-                  label="Type de service *"
-                >
-                  <MenuItem value="consultation">Consultation</MenuItem>
-                  <MenuItem value="maternite">Maternité</MenuItem>
-                  <MenuItem value="pediatrie">Pédiatrie</MenuItem>
-                  <MenuItem value="laboratoire">Laboratoire</MenuItem>
-                  <MenuItem value="imagerie_medicale">Imagerie médicale</MenuItem>
-                  <MenuItem value="urgences">Urgences</MenuItem>
-                  <MenuItem value="chirurgie">Chirurgie</MenuItem>
-                  <MenuItem value="vaccination">Vaccination</MenuItem>
-                  <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-
-          {/* Filtres */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Rechercher un acte"
@@ -289,22 +280,13 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                 placeholder="Nom ou code de l'acte..."
               />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>Type de service</InputLabel>
-                <Select
-                  value={filtreType}
-                  onChange={(e) => setFiltreType(e.target.value)}
-                  label="Type de service"
-                >
-                  {typesServices.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type === 'tous' ? 'Tous les types' : type.charAt(0).toUpperCase() + type.slice(1)}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+            {serviceConsulte && (
+              <Grid item xs={12}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Les actes sont filtrés selon le service: <strong>{serviceConsulte}</strong>
+                </Alert>
+              </Grid>
+            )}
           </Grid>
 
           {/* Liste des actes disponibles */}
@@ -560,6 +542,11 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                     <MenuItem value="vaccination">Vaccination</MenuItem>
                     <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
                   </Select>
+                  {serviceConsulte && (
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      Le type de service par défaut correspond au service consulté: <strong>{serviceConsulte}</strong>
+                    </Alert>
+                  )}
                 </FormControl>
               </Grid>
             </Grid>

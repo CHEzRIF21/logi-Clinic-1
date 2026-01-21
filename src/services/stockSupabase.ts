@@ -51,6 +51,7 @@ export interface MedicamentSupabase {
   prescription_requise: boolean;
   dci?: string;                       // Dénomination Commune Internationale
   observations?: string;              // Observations générales
+  clinic_id?: string | null;          // ID de la clinique - NULL pour médicaments globaux (toutes les cliniques)
   date_creation: string;
   date_modification: string;
   created_at: string;

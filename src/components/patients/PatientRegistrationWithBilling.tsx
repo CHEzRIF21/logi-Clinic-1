@@ -57,7 +57,6 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
   const [medecins, setMedecins] = useState<Array<{ id: string; nom: string; prenom: string }>>([]);
   const [paymentRequired, setPaymentRequired] = useState<boolean>(false);
   const [actesSelectionnes, setActesSelectionnes] = useState<Acte[]>([]);
-  const [typeServiceFacture, setTypeServiceFacture] = useState<string>('consultation');
   const [consultationId, setConsultationId] = useState<string | null>(null);
   const [factureId, setFactureId] = useState<string | null>(null);
 
@@ -196,7 +195,25 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
           consultationId
         );
 
-        // Générer la facture depuis le panier avec le type de service sélectionné
+        // Mapper le service consulté vers le type de service pour la facture
+        const getTypeServiceFromServiceConsulte = (service: string): string => {
+          const mapping: { [key: string]: string } = {
+            'Consultation': 'consultation',
+            'Maternité': 'maternite',
+            'Pédiatrie': 'pediatrie',
+            'Laboratoire': 'laboratoire',
+            'Imagerie médicale': 'imagerie_medicale',
+            'Urgences': 'urgences',
+            'Chirurgie': 'chirurgie',
+            'Vaccination': 'vaccination',
+            'Soins infirmiers': 'soins_infirmiers',
+          };
+          return mapping[service] || 'consultation';
+        };
+        
+        const typeServiceFacture = getTypeServiceFromServiceConsulte(serviceConsulte);
+        
+        // Générer la facture depuis le panier avec le type de service correspondant au service consulté
         const factureIdGeneree = await ActesService.genererFactureDepuisPanier(
           panier,
           consultationId,
@@ -407,8 +424,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                       isUrgent={isUrgent || serviceConsulte === 'Urgences'}
                       onActesChange={setActesSelectionnes}
                       initialActes={actesSelectionnes}
-                      onServiceTypeChange={setTypeServiceFacture}
-                      initialServiceType={typeServiceFacture}
+                      serviceConsulte={serviceConsulte}
                     />
                   ) : (
                     <Alert severity="info" sx={{ mb: 2 }}>
