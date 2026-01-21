@@ -218,24 +218,41 @@ export async function importerMedicaments(): Promise<{
     const medicamentsNettoyes = nettoyerEtDedupliquer(listeMedicamentsComplet);
     console.log(`📋 ${medicamentsNettoyes.length} médicaments uniques après nettoyage`);
     
-    // 2. Récupérer les codes existants
+    // 2. Récupérer les médicaments existants (codes et noms normalisés)
     const { data: medicamentsExistants, error: errorExistants } = await supabase
       .from('medicaments')
-      .select('code');
+      .select('code, nom');
     
     if (errorExistants) {
-      console.error('❌ Erreur lors de la récupération des codes existants:', errorExistants);
+      console.error('❌ Erreur lors de la récupération des médicaments existants:', errorExistants);
       throw errorExistants;
     }
     
     const codesExistants = (medicamentsExistants || []).map(m => m.code);
-    console.log(`📊 ${codesExistants.length} codes existants trouvés`);
+    // Créer un Set des noms normalisés existants pour vérifier les doublons
+    const nomsNormalisesExistants = new Set(
+      (medicamentsExistants || []).map(m => normaliserNomMedicament(m.nom))
+    );
+    console.log(`📊 ${codesExistants.length} médicaments existants trouvés`);
     
-    // 3. Préparer les données pour l'importation
+    // 3. Préparer les données pour l'importation (en excluant les doublons)
     const medicamentsAImporter: MedicamentImport[] = [];
     let codeIndex = 0;
+    let doublonsExclus = 0;
     
     for (const nom of medicamentsNettoyes) {
+      const nomNormalise = normaliserNomMedicament(nom);
+      
+      // Vérifier si un médicament avec le même nom normalisé existe déjà
+      if (nomsNormalisesExistants.has(nomNormalise)) {
+        doublonsExclus++;
+        console.log(`⚠️ Doublon exclu: "${nom}" (déjà présent dans la base)`);
+        continue;
+      }
+      
+      // Ajouter le nom normalisé au Set pour éviter les doublons dans cette importation
+      nomsNormalisesExistants.add(nomNormalise);
+      
       // Générer un code unique
       let code: string;
       do {
@@ -262,6 +279,10 @@ export async function importerMedicaments(): Promise<{
       };
       
       medicamentsAImporter.push(medicament);
+    }
+    
+    if (doublonsExclus > 0) {
+      console.log(`⚠️ ${doublonsExclus} doublon(s) exclu(s) de l'importation`);
     }
     
     console.log(`✅ ${medicamentsAImporter.length} médicaments préparés pour l'importation`);
@@ -291,8 +312,11 @@ export async function importerMedicaments(): Promise<{
     }
     
     console.log(`\n📊 Résumé de l'importation:`);
-    console.log(`   Total: ${medicamentsAImporter.length}`);
-    console.log(`   Importés: ${importes}`);
+    console.log(`   Total à importer: ${medicamentsAImporter.length}`);
+    console.log(`   Importés avec succès: ${importes}`);
+    if (doublonsExclus > 0) {
+      console.log(`   Doublons exclus: ${doublonsExclus}`);
+    }
     console.log(`   Erreurs: ${erreurs}`);
     
     return {

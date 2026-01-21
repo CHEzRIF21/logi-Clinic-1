@@ -46,7 +46,6 @@ import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { StatBadge } from '../components/ui/StatBadge';
 import { medicamentsFrequents, rechercherMedicamentFrequent, MedicamentFrequent } from '../data/medicamentsFrequents';
-import ImportMedicamentsDialog from '../components/stock/ImportMedicamentsDialog';
 import { useMedicaments } from '../hooks/useMedicaments';
 import {
   Add,
@@ -67,7 +66,6 @@ import {
   Delete,
   CheckCircle,
   ErrorOutline,
-  CloudUpload,
 } from '@mui/icons-material';
 import Snackbar from '@mui/material/Snackbar';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -377,7 +375,6 @@ const StockMedicaments: React.FC = () => {
   const [openNouveauMedicament, setOpenNouveauMedicament] = useState(false);
   const [openTransfert, setOpenTransfert] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
-  const [openImportMedicaments, setOpenImportMedicaments] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<Medicament | null>(null);
 
   // Charger les transferts en attente
@@ -989,23 +986,6 @@ const StockMedicaments: React.FC = () => {
             </Box>
           </Box>
           <Box display="flex" alignItems="center" gap={2}>
-            <Button
-              variant="contained"
-              color="secondary"
-              startIcon={<CloudUpload />}
-              onClick={() => setOpenImportMedicaments(true)}
-              size="large"
-              sx={{ 
-                fontWeight: 600,
-                boxShadow: 3,
-                '&:hover': {
-                  boxShadow: 6,
-                  transform: 'translateY(-2px)'
-                }
-              }}
-            >
-              📦 Importer Médicaments
-            </Button>
             <Chip
               label="Responsable Centre (Magasin Gros)"
               color="primary"
@@ -1176,23 +1156,6 @@ const StockMedicaments: React.FC = () => {
                     size="large"
                   >
                     Générer Rapport
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    startIcon={<CloudUpload />}
-                    onClick={() => setOpenImportMedicaments(true)}
-                    size="large"
-                    sx={{ 
-                      fontWeight: 600,
-                      boxShadow: 2,
-                      '&:hover': {
-                        boxShadow: 4,
-                        transform: 'translateY(-2px)'
-                      }
-                    }}
-                  >
-                    📦 Importer Médicaments
                   </Button>
                 </Box>
             </GlassCard>
@@ -2063,17 +2026,6 @@ const StockMedicaments: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog Import Médicaments */}
-      <ImportMedicamentsDialog
-        open={openImportMedicaments}
-        onClose={() => setOpenImportMedicaments(false)}
-        onImportComplete={() => {
-          // Recharger les médicaments après l'importation
-          refreshMedicaments();
-          loadRealData();
-          showNotification('Médicaments importés avec succès !', 'success');
-        }}
-      />
       </Box>
     </Container>
   );

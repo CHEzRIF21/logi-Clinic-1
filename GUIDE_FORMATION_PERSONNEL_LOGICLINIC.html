@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide de Formation - LogiClinic</title>
+    <style>
+        body {
+            font-family: 'Calibri', 'Arial', sans-serif;
+            line-height: 1.6;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20mm;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            page-break-after: avoid;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #95a5a6;
+            padding-bottom: 5px;
+            margin-top: 30px;
+            page-break-after: avoid;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+            page-break-after: avoid;
+        }
+        h4 {
+            color: #666;
+            margin-top: 15px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        ul, ol {
+            margin: 15px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .toc {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 5px 0;
+        }
+        .toc a {
+            text-decoration: none;
+            color: #3498db;
+        }
+        @media print {
+            body {
+                padding: 0;
+            }
+            h1, h2, h3 {
+                page-break-after: avoid;
+            }
+            pre, table {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>GUIDE DE FORMATION - LOGICLINIC</h1>
+    <h2>Manuel d'Utilisation pour le Personnel</h2>
+    
+    <p><strong>Version</strong> : 1.0<br>
+    <strong>Date</strong> : 2025<br>
+    <strong>Public</strong> : Personnel médical et administratif<br>
+    <strong>Système</strong> : LogiClinic - Système de Gestion Hospitalière</p>
+    
+    <div class="toc">
+        <h2>TABLE DES MATIÈRES</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction</a></li>
+            <li><a href="#connexion">2. Première Connexion</a></li>
+            <li><a href="#navigation">3. Navigation dans le Système</a></li>
+            <li><a href="#formation">4. Formation par Rôle</a></li>
+            <li><a href="#scenarios">5. Scénarios Pratiques</a></li>
+            <li><a href="#exercices">6. Exercices Pratiques</a></li>
+            <li><a href="#faq">7. FAQ et Dépannage</a></li>
+            <li><a href="#annexes">8. Annexes</a></li>
+        </ul>
+    </div>
+    
+    <h2 id="intro">1. INTRODUCTION</h2>
+    
+    <h3>1.1 Qu'est-ce que LogiClinic ?</h3>
+    <p>LogiClinic est un système de gestion hospitalière complet (HIS - Hospital Information System) conçu pour les centres de santé, cliniques et hôpitaux. Il offre une solution intégrée pour :</p>
+    <ul>
+        <li>Gestion des dossiers patients</li>
+        <li>Consultations médicales avec workflow guidé</li>
+        <li>Prescriptions et dispensations de médicaments</li>
+        <li>Gestion des stocks de médicaments (magasin gros et détail)</li>
+        <li>Facturation et gestion de la caisse</li>
+        <li>Examens de laboratoire et imagerie médicale</li>
+        <li>Suivi de la maternité (CPN, accouchements, post-partum)</li>
+        <li>Vaccination et calendrier vaccinal</li>
+        <li>Rendez-vous et planning</li>
+        <li>Rapports et statistiques</li>
+    </ul>
+    
+    <h3>1.2 Objectifs de cette Formation</h3>
+    <p>À la fin de cette formation, vous serez capable de :</p>
+    <ul>
+        <li>Vous connecter au système de manière sécurisée</li>
+        <li>Naviguer efficacement dans les différents modules</li>
+        <li>Effectuer toutes les tâches liées à votre rôle</li>
+        <li>Utiliser les fonctionnalités principales du système</li>
+        <li>Résoudre les problèmes courants</li>
+        <li>Optimiser votre utilisation quotidienne</li>
+    </ul>
+    
+    <h3>1.3 Durée de la Formation</h3>
+    <ul>
+        <li><strong>Formation générale</strong> : 2 heures</li>
+        <li><strong>Formation par rôle</strong> : 1-2 heures supplémentaires selon le rôle</li>
+        <li><strong>Pratique guidée</strong> : 1 heure</li>
+        <li><strong>Formation totale</strong> : 4-5 heures</li>
+    </ul>
+    
+    <h2 id="connexion">2. PREMIÈRE CONNEXION</h2>
+    
+    <h3>2.1 Accéder au Système</h3>
+    <p><strong>Étape 1 : Ouvrir le Navigateur</strong></p>
+    <ol>
+        <li>Ouvrez votre navigateur web (Chrome, Firefox, Edge recommandés)</li>
+        <li>Assurez-vous d'avoir une connexion Internet active</li>
+    </ol>
+    
+    <p><strong>Étape 2 : Accéder à l'Application</strong></p>
+    <ol>
+        <li>Entrez l'adresse URL du système fournie par votre administrateur</li>
+        <li>La page de connexion s'affiche avec le logo LogiClinic</li>
+    </ol>
+    
+    <h3>2.2 Se Connecter</h3>
+    <p><strong>Informations Requises :</strong></p>
+    <ol>
+        <li><strong>Code de la clinique</strong> : Code unique fourni par l'administrateur (ex: "CLINIC001")</li>
+        <li><strong>Nom d'utilisateur</strong> : Votre email professionnel ou nom d'utilisateur</li>
+        <li><strong>Mot de passe</strong> : Mot de passe temporaire fourni par l'administrateur</li>
+    </ol>
+    
+    <div class="warning">
+        <strong>⚠️ Première Connexion :</strong> Lors de votre première connexion, le système vous demandera de changer votre mot de passe et de définir 3 questions de sécurité.
+    </div>
+    
+    <h3>2.3 Récupération de Mot de Passe</h3>
+    <p>Si vous avez oublié votre mot de passe :</p>
+    <ol>
+        <li>Cliquez sur "Mot de passe oublié ?"</li>
+        <li>Entrez votre email</li>
+        <li>Répondez aux questions de sécurité</li>
+        <li>Suivez les instructions pour réinitialiser votre mot de passe</li>
+    </ol>
+    
+    <h2 id="navigation">3. NAVIGATION DANS LE SYSTÈME</h2>
+    
+    <h3>3.1 Tableau de Bord</h3>
+    <p>Après connexion, vous arrivez automatiquement sur le <strong>Tableau de Bord</strong> qui affiche :</p>
+    <ul>
+        <li>Statistiques générales (patients, consultations, revenus)</li>
+        <li>Alertes importantes</li>
+        <li>Activités récentes</li>
+        <li>Accès rapide aux modules</li>
+    </ul>
+    
+    <h3>3.2 Menu Principal</h3>
+    <p>Le menu se trouve à <strong>gauche de l'écran</strong> avec les modules suivants :</p>
+    <ul>
+        <li>📊 Tableau de bord</li>
+        <li>🏥 Consultations</li>
+        <li>💊 Pharmacie</li>
+        <li>📦 Stock Médicaments</li>
+        <li>🤰 Maternité</li>
+        <li>🧪 Laboratoire</li>
+        <li>💰 Caisse</li>
+        <li>Et plus selon vos permissions...</li>
+    </ul>
+    
+    <div class="info">
+        <strong>Note :</strong> Les modules visibles dépendent de votre rôle et de vos permissions.
+    </div>
+    
+    <h2 id="formation">4. FORMATION PAR RÔLE</h2>
+    
+    <h3>4.1 MÉDECIN 👨‍⚕️</h3>
+    
+    <h4>Rôle et Responsabilités</h4>
+    <ul>
+        <li>Effectuer les consultations médicales</li>
+        <li>Poser des diagnostics</li>
+        <li>Prescrire des médicaments</li>
+        <li>Demander des examens complémentaires</li>
+        <li>Suivre l'évolution des patients</li>
+    </ul>
+    
+    <h4>Créer une Nouvelle Consultation</h4>
+    <ol>
+        <li>Cliquez sur "Consultations" dans le menu</li>
+        <li>Cliquez sur "Nouvelle Consultation"</li>
+        <li>Recherchez le patient (nom, prénom, identifiant)</li>
+        <li>Sélectionnez le patient</li>
+        <li>Suivez le workflow en 12 étapes</li>
+    </ol>
+    
+    <h4>Workflow de Consultation (12 Étapes)</h4>
+    <ol>
+        <li><strong>Accueil / Identification</strong> : Vérifiez les informations patient et les alertes</li>
+        <li><strong>Démarrage</strong> : Choisissez le type de consultation</li>
+        <li><strong>Motif</strong> ⚠️ OBLIGATOIRE : Saisissez le motif principal</li>
+        <li><strong>Antécédents</strong> : Consultez et mettez à jour les antécédents</li>
+        <li><strong>Anamnèse</strong> : Historique détaillé du motif</li>
+        <li><strong>Examen Clinique</strong> : Observations de l'examen physique</li>
+        <li><strong>Constantes Vitales</strong> : Température, tension, pouls, poids, taille, IMC (calculé automatiquement)</li>
+        <li><strong>Diagnostics</strong> : Hypothèses diagnostiques et codification CIM-10</li>
+        <li><strong>Prescriptions</strong> : Sélectionnez les médicaments (triés alphabétiquement), vérifiez les alertes d'allergies</li>
+        <li><strong>Examens Complémentaires</strong> : Demande d'examens laboratoire ou imagerie</li>
+        <li><strong>Traitement en Cours</strong> : Vérifiez les traitements existants</li>
+        <li><strong>Clôture</strong> : Recommandations, date de suivi, clôturez la consultation</li>
+    </ol>
+    
+    <div class="warning">
+        <strong>⚠️ Important :</strong> Le motif de consultation est obligatoire. Vérifiez toujours les alertes d'allergies avant de prescrire.
+    </div>
+    
+    <h3>4.2 PHARMACIEN 💊</h3>
+    
+    <h4>Dispenser un Médicament</h4>
+    <ol>
+        <li>Pharmacie → Nouvelle Dispensation</li>
+        <li>Recherchez le patient ou sélectionnez une prescription</li>
+        <li>Vérifiez les stocks disponibles</li>
+        <li>Sélectionnez les lots (FIFO - First In, First Out)</li>
+        <li>Validez la dispensation</li>
+    </ol>
+    
+    <h4>Principe FIFO</h4>
+    <p>FIFO = First In, First Out (Premier Entré, Premier Sorti)</p>
+    <ul>
+        <li>Utilisez toujours les lots les plus anciens en premier</li>
+        <li>Évite la péremption des médicaments</li>
+        <li>Assure la rotation des stocks</li>
+    </ul>
+    
+    <h3>4.3 RESPONSABLE STOCK 📦</h3>
+    
+    <h4>Réceptionner des Médicaments</h4>
+    <ol>
+        <li>Stock Médicaments → Magasin Gros → Nouvelle Réception</li>
+        <li>Remplissez : Fournisseur, Date, Facture</li>
+        <li>Ajoutez les médicaments (recherche Autocomplete triée)</li>
+        <li>Remplissez : Lot, Quantité, Date expiration, Prix</li>
+        <li>Enregistrez la réception</li>
+    </ol>
+    
+    <h4>Importer les 714 Médicaments</h4>
+    <div class="warning">
+        <strong>⚠️ Important :</strong> Cette opération doit être effectuée une seule fois lors de la configuration initiale.
+    </div>
+    <ol>
+        <li>Allez dans "Stock Médicaments"</li>
+        <li>Cliquez sur "📦 Importer Médicaments" (en haut à droite)</li>
+        <li>Cliquez sur "Importer les Médicaments"</li>
+        <li>Attendez 2-5 minutes (barre de progression)</li>
+        <li>Les 714 médicaments sont maintenant disponibles</li>
+    </ol>
+    
+    <h3>4.4 SAGE-FEMME 🤰</h3>
+    
+    <h4>Créer un Dossier de Maternité</h4>
+    <ol>
+        <li>Maternité → Nouveau Dossier</li>
+        <li>Recherchez la patiente</li>
+        <li>Remplissez : Antécédents, Grossesses antérieures, Facteurs de risque</li>
+        <li>Enregistrez</li>
+    </ol>
+    
+    <h4>Consultation Prénatale (CPN)</h4>
+    <p><strong>CPN Obligatoires :</strong> CPN1, CPN2, CPN3, CPN4</p>
+    <ol>
+        <li>Sélectionnez la patiente</li>
+        <li>Nouvelle CPN → Choisissez le trimestre</li>
+        <li>Remplissez : Paramètres vitaux, Examen obstétrical, Tests, Examens labo</li>
+        <li>Prescriptions : TPI/SP, Fer, acide folique, VAT</li>
+        <li>Le prochain RDV est calculé automatiquement</li>
+    </ol>
+    
+    <h3>4.5 CAISSIER 💰</h3>
+    
+    <h4>Créer une Facture</h4>
+    <ol>
+        <li>Caisse → Création Facture → Nouvelle Facture</li>
+        <li>Recherchez le patient</li>
+        <li>Ajoutez les actes : Consultation, Examens, Médicaments</li>
+        <li>Le total est calculé automatiquement</li>
+        <li>Enregistrez la facture</li>
+    </ol>
+    
+    <h3>4.6 RÉCEPTIONNISTE 📅</h3>
+    
+    <h4>Enregistrer un Patient</h4>
+    <ol>
+        <li>Gestion Patients → Nouveau Patient</li>
+        <li>Remplissez : Nom, Prénom, Date naissance, Téléphone</li>
+        <li>Enregistrez</li>
+    </ol>
+    
+    <h3>4.7 TECHNICIEN LABORATOIRE 🧪</h3>
+    
+    <h4>Enregistrer un Prélèvement</h4>
+    <ol>
+        <li>Laboratoire → Recherchez le patient</li>
+        <li>Consultez les prescriptions</li>
+        <li>Nouveau Prélèvement</li>
+        <li>Remplissez : Type échantillon, Code, Agent préleveur</li>
+    </ol>
+    
+    <h2 id="scenarios">5. SCÉNARIOS PRATIQUES</h2>
+    
+    <h3>5.1 Parcours Patient Complet</h3>
+    <p><strong>Acteurs :</strong> Réceptionniste → Médecin → Pharmacien → Caissier</p>
+    <ol>
+        <li><strong>Réceptionniste</strong> : Enregistre le patient, crée le RDV</li>
+        <li><strong>Médecin</strong> : Consultation complète, prescriptions</li>
+        <li><strong>Pharmacien</strong> : Dispense les médicaments</li>
+        <li><strong>Caissier</strong> : Facture et enregistre le paiement</li>
+    </ol>
+    <p><strong>Durée estimée :</strong> 30-45 minutes</p>
+    
+    <h2 id="exercices">6. EXERCICES PRATIQUES</h2>
+    
+    <h3>6.1 Exercice Global : Parcours Patient Complet</h3>
+    <p><strong>Scénario :</strong> Un nouveau patient arrive avec des symptômes de grippe.</p>
+    <ol>
+        <li><strong>Réceptionniste</strong> : Enregistrez un nouveau patient</li>
+        <li><strong>Réceptionniste</strong> : Créez un rendez-vous</li>
+        <li><strong>Médecin</strong> : Consultation complète avec prescription</li>
+        <li><strong>Pharmacien</strong> : Dispensez les médicaments</li>
+        <li><strong>Caissier</strong> : Facturez et enregistrez le paiement</li>
+    </ol>
+    
+    <h2 id="faq">7. FAQ ET DÉPANNAGE</h2>
+    
+    <h3>7.1 Questions Fréquentes</h3>
+    
+    <h4>Connexion</h4>
+    <p><strong>Q : Je n'arrive pas à me connecter.</strong></p>
+    <p><strong>R :</strong> Vérifiez le code clinique, username, mot de passe, et votre connexion Internet.</p>
+    
+    <h4>Consultations</h4>
+    <p><strong>Q : Le motif de consultation est obligatoire. Est-ce normal ?</strong></p>
+    <p><strong>R :</strong> Oui, c'est normal et obligatoire pour la traçabilité et les statistiques.</p>
+    
+    <h4>Stock</h4>
+    <p><strong>Q : Comment importer les 714 médicaments ?</strong></p>
+    <p><strong>R :</strong> Stock Médicaments → "📦 Importer Médicaments" (en haut à droite) → "Importer les Médicaments"</p>
+    
+    <h3>7.2 Dépannage Technique</h3>
+    <p><strong>Le système est lent :</strong></p>
+    <ul>
+        <li>Vérifiez votre connexion Internet</li>
+        <li>Fermez les onglets inutiles</li>
+        <li>Actualisez la page (F5)</li>
+    </ul>
+    
+    <h2 id="annexes">8. ANNEXES</h2>
+    
+    <h3>8.1 Raccourcis Clavier</h3>
+    <table>
+        <tr>
+            <th>Raccourci</th>
+            <th>Action</th>
+        </tr>
+        <tr>
+            <td>Ctrl + K</td>
+            <td>Recherche rapide</td>
+        </tr>
+        <tr>
+            <td>Ctrl + /</td>
+            <td>Aide contextuelle</td>
+        </tr>
+        <tr>
+            <td>Échap</td>
+            <td>Fermer les dialogues</td>
+        </tr>
+        <tr>
+            <td>F5</td>
+            <td>Actualiser la page</td>
+        </tr>
+    </table>
+    
+    <h3>8.2 Codes CIM-10 Courants</h3>
+    <table>
+        <tr>
+            <th>Code</th>
+            <th>Description</th>
+        </tr>
+        <tr>
+            <td>J06.9</td>
+            <td>Infection aiguë des voies respiratoires supérieures</td>
+        </tr>
+        <tr>
+            <td>A09</td>
+            <td>Diarrhée et gastro-entérite</td>
+        </tr>
+        <tr>
+            <td>N39.0</td>
+            <td>Infection urinaire</td>
+        </tr>
+        <tr>
+            <td>I10</td>
+            <td>Hypertension essentielle</td>
+        </tr>
+        <tr>
+            <td>E11</td>
+            <td>Diabète de type 2</td>
+        </tr>
+    </table>
+    
+    <h3>8.3 Glossaire</h3>
+    <ul>
+        <li><strong>CPN</strong> : Consultation Prénatale</li>
+        <li><strong>DPA</strong> : Date Prévue d'Accouchement</li>
+        <li><strong>FIFO</strong> : First In, First Out (Premier Entré, Premier Sorti)</li>
+        <li><strong>DCI</strong> : Dénomination Commune Internationale</li>
+        <li><strong>CIM-10</strong> : Classification Internationale des Maladies</li>
+    </ul>
+    
+    <h2>CONCLUSION</h2>
+    
+    <div class="success">
+        <h3>Checklist de Formation</h3>
+        <p>Après cette formation, vous devriez être capable de :</p>
+        <ul>
+            <li>✅ Vous connecter au système</li>
+            <li>✅ Naviguer dans les modules</li>
+            <li>✅ Effectuer les tâches de votre rôle</li>
+            <li>✅ Utiliser les fonctionnalités principales</li>
+            <li>✅ Résoudre les problèmes courants</li>
+        </ul>
+    </div>
+    
+    <p><strong>Bonne formation et bon usage de LogiClinic ! 🎉</strong></p>
+    
+    <hr>
+    
+    <p><em>Version : 1.0 | Dernière mise à jour : 2025 | Équipe LogiClinic</em></p>
+    
+    <div class="info">
+        <h3>INSTRUCTIONS POUR ENREGISTRER EN WORD</h3>
+        <ol>
+            <li>Ouvrez ce fichier HTML dans votre navigateur</li>
+            <li>Fichier → Imprimer (ou Ctrl+P)</li>
+            <li>Choisissez "Enregistrer au format PDF" ou "Microsoft Print to PDF"</li>
+            <li>OU : Ouvrez ce fichier HTML directement dans Microsoft Word</li>
+            <li>Fichier → Enregistrer sous → Choisissez "Document Word (*.docx)"</li>
+            <li>Le document est maintenant en format Word !</li>
+        </ol>
+    </div>
+</body>
+</html>

@@ -819,12 +819,17 @@ export const listeMedicamentsComplet: MedicamentRaw[] = [
 
 /**
  * Fonction pour nettoyer et normaliser le nom d'un médicament
+ * Cette fonction est utilisée pour détecter les doublons
  */
 export function normaliserNomMedicament(nom: string): string {
   return nom
     .trim()
     .replace(/\s+/g, ' ') // Remplacer les espaces multiples par un seul
-    .toUpperCase();
+    .replace(/[.,;:!?()\[\]{}'"]/g, '') // Supprimer la ponctuation
+    .replace(/\s+/g, '') // Supprimer tous les espaces
+    .toUpperCase()
+    .normalize('NFD') // Normaliser les caractères accentués
+    .replace(/[\u0300-\u036f]/g, ''); // Supprimer les accents
 }
 
 /**

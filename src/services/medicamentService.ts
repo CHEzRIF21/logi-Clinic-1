@@ -1,6 +1,7 @@
 import { supabase, MedicamentSupabase, MedicamentFormData } from './stockSupabase';
 import { MedicamentIdGenerator } from '../utils/medicamentIdGenerator';
 import { getMyClinicId } from './clinicService';
+import { normaliserNomMedicament } from '../data/listeMedicamentsComplet';
 
 export class MedicamentService {
   // Récupérer tous les médicaments (globaux + spécifiques à la clinique)
@@ -28,11 +29,42 @@ export class MedicamentService {
         throw error;
       }
 
-      return data || [];
+      // Dédupliquer les médicaments par nom normalisé
+      const medicamentsDedupliques = MedicamentService.deduplicateMedicaments(data || []);
+
+      return medicamentsDedupliques;
     } catch (error) {
       console.error('Erreur dans getAllMedicaments:', error);
       throw error;
     }
+  }
+
+  // Fonction pour dédupliquer les médicaments par nom normalisé
+  static deduplicateMedicaments(medicaments: MedicamentSupabase[]): MedicamentSupabase[] {
+    const vus = new Map<string, MedicamentSupabase>();
+    
+    for (const medicament of medicaments) {
+      const nomNormalise = normaliserNomMedicament(medicament.nom);
+      
+      // Si on n'a pas encore vu ce médicament, ou si celui-ci est plus récent (ID plus grand)
+      if (!vus.has(nomNormalise)) {
+        vus.set(nomNormalise, medicament);
+      } else {
+        const existant = vus.get(nomNormalise)!;
+        // Garder le médicament avec l'ID le plus récent (ou celui qui est global si l'autre est spécifique)
+        if (medicament.clinic_id === null && existant.clinic_id !== null) {
+          // Préférer le médicament global
+          vus.set(nomNormalise, medicament);
+        } else if (medicament.id > existant.id) {
+          // Préférer le médicament le plus récent
+          vus.set(nomNormalise, medicament);
+        }
+      }
+    }
+    
+    return Array.from(vus.values()).sort((a, b) => 
+      a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })
+    );
   }
 
   // Récupérer un médicament par ID

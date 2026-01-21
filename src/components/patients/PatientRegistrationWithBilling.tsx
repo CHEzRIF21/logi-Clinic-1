@@ -20,8 +20,6 @@ import {
 import {
   Person,
   MedicalServices,
-  Payment,
-  CheckCircle,
   Receipt,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -41,7 +39,7 @@ interface PatientRegistrationWithBillingProps {
   onCancel?: () => void;
 }
 
-const steps = ['Sélection Patient', 'Orientation', 'Actes à Facturer', 'Confirmation'];
+const steps = ['Sélection Patient', 'Acte à facturer'];
 
 export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBillingProps> = ({
   onComplete,
@@ -153,9 +151,8 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
 
       // Stocker l'ID de la consultation pour l'utiliser plus tard
       setConsultationId(consultation.id);
-
-      // Passer à l'étape de sélection des actes
-      setActiveStep(2);
+      
+      // Rester sur la même étape, la section des actes apparaîtra automatiquement
     } catch (err: any) {
       console.error('Erreur création consultation:', err);
       setError('Erreur lors de la création de la consultation: ' + err.message);
@@ -222,17 +219,17 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
             );
           }
 
-          setActiveStep(3);
+          // Facture créée avec succès, terminer le processus
+          onComplete?.(selectedPatient.id, consultationId);
         } else {
           setError('Erreur lors de la création de la facture');
           setLoading(false);
           return;
         }
       } else {
-        setActiveStep(3);
+        // Pas d'actes sélectionnés, terminer quand même
+        onComplete?.(selectedPatient.id, consultationId);
       }
-
-      onComplete?.(selectedPatient.id, consultationId);
     } catch (err: any) {
       console.error('Erreur génération facture:', err);
       setError('Erreur lors de la génération de la facture: ' + err.message);
@@ -262,7 +259,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
             <Person color="primary" sx={{ fontSize: 40 }} />
             <Box>
               <Typography variant="h4" gutterBottom>
-                Consultation avec Facturation
+                Acte à facturer
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Sélectionnez un patient et créez une consultation avec facturation
@@ -333,14 +330,19 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
             </Box>
           )}
 
-          {/* Étape 2: Orientation */}
+          {/* Étape 2: Acte à facturer (Orientation + Actes à Facturer) */}
           {activeStep === 1 && selectedPatient && (
             <Box>
               <Typography variant="h6" gutterBottom>
-                Orientation
+                Acte à facturer
               </Typography>
 
-              <Box sx={{ mb: 3 }}>
+              {/* Section Orientation */}
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="subtitle1" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
+                  Orientation
+                </Typography>
+
                 <FormControl fullWidth sx={{ mb: 2 }}>
                   <InputLabel>Service consulté *</InputLabel>
                   <Select
@@ -388,44 +390,33 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 </FormControl>
               </Box>
 
-              <Box display="flex" justifyContent="space-between" mt={3}>
-                <Button 
-                  onClick={handleBack}
-                  disabled={loading}
-                >
-                  Retour
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleCreateConsultation}
-                  disabled={loading || !selectedPatient || !serviceConsulte}
-                  startIcon={loading ? <CircularProgress size={20} /> : <MedicalServices />}
-                >
-                  {loading ? 'Création...' : 'Continuer vers les Actes'}
-                </Button>
-              </Box>
-            </Box>
-          )}
+              {/* Section Actes à Facturer */}
+              {serviceConsulte && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
+                    Actes à Facturer
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Sélectionnez les actes médicaux à inclure dans la facture initiale.
+                    Les actes par défaut ont été pré-sélectionnés selon le type de consultation.
+                  </Typography>
 
-          {/* Étape 3: Sélection des Actes à Facturer */}
-          {activeStep === 2 && selectedPatient && (
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Actes à Facturer
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Sélectionnez les actes médicaux à inclure dans la facture initiale.
-                Les actes par défaut ont été pré-sélectionnés selon le type de consultation.
-              </Typography>
-
-              <SelectionActesFacturables
-                typeConsultation={serviceConsulte === 'Urgences' ? 'urgence' : serviceConsulte === 'Maternité' || serviceConsulte === 'Pédiatrie' || serviceConsulte === 'Chirurgie' ? 'specialisee' : 'generale'}
-                isUrgent={isUrgent || serviceConsulte === 'Urgences'}
-                onActesChange={setActesSelectionnes}
-                initialActes={actesSelectionnes}
-                onServiceTypeChange={setTypeServiceFacture}
-                initialServiceType={typeServiceFacture}
-              />
+                  {consultationId ? (
+                    <SelectionActesFacturables
+                      typeConsultation={serviceConsulte === 'Urgences' ? 'urgence' : serviceConsulte === 'Maternité' || serviceConsulte === 'Pédiatrie' || serviceConsulte === 'Chirurgie' ? 'specialisee' : 'generale'}
+                      isUrgent={isUrgent || serviceConsulte === 'Urgences'}
+                      onActesChange={setActesSelectionnes}
+                      initialActes={actesSelectionnes}
+                      onServiceTypeChange={setTypeServiceFacture}
+                      initialServiceType={typeServiceFacture}
+                    />
+                  ) : (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Veuillez d'abord créer la consultation en cliquant sur "Créer la consultation".
+                    </Alert>
+                  )}
+                </Box>
+              )}
 
               <Box display="flex" justifyContent="space-between" mt={3}>
                 <Button 
@@ -434,75 +425,25 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                 >
                   Retour
                 </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleGenerateInvoiceAndComplete}
-                  disabled={loading || actesSelectionnes.length === 0 || !consultationId}
-                  startIcon={loading ? <CircularProgress size={20} /> : <Receipt />}
-                >
-                  {loading ? 'Génération...' : 'Générer la Facture et Finaliser'}
-                </Button>
-              </Box>
-            </Box>
-          )}
-
-          {/* Étape 4: Confirmation */}
-          {activeStep === 3 && (
-            <Box textAlign="center">
-              <CheckCircle color="success" sx={{ fontSize: 60, mb: 2 }} />
-              <Typography variant="h5" gutterBottom>
-                Facture créée avec succès !
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                Les actes ont été enregistrés et une facture a été générée.
-                {factureId && (
-                  <Box component="span" display="block" sx={{ mt: 1 }}>
-                    ID Facture: <strong>{factureId}</strong>
-                  </Box>
+                {!consultationId ? (
+                  <Button
+                    variant="contained"
+                    onClick={handleCreateConsultation}
+                    disabled={loading || !selectedPatient || !serviceConsulte}
+                    startIcon={loading ? <CircularProgress size={20} /> : <MedicalServices />}
+                  >
+                    {loading ? 'Création...' : 'Créer la consultation'}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    onClick={handleGenerateInvoiceAndComplete}
+                    disabled={loading || actesSelectionnes.length === 0 || !consultationId}
+                    startIcon={loading ? <CircularProgress size={20} /> : <Receipt />}
+                  >
+                    {loading ? 'Génération...' : 'Générer la Facture et Finaliser'}
+                  </Button>
                 )}
-                {selectedPatient && (
-                  <>
-                    <Box component="span" display="block" sx={{ mt: 1 }}>
-                      Patient: <strong>{selectedPatient.prenom} {selectedPatient.nom}</strong>
-                    </Box>
-                    <Box component="span" display="block" sx={{ mt: 1 }}>
-                      Service: <strong>{serviceConsulte || 'Non spécifié'}</strong>
-                    </Box>
-                  </>
-                )}
-              </Typography>
-
-              <Alert severity="info" sx={{ mb: 3 }}>
-                Le patient peut maintenant effectuer le paiement à la Caisse.
-              </Alert>
-
-              <Box display="flex" justifyContent="center" gap={2}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<Payment />}
-                  onClick={() => navigate('/caisse')}
-                >
-                  Aller à la Caisse
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() => {
-                    // Réinitialiser tout pour recommencer
-                    setActiveStep(0);
-                    setSelectedPatient(null);
-                    setServiceConsulte('');
-                    setMedecinId('');
-                    setIsUrgent(false);
-                    setActesSelectionnes([]);
-                    setConsultationId(null);
-                    setFactureId(null);
-                    setError(null);
-                    setOpenPatientSelector(true);
-                  }}
-                >
-                  Nouvelle Consultation
-                </Button>
               </Box>
             </Box>
           )}
