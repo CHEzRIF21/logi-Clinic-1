@@ -4,19 +4,10 @@ import {
   Card,
   CardContent,
   Typography,
-  Autocomplete,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  FormControl,
-  FormLabel,
   Alert,
-  Divider,
-  Chip,
-  TextField
+  Divider
 } from '@mui/material';
 import { Science } from '@mui/icons-material';
-import { DiagnosticService, DiagnosticCode } from '../../../services/diagnosticService';
 import { SpeechTextField } from '../../common/SpeechTextField';
 
 interface WorkflowStep9DiagnosticProps {
@@ -30,57 +21,25 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
   diagnosticsDetail = [],
   onDiagnosticsChange
 }) => {
-  const [principalCode, setPrincipalCode] = useState<string>('');
   const [principalLibelle, setPrincipalLibelle] = useState<string>('');
-  const [principalType, setPrincipalType] = useState<'Suspecté' | 'Confirmé'>('Suspecté');
   const [secondaire, setSecondaire] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<DiagnosticCode[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     if (diagnosticsDetail && diagnosticsDetail.length > 0) {
       const principal = diagnosticsDetail.find(d => d.principal);
       if (principal) {
-        setPrincipalCode(principal.code || '');
         setPrincipalLibelle(principal.libelle || '');
-        setPrincipalType(principal.type || 'Suspecté');
       }
       const secondaires = diagnosticsDetail.filter(d => !d.principal).map(d => d.libelle).join(', ');
       setSecondaire(secondaires);
     }
   }, [diagnosticsDetail]);
 
-  useEffect(() => {
-    const searchDiagnostics = async () => {
-      if (searchQuery.length > 2) {
-        try {
-          const results = await DiagnosticService.searchCIM10(searchQuery);
-          setSearchResults(results);
-        } catch (error) {
-          console.error('Erreur lors de la recherche:', error);
-        }
-      } else {
-        setSearchResults([]);
-      }
-    };
-
-    const timeoutId = setTimeout(searchDiagnostics, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery]);
-
-  const handlePrincipalSelect = (code: DiagnosticCode | null) => {
-    if (code) {
-      setPrincipalCode(code.code);
-      setPrincipalLibelle(code.libelle);
-      updateDiagnostics();
-    }
-  };
-
   const updateDiagnostics = () => {
-    const principal = principalCode ? {
-      code: principalCode,
+    const principal = principalLibelle ? {
+      code: '',
       libelle: principalLibelle,
-      type: principalType,
+      type: 'Suspecté' as const,
       principal: true
     } : null;
 
@@ -106,7 +65,7 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
     }, 300);
     
     return () => clearTimeout(timeoutId);
-  }, [principalCode, principalLibelle, principalType, secondaire]);
+  }, [principalLibelle, secondaire]);
 
   return (
     <Card>
@@ -120,7 +79,7 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
         <Divider sx={{ my: 2 }} />
 
         <Alert severity="info" sx={{ mb: 2 }}>
-          Diagnostic principal avec code CIM-10 et diagnostic secondaire en texte libre.
+          Diagnostic principal et diagnostics secondaires en texte libre.
         </Alert>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -128,43 +87,16 @@ export const WorkflowStep9Diagnostic: React.FC<WorkflowStep9DiagnosticProps> = (
             <Typography variant="subtitle2" gutterBottom>
               Diagnostic Principal
             </Typography>
-            <Autocomplete
-              options={searchResults}
-              getOptionLabel={(option) => `${option.code} - ${option.libelle}`}
-              value={searchResults.find(r => r.code === principalCode) || null}
-              onChange={(_, newValue) => handlePrincipalSelect(newValue)}
-              onInputChange={(_, newInputValue) => setSearchQuery(newInputValue)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Rechercher un code CIM-10"
-                  placeholder="Tapez pour rechercher..."
-                />
-              )}
-              renderOption={(props, option) => (
-                <Box component="li" {...props}>
-                  <Box>
-                    <Chip label={option.code} size="small" sx={{ mr: 1 }} />
-                    {option.libelle}
-                  </Box>
-                </Box>
-              )}
+            <SpeechTextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Diagnostic principal"
+              value={principalLibelle}
+              onChange={setPrincipalLibelle}
+              placeholder="Saisissez le diagnostic principal"
+              enableSpeech={true}
             />
-            {principalCode && (
-              <Box sx={{ mt: 2 }}>
-                <FormControl component="fieldset">
-                  <FormLabel component="legend">Type de diagnostic</FormLabel>
-                  <RadioGroup
-                    row
-                    value={principalType}
-                    onChange={(e) => setPrincipalType(e.target.value as 'Suspecté' | 'Confirmé')}
-                  >
-                    <FormControlLabel value="Suspecté" control={<Radio />} label="Suspecté" />
-                    <FormControlLabel value="Confirmé" control={<Radio />} label="Confirmé" />
-                  </RadioGroup>
-                </FormControl>
-              </Box>
-            )}
           </Box>
 
           <Box>

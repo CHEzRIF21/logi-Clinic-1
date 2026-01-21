@@ -18,11 +18,13 @@ import { PatientService } from '../../../services/patientService';
 interface WorkflowStep6AllergiesProps {
   patient: Patient;
   onAllergiesChange: (allergies: string) => void;
+  bannerOnly?: boolean; // Si true, affiche uniquement le banner d'alerte
 }
 
 export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
   patient,
-  onAllergiesChange
+  onAllergiesChange,
+  bannerOnly = false
 }) => {
   const [allergiesDetails, setAllergiesDetails] = useState<string>(patient.allergies || ''); // Champ séparé pour les détails
   const [allergiesList, setAllergiesList] = useState<string[]>(
@@ -78,39 +80,41 @@ export const WorkflowStep6Allergies: React.FC<WorkflowStep6AllergiesProps> = ({
   // Extraire les allergies depuis le champ "Détails des allergies" pour le banner
   const allergiesFromDetails = allergiesDetails ? allergiesDetails.split(',').map(a => a.trim()).filter(a => a) : [];
 
+  // Si bannerOnly est true, afficher uniquement le banner
+  if (bannerOnly) {
+    return allergiesFromDetails.length > 0 ? (
+      <Alert
+        severity="error"
+        icon={<Warning />}
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+          mb: 2,
+          fontWeight: 'bold',
+          fontSize: '1.1rem'
+        }}
+      >
+        <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+          <Typography variant="h6" component="span">
+            ⚠️ ALLERGIES CONNUES :
+          </Typography>
+          {allergiesFromDetails.map((allergy, index) => (
+            <Chip
+              key={index}
+              label={allergy}
+              color="error"
+              size="medium"
+              sx={{ fontWeight: 'bold' }}
+            />
+          ))}
+        </Box>
+      </Alert>
+    ) : null;
+  }
+
   return (
     <>
-      {/* Banner persistant en haut */}
-      {allergiesFromDetails.length > 0 && (
-        <Alert
-          severity="error"
-          icon={<Warning />}
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1000,
-            mb: 2,
-            fontWeight: 'bold',
-            fontSize: '1.1rem'
-          }}
-        >
-          <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-            <Typography variant="h6" component="span">
-              ⚠️ ALLERGIES CONNUES :
-            </Typography>
-            {allergiesFromDetails.map((allergy, index) => (
-              <Chip
-                key={index}
-                label={allergy}
-                color="error"
-                size="medium"
-                sx={{ fontWeight: 'bold' }}
-              />
-            ))}
-          </Box>
-        </Alert>
-      )}
-
       <Card>
         <CardContent>
           <Box display="flex" alignItems="center" gap={1} mb={2}>

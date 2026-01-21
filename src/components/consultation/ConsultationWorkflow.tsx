@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Alert,
-} from '@mui/material';
+import { Box } from '@mui/material';
 import {
   Assignment,
   History,
@@ -238,144 +235,102 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     const step = STEPS[stepIndex];
     const data = stepData[stepIndex] || {};
 
-    // Banner d'alertes allergies persistant (sauf étape 6)
-    const allergiesBanner = patient.allergies && step.id !== 6 ? (
-      <Box sx={{ mb: 2 }}>
-        <WorkflowStep6Allergies
-          patient={patient}
-          onAllergiesChange={() => {}}
-        />
-      </Box>
-    ) : null;
-
     switch (step.id) {
       case 1:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep1Motif
-              consultation={consultation}
-              onMotifChange={(motif, categorie) =>
-                updateStepData(stepIndex, { motif, categorie_motif: categorie })
-              }
-              required={true}
-            />
-          </>
+          <WorkflowStep1Motif
+            consultation={consultation}
+            onMotifChange={(motif, categorie) =>
+              updateStepData(stepIndex, { motif, categorie_motif: categorie })
+            }
+            required={true}
+          />
         );
       case 2:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep2Anamnese
-              anamnese={data.anamnese || consultation.anamnese || {}}
-              onAnamneseChange={(anamnese) =>
-                updateStepData(stepIndex, { anamnese })
-              }
-            />
-          </>
+          <WorkflowStep2Anamnese
+            anamnese={data.anamnese || consultation.anamnese || {}}
+            onAnamneseChange={(anamnese) =>
+              updateStepData(stepIndex, { anamnese })
+            }
+          />
         );
       case 3:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep3TraitementEnCours
-              patient={patient}
-              traitementEnCours={data.traitement_en_cours || consultation.traitement_en_cours || ''}
-              onTraitementChange={(traitement) =>
-                updateStepData(stepIndex, { traitement_en_cours: traitement })
-              }
-            />
-          </>
+          <WorkflowStep3TraitementEnCours
+            patient={patient}
+            traitementEnCours={data.traitement_en_cours || consultation.traitement_en_cours || ''}
+            onTraitementChange={(traitement) =>
+              updateStepData(stepIndex, { traitement_en_cours: traitement })
+            }
+          />
         );
       case 4:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep4Antecedents
-              patient={patient}
-              antecedents={data.antecedents || (consultation as any).antecedents_consultation || {}}
-              onAntecedentsChange={(antecedents) =>
-                updateStepData(stepIndex, { antecedents })
-              }
-            />
-          </>
+          <WorkflowStep4Antecedents
+            patient={patient}
+            antecedents={data.antecedents || (consultation as any).antecedents_consultation || {}}
+            onAntecedentsChange={(antecedents) =>
+              updateStepData(stepIndex, { antecedents })
+            }
+          />
         );
       case 5:
-        return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep5Prevention patient={patient} />
-          </>
-        );
+        return <WorkflowStep5Prevention patient={patient} />;
       case 6:
         return <WorkflowStep6Allergies patient={patient} onAllergiesChange={() => {}} />;
       case 7:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep7Bilans
-              patient={patient}
-              consultationId={consultation.id}
-            />
-          </>
+          <WorkflowStep7Bilans
+            patient={patient}
+            consultationId={consultation.id}
+          />
         );
       case 8:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep8ExamenPhysique
-              consultationId={consultation.id}
-              patientId={consultation.patient_id}
-              examensCliniques={data.examens_cliniques || consultation.examens_cliniques || {}}
-              onExamensChange={(examens) =>
-                updateStepData(stepIndex, { examens_cliniques: examens })
-              }
-              userId={userId}
-            />
-          </>
+          <WorkflowStep8ExamenPhysique
+            consultationId={consultation.id}
+            patientId={consultation.patient_id}
+            examensCliniques={data.examens_cliniques || consultation.examens_cliniques || {}}
+            onExamensChange={(examens) =>
+              updateStepData(stepIndex, { examens_cliniques: examens })
+            }
+            userId={userId}
+          />
         );
       case 9:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep9Diagnostic
-              diagnostics={data.diagnostics || consultation.diagnostics || []}
-              diagnosticsDetail={data.diagnostics_detail || (consultation as any).diagnostics_detail || []}
-              onDiagnosticsChange={(diagnostics, diagnosticsDetail) =>
-                updateStepData(stepIndex, { diagnostics, diagnostics_detail: diagnosticsDetail })
-              }
-            />
-          </>
+          <WorkflowStep9Diagnostic
+            diagnostics={data.diagnostics || consultation.diagnostics || []}
+            diagnosticsDetail={data.diagnostics_detail || (consultation as any).diagnostics_detail || []}
+            onDiagnosticsChange={(diagnostics, diagnosticsDetail) =>
+              updateStepData(stepIndex, { diagnostics, diagnostics_detail: diagnosticsDetail })
+            }
+          />
         );
       case 10:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep10Ordonnance
-              consultationId={consultation.id}
-              patientId={consultation.patient_id}
-              patient={patient}
-              onPrescriptionComplete={() => {
-                setCompletedSteps((prev) => {
-                  const newSet = new Set(prev);
-                  newSet.add(stepIndex);
-                  return newSet;
-                });
-              }}
-              userId={userId}
-            />
-          </>
+          <WorkflowStep10Ordonnance
+            consultationId={consultation.id}
+            patientId={consultation.patient_id}
+            patient={patient}
+            onPrescriptionComplete={() => {
+              setCompletedSteps((prev) => {
+                const newSet = new Set(prev);
+                newSet.add(stepIndex);
+                return newSet;
+              });
+            }}
+            userId={userId}
+          />
         );
       case 11:
         return (
-          <>
-            {allergiesBanner}
-            <WorkflowStep11Cloture
-              consultation={consultation}
-              onClose={onClose}
-              userId={userId}
-            />
-          </>
+          <WorkflowStep11Cloture
+            consultation={consultation}
+            onClose={onClose}
+            userId={userId}
+          />
         );
       default:
         return null;

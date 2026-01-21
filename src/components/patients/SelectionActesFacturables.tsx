@@ -40,6 +40,8 @@ import {
 } from '@mui/icons-material';
 import { ActesService, Acte } from '../../services/actesService';
 import { FacturationService, ServiceFacturable } from '../../services/facturationService';
+import { MedicamentService } from '../../services/medicamentService';
+import { MedicamentSupabase } from '../../services/stockSupabase';
 import { useSnackbar } from 'notistack';
 
 interface SelectionActesFacturablesProps {
@@ -59,10 +61,12 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
 }) => {
   const { enqueueSnackbar } = useSnackbar();
   const [actesDisponibles, setActesDisponibles] = useState<ServiceFacturable[]>([]);
+  const [medicamentsDisponibles, setMedicamentsDisponibles] = useState<MedicamentSupabase[]>([]);
   const [actesSelectionnes, setActesSelectionnes] = useState<Acte[]>(initialActes);
   const [loading, setLoading] = useState(false);
   const [recherche, setRecherche] = useState('');
   const [openCustomActeDialog, setOpenCustomActeDialog] = useState(false);
+  const [typeServiceFiltre, setTypeServiceFiltre] = useState<string>('');
   
   // Mapper le service consulté vers le type de service pour la facture
   const getTypeServiceFromServiceConsulte = (service: string): string => {
@@ -76,6 +80,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       'Chirurgie': 'chirurgie',
       'Vaccination': 'vaccination',
       'Soins infirmiers': 'soins_infirmiers',
+      'Pharmacie': 'pharmacie',
     };
     return mapping[service] || 'consultation';
   };
@@ -106,8 +111,27 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   }, [serviceConsulte]);
 
   useEffect(() => {
-    loadActesDisponibles();
-  }, []);
+    // Si "Pharmacie" est sélectionné, charger uniquement les médicaments
+    if (typeServiceFacture === 'pharmacie' || typeServiceFiltre === 'pharmacie') {
+      loadMedicaments();
+    } else {
+      // Sinon, charger les actes normaux
+      loadActesDisponibles();
+    }
+  }, [typeServiceFacture, typeServiceFiltre]);
+
+  const loadMedicaments = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const medicaments = await MedicamentService.getAllMedicaments();
+      setMedicamentsDisponibles(medicaments);
+    } catch (error: any) {
+      console.error('Erreur chargement médicaments:', error);
+      enqueueSnackbar('Erreur lors du chargement des médicaments', { variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  }, [enqueueSnackbar]);
 
   useEffect(() => {
     if (actesDisponibles.length > 0 && actesSelectionnes.length === 0) {
@@ -157,12 +181,32 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       code: service.code,
       libelle: service.nom,
       quantite: 1,
-      prix_unitaire: service.tarif_base,
+      prix_unitaire: 0, // Prix unitaire vide par défaut (doit être rempli manuellement)
       type_service: service.type_service,
     };
 
     setActesSelectionnes([...actesSelectionnes, nouvelActe]);
     enqueueSnackbar('Acte ajouté au panier', { variant: 'success' });
+  };
+
+  const handleAddMedicament = (medicament: MedicamentSupabase) => {
+    // Vérifier si le médicament n'est pas déjà dans le panier
+    const existe = actesSelectionnes.find(a => a.code === medicament.code);
+    if (existe) {
+      enqueueSnackbar('Ce médicament est déjà dans le panier', { variant: 'info' });
+      return;
+    }
+
+    const nouvelActe: Acte = {
+      code: medicament.code,
+      libelle: `${medicament.nom} ${medicament.forme ? `(${medicament.forme})` : ''} ${medicament.dosage ? `- ${medicament.dosage}` : ''}`.trim(),
+      quantite: 1,
+      prix_unitaire: 0, // Prix unitaire vide par défaut
+      type_service: 'pharmacie',
+    };
+
+    setActesSelectionnes([...actesSelectionnes, nouvelActe]);
+    enqueueSnackbar('Médicament ajouté au panier', { variant: 'success' });
   };
 
   const handleRemoveActe = (code: string) => {
@@ -224,7 +268,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
 
   const handleQuantiteChange = (code: string, quantite: number) => {
     if (quantite < 1) {
-      handleRemoveActe(code);
+      enqueueSnackbar('La quantité doit être au moins égale à 1', { variant: 'error' });
       return;
     }
 
@@ -235,9 +279,17 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     );
   };
 
+  const handlePrixUnitaireChange = (code: string, prix: number) => {
+    setActesSelectionnes(
+      actesSelectionnes.map(acte =>
+        acte.code === code ? { ...acte, prix_unitaire: prix || 0 } : acte
+      )
+    );
+  };
+
   const calculerTotal = () => {
     return actesSelectionnes.reduce(
-      (sum, acte) => sum + acte.prix_unitaire * acte.quantite,
+      (sum, acte) => sum + (acte.prix_unitaire || 0) * (acte.quantite || 1),
       0
     );
   };
@@ -250,6 +302,14 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
       acte.nom.toLowerCase().includes(recherche.toLowerCase()) ||
       acte.code.toLowerCase().includes(recherche.toLowerCase());
     return matchType && matchRecherche;
+  });
+
+  // Filtrer les médicaments en fonction de la recherche
+  const medicamentsFiltres = medicamentsDisponibles.filter(medicament => {
+    const matchRecherche = !recherche || 
+      medicament.nom.toLowerCase().includes(recherche.toLowerCase()) ||
+      medicament.code.toLowerCase().includes(recherche.toLowerCase());
+    return matchRecherche;
   });
 
 
@@ -271,7 +331,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
 
           {/* Filtre de recherche */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="Rechercher un acte"
@@ -279,6 +339,33 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                 onChange={(e) => setRecherche(e.target.value)}
                 placeholder="Nom ou code de l'acte..."
               />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Filtrer par type de service</InputLabel>
+                <Select
+                  value={typeServiceFiltre}
+                  onChange={(e) => {
+                    setTypeServiceFiltre(e.target.value);
+                    if (e.target.value === 'pharmacie') {
+                      loadMedicaments();
+                    }
+                  }}
+                  label="Filtrer par type de service"
+                >
+                  <MenuItem value="">Tous les services</MenuItem>
+                  <MenuItem value="consultation">Consultation</MenuItem>
+                  <MenuItem value="maternite">Maternité</MenuItem>
+                  <MenuItem value="pediatrie">Pédiatrie</MenuItem>
+                  <MenuItem value="laboratoire">Laboratoire</MenuItem>
+                  <MenuItem value="imagerie_medicale">Imagerie médicale</MenuItem>
+                  <MenuItem value="urgences">Urgences</MenuItem>
+                  <MenuItem value="chirurgie">Chirurgie</MenuItem>
+                  <MenuItem value="vaccination">Vaccination</MenuItem>
+                  <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
+                  <MenuItem value="pharmacie">Pharmacie</MenuItem>
+                </Select>
+              </FormControl>
             </Grid>
             {serviceConsulte && (
               <Grid item xs={12}>
@@ -292,16 +379,20 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
           {/* Liste des actes disponibles */}
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
             <Typography variant="subtitle1">
-              Actes Disponibles
+              {typeServiceFiltre === 'pharmacie' || typeServiceFacture === 'pharmacie' 
+                ? 'Médicaments Disponibles' 
+                : 'Actes Disponibles'}
             </Typography>
-            <Button
-              variant="outlined"
-              startIcon={<AddCircle />}
-              onClick={() => setOpenCustomActeDialog(true)}
-              size="small"
-            >
-              Ajouter un acte personnalisé
-            </Button>
+            {typeServiceFiltre !== 'pharmacie' && typeServiceFacture !== 'pharmacie' && (
+              <Button
+                variant="outlined"
+                startIcon={<AddCircle />}
+                onClick={() => setOpenCustomActeDialog(true)}
+                size="small"
+              >
+                Ajouter un acte personnalisé
+              </Button>
+            )}
           </Box>
           {loading ? (
             <Box display="flex" justifyContent="center" p={3}>
@@ -320,56 +411,114 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {actesFiltres.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} align="center">
-                        <Typography variant="body2" color="text.secondary">
-                          Aucun acte trouvé
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    actesFiltres.map((acte) => {
-                      const estSelectionne = actesSelectionnes.some(a => a.code === acte.code);
-                      return (
-                        <TableRow key={acte.id} hover>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight="bold">
-                              {acte.code}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>{acte.nom}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={acte.type_service}
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          </TableCell>
-                          <TableCell align="right">
-                            {acte.tarif_base.toLocaleString()} XOF
-                          </TableCell>
-                          <TableCell align="center">
-                            {estSelectionne ? (
+                  {/* Afficher UNIQUEMENT les médicaments si "Pharmacie" est sélectionné */}
+                  {(typeServiceFiltre === 'pharmacie' || typeServiceFacture === 'pharmacie') ? (
+                    medicamentsFiltres.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">
+                          <Typography variant="body2" color="text.secondary">
+                            Aucun médicament trouvé dans le stock
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      medicamentsFiltres.map((medicament) => {
+                        const estSelectionne = actesSelectionnes.some(a => a.code === medicament.code);
+                        return (
+                          <TableRow key={medicament.id} hover>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight="bold">
+                                {medicament.code}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              {`${medicament.nom} ${medicament.forme ? `(${medicament.forme})` : ''} ${medicament.dosage ? `- ${medicament.dosage}` : ''}`.trim()}
+                            </TableCell>
+                            <TableCell>
                               <Chip
-                                label="Déjà ajouté"
-                                size="small"
-                                color="success"
-                              />
-                            ) : (
-                              <IconButton
+                                label="Pharmacie"
                                 size="small"
                                 color="primary"
-                                onClick={() => handleAddActe(acte)}
-                              >
-                                <Add />
-                              </IconButton>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
+                                variant="outlined"
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              {(medicament.prix_unitaire_detail || medicament.prix_unitaire || 0).toLocaleString()} XOF
+                            </TableCell>
+                            <TableCell align="center">
+                              {estSelectionne ? (
+                                <Chip
+                                  label="Déjà ajouté"
+                                  size="small"
+                                  color="success"
+                                />
+                              ) : (
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={() => handleAddMedicament(medicament)}
+                                >
+                                  <Add />
+                                </IconButton>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )
+                  ) : (
+                    /* Afficher les actes normaux (pas de médicaments) */
+                    actesFiltres.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">
+                          <Typography variant="body2" color="text.secondary">
+                            Aucun acte trouvé
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      actesFiltres.map((acte) => {
+                        const estSelectionne = actesSelectionnes.some(a => a.code === acte.code);
+                        return (
+                          <TableRow key={acte.id} hover>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight="bold">
+                                {acte.code}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>{acte.nom}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={acte.type_service}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              {acte.tarif_base.toLocaleString()} XOF
+                            </TableCell>
+                            <TableCell align="center">
+                              {estSelectionne ? (
+                                <Chip
+                                  label="Déjà ajouté"
+                                  size="small"
+                                  color="success"
+                                />
+                              ) : (
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={() => handleAddActe(acte)}
+                                >
+                                  <Add />
+                                </IconButton>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )
                   )}
                 </TableBody>
               </Table>
@@ -424,13 +573,25 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                             }
                             inputProps={{ min: 1, style: { textAlign: 'center', width: 60 } }}
                             size="small"
+                            required
+                            error={!acte.quantite || acte.quantite < 1}
+                            helperText={(!acte.quantite || acte.quantite < 1) ? 'Quantité requise' : ''}
                           />
                         </TableCell>
                         <TableCell align="right">
-                          {acte.prix_unitaire.toLocaleString()} XOF
+                          <TextField
+                            type="number"
+                            value={acte.prix_unitaire || ''}
+                            onChange={(e) =>
+                              handlePrixUnitaireChange(acte.code, parseFloat(e.target.value) || 0)
+                            }
+                            inputProps={{ min: 0, step: 1, style: { textAlign: 'right', width: 100 } }}
+                            size="small"
+                            placeholder="0"
+                          />
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                          {(acte.prix_unitaire * acte.quantite).toLocaleString()} XOF
+                          {((acte.prix_unitaire || 0) * (acte.quantite || 1)).toLocaleString()} XOF
                         </TableCell>
                         <TableCell align="center">
                           <IconButton
@@ -541,6 +702,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                     <MenuItem value="chirurgie">Chirurgie</MenuItem>
                     <MenuItem value="vaccination">Vaccination</MenuItem>
                     <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
+                    <MenuItem value="pharmacie">Pharmacie</MenuItem>
                   </Select>
                   {serviceConsulte && (
                     <Alert severity="info" sx={{ mt: 1 }}>

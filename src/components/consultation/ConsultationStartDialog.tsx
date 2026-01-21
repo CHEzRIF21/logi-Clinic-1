@@ -46,6 +46,31 @@ const SPECIALITE_ICONS: Record<string, React.ReactNode> = {
   'Pédiatrie': <LocalHospital />,
 };
 
+// Liste complète des spécialités médicales
+const SPECIALITES_MEDICALES = [
+  'Cardiologie',
+  'Pneumologie',
+  'Gastro-entérologie / Hépatologie',
+  'Néphrologie',
+  'Endocrinologie / Diabétologie',
+  'Rhumatologie',
+  'Hématologie',
+  'Oncologie médicale',
+  'Neurologie',
+  'Dermatologie',
+  'Maladies infectieuses',
+  'Allergologie',
+  'Médecine du sport',
+  'Médecine du travail',
+  'Pédiatrie',
+  'Néonatologie (consultations de suivi)',
+  'Gynécologie',
+  'Ophtalmologie',
+  'Oto-rhino-laryngologie (ORL)',
+  'Audiologie',
+  'Autres',
+];
+
 export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = ({
   open,
   onClose,
@@ -129,7 +154,8 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
     ? templates
     : templates.filter((t) => t.specialite === filterSpecialite);
 
-  const specialites = Array.from(new Set(templates.map((t) => t.specialite)));
+  // Utiliser la liste complète des spécialités médicales
+  const specialites = SPECIALITES_MEDICALES;
 
   return (
     <Dialog 
@@ -168,11 +194,13 @@ export const ConsultationStartDialog: React.FC<ConsultationStartDialogProps> = (
               label="Filtrer par spécialité"
             >
               <MenuItem value="all">Toutes les spécialités</MenuItem>
-              {specialites.map((spec) => (
-                <MenuItem key={spec} value={spec}>
-                  {spec}
-                </MenuItem>
-              ))}
+              {specialites
+                .filter((spec) => spec) // Filtrer les valeurs null/undefined
+                .map((spec) => (
+                  <MenuItem key={spec} value={spec}>
+                    {spec}
+                  </MenuItem>
+                ))}
             </Select>
           </FormControl>
 

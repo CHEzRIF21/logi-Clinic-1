@@ -30,6 +30,7 @@ import {
   Warning,
   CheckCircle,
   SwapHoriz,
+  Remove,
 } from '@mui/icons-material';
 import Autocomplete from '@mui/material/Autocomplete';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -44,6 +45,8 @@ import {
   PrescriptionSafetyService,
 } from '../../services/prescriptionSafetyService';
 import { PrescriptionPrintService, OrdonnanceData } from '../../services/prescriptionPrintService';
+import { MedicamentService } from '../../services/medicamentService';
+import { MedicamentSupabase } from '../../services/stockSupabase';
 
 interface PrescriptionFormModalProps {
   open: boolean;
@@ -90,10 +93,11 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
   patient,
   medecin,
 }) => {
-  const [lines, setLines] = useState<PrescriptionLineDraft[]>([createEmptyLine()]);
+  const [lines, setLines] = useState<PrescriptionLineDraft[]>([]);
+  const [allMedicaments, setAllMedicaments] = useState<MedicamentSupabase[]>([]);
   const [medicamentOptions, setMedicamentOptions] = useState<MedicamentSafetyInfo[]>([]);
   const [optionsQuery, setOptionsQuery] = useState('');
-  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [loadingMedicaments, setLoadingMedicaments] = useState(false);
   const [incompatibilityAlerts, setIncompatibilityAlerts] = useState<IncompatibilityAlert[]>([]);
 
   const patientAllergies = useMemo(
@@ -101,43 +105,73 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
     [patient?.allergies]
   );
 
+  // Charger tous les médicaments au montage du composant
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchMedicaments = async () => {
-      if (!optionsQuery || optionsQuery.trim().length < 2) {
-        setMedicamentOptions([]);
-        return;
-      }
-
-      setOptionsLoading(true);
+    const loadAllMedicaments = async () => {
       try {
-        const results = await PrescriptionSafetyService.searchMedicaments(optionsQuery.trim());
-        if (!cancelled) {
-          setMedicamentOptions(results);
-        }
+        setLoadingMedicaments(true);
+        const medicaments = await MedicamentService.getAllMedicaments();
+        setAllMedicaments(medicaments);
       } catch (error) {
-        console.error('Erreur lors de la recherche de médicaments:', error);
-        if (!cancelled) {
-          setMedicamentOptions([]);
-        }
+        console.error('Erreur lors du chargement des médicaments:', error);
       } finally {
-        if (!cancelled) {
-          setOptionsLoading(false);
-        }
+        setLoadingMedicaments(false);
       }
     };
 
-    // Debounce pour éviter trop de requêtes
-    const timeoutId = setTimeout(() => {
-      fetchMedicaments().catch(console.error);
-    }, 300);
+    if (open) {
+      loadAllMedicaments();
+    }
+  }, [open]);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [optionsQuery]);
+  // Filtrer les médicaments en fonction de la saisie
+  useEffect(() => {
+    if (!optionsQuery || optionsQuery.trim().length === 0) {
+      setMedicamentOptions([]);
+      return;
+    }
+
+    const query = optionsQuery.trim().toLowerCase();
+    
+    // Filtrer les médicaments selon la saisie
+    const filtered = allMedicaments
+      .filter((med) => {
+        const nom = (med.nom || '').toLowerCase();
+        const code = (med.code || '').toLowerCase();
+        const dci = (med.dci || '').toLowerCase();
+        const dosage = (med.dosage || '').toLowerCase();
+        
+        return (
+          nom.includes(query) ||
+          code.includes(query) ||
+          dci.includes(query) ||
+          dosage.includes(query)
+        );
+      })
+      .slice(0, 50) // Limiter à 50 résultats pour les performances
+      .map((med) => {
+        // Convertir MedicamentSupabase en MedicamentSafetyInfo
+        // Note: On doit récupérer le stock depuis les lots, mais pour l'instant on met 0
+        // Si nécessaire, on peut faire une requête supplémentaire pour récupérer le stock
+        return {
+          id: med.id,
+          code: med.code,
+          nom: med.nom,
+          dosage: med.dosage,
+          unite: med.unite,
+          categorie: med.categorie,
+          prescription_requise: med.prescription_requise,
+          seuil_alerte: med.seuil_alerte,
+          seuil_rupture: med.seuil_rupture,
+          stock_total: 0, // Sera mis à jour si nécessaire
+          stock_detail: 0,
+          stock_gros: 0,
+          molecules: [],
+        } as MedicamentSafetyInfo;
+      });
+
+    setMedicamentOptions(filtered);
+  }, [optionsQuery, allMedicaments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,10 +201,6 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
       cancelled = true;
     };
   }, [lines]);
-
-  const handleAddLine = () => {
-    setLines((prev) => [...prev, createEmptyLine()]);
-  };
 
   const handleRemoveLine = (index: number) => {
     setLines((prev) => prev.filter((_, i) => i !== index));
@@ -209,13 +239,8 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
       return nextLine;
     });
     
-    // Déclencher la recherche si au moins 2 caractères
-    if (value && value.length >= 2) {
-      setOptionsQuery(value);
-    } else {
-      setOptionsQuery('');
-      setMedicamentOptions([]);
-    }
+    // Filtrer la liste des médicaments selon la saisie
+    setOptionsQuery(value);
   };
 
   const handleMedicamentSelect = (index: number, value: MedicamentSafetyInfo | string | null) => {
@@ -330,7 +355,8 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
   };
 
   const handleClose = () => {
-    setLines([createEmptyLine()]);
+    setLines([]);
+    setAllMedicaments([]);
     setMedicamentOptions([]);
     setOptionsQuery('');
     setIncompatibilityAlerts([]);
@@ -393,76 +419,135 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
             </Alert>
           )}
 
-          <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-            Lignes de prescription
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mb: 2 }}>
+            Sélectionner les médicaments
           </Typography>
 
-          {lines.map((line, index) => (
-            <Box key={index} sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="subtitle2">Ligne {index + 1}</Typography>
-                {lines.length > 1 && (
-                  <IconButton size="small" color="error" onClick={() => handleRemoveLine(index)}>
-                    <Delete />
-                  </IconButton>
-                )}
-              </Box>
-
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Autocomplete<MedicamentSafetyInfo, false, true, true>
-                    freeSolo
-                    options={medicamentOptions}
-                    loading={optionsLoading}
-                    value={line.selectedMedicament || null}
-                    inputValue={line.medicamentInput || ''}
-                    onInputChange={(_, newInputValue) => handleMedicamentInputChange(index, newInputValue)}
-                    onChange={(_, newValue) => handleMedicamentSelect(index, newValue)}
-                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                    getOptionLabel={(option) =>
-                      option && typeof option !== 'string'
-                        ? `${option.nom}${option.dosage ? ` (${option.dosage} ${option.unite || ''})` : ''}`
-                        : ''
+          {/* Zone de recherche et sélection de médicaments */}
+          <Box sx={{ mb: 3 }}>
+            <Autocomplete<MedicamentSafetyInfo, false, true, true>
+              freeSolo
+              options={medicamentOptions}
+              loading={loadingMedicaments}
+              value={null}
+              inputValue={optionsQuery}
+              onInputChange={(_, newInputValue) => setOptionsQuery(newInputValue)}
+              onChange={(_, newValue) => {
+                if (newValue && typeof newValue !== 'string') {
+                  // Vérifier si le médicament n'est pas déjà sélectionné
+                  const alreadySelected = lines.some(
+                    (line) => line.medicament_id === newValue.id
+                  );
+                  if (!alreadySelected) {
+                    // Créer une nouvelle ligne avec le médicament sélectionné
+                    const newLine = createEmptyLine();
+                    const alerts: PrescriptionSafetyAlert[] = [];
+                    const stockAlert = PrescriptionSafetyService.getStockAlert(newValue);
+                    if (stockAlert) {
+                      alerts.push(stockAlert);
                     }
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Nom du médicament *"
-                        required
-                        placeholder="Tapez au moins 2 caractères pour rechercher..."
-                        helperText={
-                          optionsLoading 
-                            ? 'Recherche en cours...' 
-                            : optionsQuery.length >= 2 && medicamentOptions.length === 0
-                            ? 'Aucun médicament trouvé. Vous pouvez continuer à taper librement.'
-                            : optionsQuery.length >= 2 && medicamentOptions.length > 0
-                            ? `${medicamentOptions.length} médicament(s) trouvé(s)`
-                            : 'Tapez au moins 2 caractères pour rechercher dans le catalogue'
-                        }
-                        InputProps={{
-                          ...params.InputProps,
-                          endAdornment: (
-                            <>
-                              {optionsLoading ? <CircularProgress color="inherit" size={20} /> : null}
-                              {params.InputProps.endAdornment}
-                            </>
-                          ),
-                        }}
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <Box component="li" {...props} key={option.id} display="flex" flexDirection="column">
-                        <Typography variant="body2" fontWeight="bold">
-                          {option.nom}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {option.dosage} {option.unite} • Stock: {option.stock_total} unités
-                        </Typography>
-                      </Box>
-                    )}
-                  />
+                    alerts.push(...PrescriptionSafetyService.getAllergyAlerts(patientAllergies, newValue));
+                    
+                    newLine.selectedMedicament = newValue;
+                    newLine.medicament_id = newValue.id;
+                    newLine.nom_medicament = newValue.nom;
+                    newLine.medicamentInput = newValue.nom;
+                    newLine.alerts = alerts;
+                    
+                    setLines((prev) => [...prev, newLine]);
+                    setOptionsQuery('');
+                  }
+                }
+              }}
+              getOptionLabel={(option) =>
+                option && typeof option !== 'string'
+                  ? `${option.nom}${option.dosage ? ` (${option.dosage} ${option.unite || ''})` : ''}`
+                  : ''
+              }
+              filterOptions={(options, { inputValue }) => {
+                return options;
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Rechercher et ajouter un médicament"
+                  placeholder="Tapez pour rechercher dans le stock..."
+                  helperText={
+                    loadingMedicaments
+                      ? 'Chargement des médicaments...'
+                      : optionsQuery.length > 0 && medicamentOptions.length === 0
+                      ? 'Aucun médicament trouvé. Vous pouvez continuer à taper librement.'
+                      : optionsQuery.length > 0 && medicamentOptions.length > 0
+                      ? `${medicamentOptions.length} médicament(s) trouvé(s)`
+                      : 'Tapez pour rechercher et ajouter des médicaments'
+                  }
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {loadingMedicaments ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.id} display="flex" flexDirection="column">
+                  <Typography variant="body2" fontWeight="bold">
+                    {option.nom}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {option.dosage} {option.unite} • Stock: {option.stock_total} unités
+                  </Typography>
+                </Box>
+              )}
+            />
+          </Box>
+
+          <Divider sx={{ my: 3 }} />
+
+          <Typography variant="subtitle1" gutterBottom fontWeight="bold" sx={{ mb: 2 }}>
+            Détails de prescription ({lines.filter(l => l.medicament_id || l.nom_medicament).length} médicament(s))
+          </Typography>
+
+          {/* Liste des médicaments sélectionnés avec leurs détails */}
+          {lines
+            .filter((line) => line.medicament_id || line.nom_medicament)
+            .map((line, index) => {
+              const actualIndex = lines.findIndex((l) => l === line);
+              return (
+                <Box
+                  key={actualIndex}
+                  sx={{
+                    mb: 3,
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Medication color="primary" />
+                      <Typography variant="subtitle2" fontWeight="bold">
+                        {line.selectedMedicament?.nom || line.nom_medicament || 'Médicament'}
+                        {line.selectedMedicament?.dosage && ` (${line.selectedMedicament.dosage} ${line.selectedMedicament.unite || ''})`}
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleRemoveLine(actualIndex)}
+                      title="Supprimer ce médicament"
+                    >
+                      <Remove />
+                    </IconButton>
+                  </Box>
+
                   {line.selectedMedicament && (
-                    <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
+                    <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
                       <Chip
                         size="small"
                         label={`Stock total: ${line.selectedMedicament.stock_total}`}
@@ -479,85 +564,93 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                       <Chip size="small" label={`Gros: ${line.selectedMedicament.stock_gros}`} />
                     </Box>
                   )}
+
                   {renderLineAlerts(line.alerts)}
-                </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Posologie *"
-                    value={line.posologie || ''}
-                    onChange={(e) => handleLineChange(index, 'posologie', e.target.value)}
-                    placeholder="Ex: 1 comprimé matin et soir"
-                    required
-                  />
-                </Grid>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Posologie *"
+                        value={line.posologie || ''}
+                        onChange={(e) => handleLineChange(actualIndex, 'posologie', e.target.value)}
+                        placeholder="Ex: 1 comprimé matin et soir"
+                        required
+                        size="small"
+                      />
+                    </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Quantité totale *"
-                    type="number"
-                    value={line.quantite_totale || ''}
-                    onChange={(e) => handleLineChange(index, 'quantite_totale', parseInt(e.target.value) || 1)}
-                    inputProps={{ min: 1 }}
-                    required
-                  />
-                </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Quantité totale *"
+                        type="number"
+                        value={line.quantite_totale || ''}
+                        onChange={(e) =>
+                          handleLineChange(actualIndex, 'quantite_totale', parseInt(e.target.value) || 1)
+                        }
+                        inputProps={{ min: 1 }}
+                        required
+                        size="small"
+                      />
+                    </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="Durée (jours)"
-                    type="number"
-                    value={line.duree_jours || ''}
-                    onChange={(e) => handleLineChange(index, 'duree_jours', parseInt(e.target.value) || undefined)}
-                    inputProps={{ min: 1 }}
-                  />
-                </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Durée (jours)"
+                        type="number"
+                        value={line.duree_jours || ''}
+                        onChange={(e) =>
+                          handleLineChange(actualIndex, 'duree_jours', parseInt(e.target.value) || undefined)
+                        }
+                        inputProps={{ min: 1 }}
+                        size="small"
+                      />
+                    </Grid>
 
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Mode d'administration</InputLabel>
-                    <Select
-                      value={line.mode_administration || ''}
-                      onChange={(e) => handleLineChange(index, 'mode_administration', e.target.value)}
-                      label="Mode d'administration"
-                    >
-                      <MenuItem value="orale">Orale</MenuItem>
-                      <MenuItem value="injection">Injection</MenuItem>
-                      <MenuItem value="topique">Topique</MenuItem>
-                      <MenuItem value="inhalation">Inhalation</MenuItem>
-                      <MenuItem value="rectale">Rectale</MenuItem>
-                      <MenuItem value="autre">Autre</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel>Mode d'administration</InputLabel>
+                        <Select
+                          value={line.mode_administration || ''}
+                          onChange={(e) =>
+                            handleLineChange(actualIndex, 'mode_administration', e.target.value)
+                          }
+                          label="Mode d'administration"
+                        >
+                          <MenuItem value="orale">Orale</MenuItem>
+                          <MenuItem value="injection">Injection</MenuItem>
+                          <MenuItem value="topique">Topique</MenuItem>
+                          <MenuItem value="inhalation">Inhalation</MenuItem>
+                          <MenuItem value="rectale">Rectale</MenuItem>
+                          <MenuItem value="autre">Autre</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
 
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    label="Instructions"
-                    value={line.instructions || ''}
-                    onChange={(e) => handleLineChange(index, 'instructions', e.target.value)}
-                    placeholder="Instructions particulières..."
-                  />
-                </Grid>
-              </Grid>
-            </Box>
-          ))}
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
+                        label="Instructions"
+                        value={line.instructions || ''}
+                        onChange={(e) => handleLineChange(actualIndex, 'instructions', e.target.value)}
+                        placeholder="Instructions particulières..."
+                        size="small"
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
+              );
+            })}
 
-          <Button
-            variant="outlined"
-            startIcon={<Add />}
-            onClick={handleAddLine}
-            fullWidth
-            sx={{ mt: 2 }}
-          >
-            Ajouter une ligne
-          </Button>
+          {lines.filter((l) => l.medicament_id || l.nom_medicament).length === 0 && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Aucun médicament sélectionné. Utilisez le champ de recherche ci-dessus pour ajouter des médicaments.
+            </Alert>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

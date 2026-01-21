@@ -376,6 +376,7 @@ export const PatientRegistrationWithBilling: React.FC<PatientRegistrationWithBil
                     <MenuItem value="Chirurgie">Chirurgie</MenuItem>
                     <MenuItem value="Vaccination">Vaccination</MenuItem>
                     <MenuItem value="Soins infirmiers">Soins infirmiers</MenuItem>
+                    <MenuItem value="Pharmacie">Pharmacie</MenuItem>
                   </Select>
                 </FormControl>
 
