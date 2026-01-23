@@ -1907,7 +1907,7 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
 
       {/* Dialog Détails du Transfert */}
       <Dialog 
-        open={selectedTransfert !== null && !openValidation && !openRefus} 
+        open={selectedTransfert !== null && !openValidation && !openRefus && !openReception} 
         onClose={(event, reason) => {
           if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
             setSelectedTransfert(null);
@@ -1918,12 +1918,12 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
         fullWidth
       >
         <DialogTitle>
-          Détails du Transfert - {selectedTransfert?.numero_transfert || selectedTransfert?.numeroTransfert}
+          Détails du Transfert - {selectedTransfert?.numero_transfert || selectedTransfert?.numeroTransfert || 'N/A'}
         </DialogTitle>
         <DialogContent>
           {selectedTransfert && (
             <Box>
-              <Grid container spacing={3}>
+              <Grid container spacing={3} sx={{ mt: 1 }}>
                 <Grid item xs={12} md={6}>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="h6" gutterBottom>
@@ -1931,39 +1931,108 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                       <Typography variant="body2">
-                        <strong>Médicament:</strong> {selectedTransfert.medicamentNom}
+                        <strong>N° Transfert:</strong> {selectedTransfert.numero_transfert || selectedTransfert.numeroTransfert || 'N/A'}
                       </Typography>
                       <Typography variant="body2">
-                        <strong>Code:</strong> {selectedTransfert.medicamentCode}
+                        <strong>Date:</strong> {selectedTransfert.date_transfert ? new Date(selectedTransfert.date_transfert).toLocaleDateString('fr-FR') : 'N/A'}
                       </Typography>
                       <Typography variant="body2">
-                        <strong>Quantité:</strong> {selectedTransfert.quantite} unités
+                        <strong>Statut:</strong> {selectedTransfert.statut || 'N/A'}
                       </Typography>
                       <Typography variant="body2">
-                        <strong>Motif:</strong> {selectedTransfert.motif}
+                        <strong>Motif:</strong> {selectedTransfert.motif || selectedTransfert.observations || 'Non spécifié'}
                       </Typography>
+                      {selectedTransfert.observations && (
+                        <Typography variant="body2">
+                          <strong>Observations:</strong> {selectedTransfert.observations}
+                        </Typography>
+                      )}
                     </Box>
                   </Paper>
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Paper sx={{ p: 2 }}>
                     <Typography variant="h6" gutterBottom>
-                      Impact sur les Stocks
+                      Dates et Utilisateurs
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      <Typography variant="body2">
-                        <strong>Stock Gros avant:</strong> {selectedTransfert.stockGrosAvant}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Stock Gros après:</strong> {selectedTransfert.stockGrosApres}
-              </Typography>
+                      {selectedTransfert.date_validation && (
                         <Typography variant="body2">
-                        <strong>Stock Détail avant:</strong> {selectedTransfert.stockDetailAvant}
+                          <strong>Date Validation:</strong> {new Date(selectedTransfert.date_validation).toLocaleDateString('fr-FR')}
                         </Typography>
-                      <Typography variant="body2">
-                        <strong>Stock Détail après:</strong> {selectedTransfert.stockDetailApres}
+                      )}
+                      {selectedTransfert.date_reception && (
+                        <Typography variant="body2">
+                          <strong>Date Réception:</strong> {new Date(selectedTransfert.date_reception).toLocaleDateString('fr-FR')}
                         </Typography>
+                      )}
+                      {selectedTransfert.utilisateur_source_id && (
+                        <Typography variant="body2">
+                          <strong>Demandeur:</strong> {selectedTransfert.utilisateur_source_id}
+                        </Typography>
+                      )}
+                      {selectedTransfert.utilisateur_destination_id && (
+                        <Typography variant="body2">
+                          <strong>Validateur:</strong> {selectedTransfert.utilisateur_destination_id}
+                        </Typography>
+                      )}
                     </Box>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Médicaments du Transfert
+                    </Typography>
+                    {selectedTransfert.transfert_lignes && selectedTransfert.transfert_lignes.length > 0 ? (
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>Médicament</TableCell>
+                              <TableCell>Lot</TableCell>
+                              <TableCell align="right">Quantité</TableCell>
+                              <TableCell align="right">Quantité Validée</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {selectedTransfert.transfert_lignes.map((ligne: any, idx: number) => (
+                              <TableRow key={idx}>
+                                <TableCell>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {ligne.medicaments?.nom || 'Médicament inconnu'}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {ligne.medicaments?.code || ''}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {ligne.lots?.numero_lot || '-'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2">
+                                    {ligne.quantite || 0} unités
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {ligne.quantite_validee !== null && ligne.quantite_validee !== undefined 
+                                      ? `${ligne.quantite_validee} unités` 
+                                      : 'Non validée'}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Aucune ligne de transfert disponible
+                      </Typography>
+                    )}
                   </Paper>
                 </Grid>
               </Grid>

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, CircularProgress, Container, Divider, FormControl, Grid, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Paper, Select, SelectChangeEvent, Slider, Snackbar, Tab, Tabs, TextField, Typography } from '@mui/material';
-import { Upload, ZoomIn, ZoomOut, Contrast, BorderColor, NoteAlt, ContentCut, Save, PictureAsPdf, Send, Search } from '@mui/icons-material';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Container, Divider, FormControl, Grid, IconButton, InputLabel, List, ListItem, ListItemText, MenuItem, Paper, Select, SelectChangeEvent, Slider, Snackbar, Tab, Tabs, TextField, Typography, Chip, Avatar, alpha, useTheme } from '@mui/material';
+import { Upload, ZoomIn, ZoomOut, Contrast, BorderColor, NoteAlt, ContentCut, Save, PictureAsPdf, Send, Search, RadioButtonChecked, Scanner, Healing, MonitorHeart, MedicalServices, AccessTime, Person, LocalHospital, Visibility } from '@mui/icons-material';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -11,11 +11,60 @@ import PatientSelector from '../components/shared/PatientSelector';
 import PatientCard from '../components/shared/PatientCard';
 import { PaymentNotification } from '../components/shared/PaymentNotification';
 import { PaymentStatusCell } from '../components/shared/PaymentStatusCell';
+import { PatientService } from '../services/patientService';
 import jsPDF from 'jspdf';
 
 const types: ImagerieType[] = ['Radiographie', 'Scanner', 'IRM', 'Échographie', 'Autre'];
 
+// Mapping des types d'examen vers les icônes
+const getExamenIcon = (type: ImagerieType) => {
+  switch (type) {
+    case 'Radiographie':
+      return <RadioButtonChecked />;
+    case 'Scanner':
+      return <Scanner />;
+    case 'IRM':
+      return <Healing />;
+    case 'Échographie':
+      return <MonitorHeart />;
+    default:
+      return <MedicalServices />;
+  }
+};
+
+// Mapping des statuts vers les couleurs
+const getStatutColor = (statut: string) => {
+  switch (statut) {
+    case 'en_attente':
+      return 'warning';
+    case 'en_cours':
+      return 'info';
+    case 'termine':
+      return 'success';
+    case 'annule':
+      return 'error';
+    default:
+      return 'default';
+  }
+};
+
+const getStatutLabel = (statut: string) => {
+  switch (statut) {
+    case 'en_attente':
+      return 'En attente';
+    case 'en_cours':
+      return 'En cours';
+    case 'termine':
+      return 'Terminé';
+    case 'annule':
+      return 'Annulé';
+    default:
+      return statut;
+  }
+};
+
 const Imagerie: React.FC = () => {
+  const theme = useTheme();
   const [tab, setTab] = useState(0);
   const [filters, setFilters] = useState<{ patient?: string; type?: ImagerieType; from?: string; to?: string; medecin?: string }>({});
   const [examens, setExamens] = useState<ImagerieExamen[]>([]);
@@ -31,6 +80,7 @@ const Imagerie: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState<boolean>(false);
   const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
+  const [patientsMap, setPatientsMap] = useState<Record<string, Patient>>({});
   
   // États pour les notifications et le chargement
   const [loading, setLoading] = useState(false);
@@ -49,6 +99,23 @@ const Imagerie: React.FC = () => {
       medecin: filters.medecin,
     });
     setExamens(list);
+    
+    // Charger les informations des patients
+    const uniquePatientIds = [...new Set(list.map(ex => ex.patient_id))];
+    const patients: Record<string, Patient> = {};
+    
+    for (const patientId of uniquePatientIds) {
+      try {
+        const patient = await PatientService.getPatientById(patientId);
+        if (patient) {
+          patients[patientId] = patient;
+        }
+      } catch (error) {
+        console.warn(`Impossible de charger le patient ${patientId}:`, error);
+      }
+    }
+    
+    setPatientsMap(patients);
   };
 
   useEffect(() => { loadExamens(); }, []);
@@ -356,33 +423,159 @@ const Imagerie: React.FC = () => {
               </Card>
             </Grid>
             <Grid item xs={12} md={8}>
-              <Paper sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                  <TextField type="date" label="Du" InputLabelProps={{ shrink: true }} size="small" value={filters.from || ''} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
-                  <TextField type="date" label="Au" InputLabelProps={{ shrink: true }} size="small" value={filters.to || ''} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
-                  <Button variant="outlined" startIcon={<Search />} onClick={loadExamens}>Filtrer</Button>
+              <Paper sx={{ p: 3, borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                  <TextField 
+                    type="date" 
+                    label="Du" 
+                    InputLabelProps={{ shrink: true }} 
+                    size="small" 
+                    value={filters.from || ''} 
+                    onChange={(e) => setFilters({ ...filters, from: e.target.value })} 
+                  />
+                  <TextField 
+                    type="date" 
+                    label="Au" 
+                    InputLabelProps={{ shrink: true }} 
+                    size="small" 
+                    value={filters.to || ''} 
+                    onChange={(e) => setFilters({ ...filters, to: e.target.value })} 
+                  />
+                  <Button 
+                    variant="contained" 
+                    startIcon={<Search />} 
+                    onClick={loadExamens}
+                    sx={{ ml: 'auto' }}
+                  >
+                    Filtrer
+                  </Button>
                 </Box>
-                <List>
-                  {examens.map(ex => (
-                    <ListItem 
-                      key={ex.id} 
-                      button 
-                      selected={selectedExamen?.id === ex.id} 
-                      onClick={() => handleSelectExamen(ex)}
-                      secondaryAction={
-                        ex.consultation_id ? (
-                          <PaymentStatusCell consultationId={ex.consultation_id} size="small" />
-                        ) : null
-                      }
-                    >
-                      <ListItemText
-                        primary={`${ex.type_examen} • ${new Date(ex.date_examen).toLocaleString()}`}
-                        secondary={`Patient: ${ex.patient_id} • Médecin: ${ex.medecin_referent || '-'} • Statut: ${ex.statut}`}
-                      />
-                    </ListItem>
-                  ))}
-                  {examens.length === 0 && <Typography variant="body2" color="text.secondary">Aucun examen</Typography>}
-                </List>
+                
+                {examens.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <MedicalServices sx={{ fontSize: 64, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      Aucun examen trouvé
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Ajustez vos filtres ou créez un nouvel examen
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Grid container spacing={2}>
+                    {examens.map(ex => {
+                      const patient = patientsMap[ex.patient_id];
+                      const isSelected = selectedExamen?.id === ex.id;
+                      
+                      return (
+                        <Grid item xs={12} key={ex.id}>
+                          <Card
+                            sx={{
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease-in-out',
+                              border: isSelected ? `2px solid ${theme.palette.primary.main}` : '1px solid',
+                              borderColor: isSelected ? theme.palette.primary.main : 'divider',
+                              backgroundColor: isSelected 
+                                ? alpha(theme.palette.primary.main, 0.05) 
+                                : 'background.paper',
+                              '&:hover': {
+                                transform: 'translateY(-2px)',
+                                boxShadow: theme.shadows[4],
+                                borderColor: theme.palette.primary.main,
+                              },
+                            }}
+                            onClick={() => handleSelectExamen(ex)}
+                          >
+                            <CardContent>
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                                {/* Icône du type d'examen */}
+                                <Avatar
+                                  sx={{
+                                    bgcolor: theme.palette.primary.main,
+                                    width: 56,
+                                    height: 56,
+                                  }}
+                                >
+                                  {getExamenIcon(ex.type_examen)}
+                                </Avatar>
+                                
+                                {/* Contenu principal */}
+                                <Box sx={{ flex: 1, minWidth: 0 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                      {ex.type_examen}
+                                    </Typography>
+                                    <Chip
+                                      label={getStatutLabel(ex.statut)}
+                                      color={getStatutColor(ex.statut) as any}
+                                      size="small"
+                                      sx={{ fontWeight: 500 }}
+                                    />
+                                    {ex.consultation_id && (
+                                      <Box sx={{ ml: 'auto' }}>
+                                        <PaymentStatusCell consultationId={ex.consultation_id} size="small" />
+                                      </Box>
+                                    )}
+                                  </Box>
+                                  
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    {/* Informations patient */}
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                      <Person sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                      <Typography variant="body2" color="text.secondary">
+                                        <strong>Patient:</strong>{' '}
+                                        {patient 
+                                          ? `${patient.prenom} ${patient.nom}` 
+                                          : ex.identifiant_patient || ex.patient_id}
+                                      </Typography>
+                                    </Box>
+                                    
+                                    {/* Date et heure */}
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                      <AccessTime sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                      <Typography variant="body2" color="text.secondary">
+                                        {new Date(ex.date_examen).toLocaleString('fr-FR', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        })}
+                                      </Typography>
+                                    </Box>
+                                    
+                                    {/* Médecin référent */}
+                                    {ex.medecin_referent && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                        <LocalHospital sx={{ fontSize: 16, color: 'text.secondary' }} />
+                                        <Typography variant="body2" color="text.secondary">
+                                          <strong>Médecin:</strong> {ex.medecin_referent}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                </Box>
+                                
+                                {/* Action */}
+                                <IconButton
+                                  sx={{
+                                    color: isSelected ? 'primary.main' : 'text.secondary',
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectExamen(ex);
+                                  }}
+                                >
+                                  <Visibility />
+                                </IconButton>
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                )}
               </Paper>
             </Grid>
           </Grid>
@@ -461,15 +654,99 @@ const Imagerie: React.FC = () => {
               <Grid item xs={12} md={2}><TextField type="date" label="Au" InputLabelProps={{ shrink: true }} fullWidth value={filters.to || ''} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></Grid>
               <Grid item xs={12} md={2}><Button fullWidth variant="outlined" startIcon={<Search />} onClick={loadExamens}>Rechercher</Button></Grid>
             </Grid>
-            <Divider sx={{ mb: 2 }} />
-            <List>
-              {examens.map(ex => (
-                <ListItem key={ex.id} button onClick={() => handleSelectExamen(ex)}>
-                  <ListItemText primary={`${ex.type_examen} • ${new Date(ex.date_examen).toLocaleString()}`} secondary={`Patient: ${ex.patient_id} • Médecin: ${ex.medecin_referent || '-'} • Statut: ${ex.statut}`} />
-                </ListItem>
-              ))}
-              {examens.length === 0 && <Typography variant="body2" color="text.secondary">Aucun résultat</Typography>}
-            </List>
+            <Divider sx={{ mb: 3 }} />
+            
+            {examens.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <MedicalServices sx={{ fontSize: 64, color: 'text.secondary', mb: 2, opacity: 0.5 }} />
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Aucun résultat trouvé
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Ajustez vos critères de recherche
+                </Typography>
+              </Box>
+            ) : (
+              <Grid container spacing={2}>
+                {examens.map(ex => {
+                  const patient = patientsMap[ex.patient_id];
+                  const isSelected = selectedExamen?.id === ex.id;
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={ex.id}>
+                      <Card
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease-in-out',
+                          border: isSelected ? `2px solid ${theme.palette.primary.main}` : '1px solid',
+                          borderColor: isSelected ? theme.palette.primary.main : 'divider',
+                          backgroundColor: isSelected 
+                            ? alpha(theme.palette.primary.main, 0.05) 
+                            : 'background.paper',
+                          height: '100%',
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            boxShadow: theme.shadows[4],
+                            borderColor: theme.palette.primary.main,
+                          },
+                        }}
+                        onClick={() => handleSelectExamen(ex)}
+                      >
+                        <CardContent>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                            <Avatar
+                              sx={{
+                                bgcolor: theme.palette.primary.main,
+                                width: 48,
+                                height: 48,
+                              }}
+                            >
+                              {getExamenIcon(ex.type_examen)}
+                            </Avatar>
+                            
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                  {ex.type_examen}
+                                </Typography>
+                                <Chip
+                                  label={getStatutLabel(ex.statut)}
+                                  color={getStatutColor(ex.statut) as any}
+                                  size="small"
+                                  sx={{ fontSize: '0.7rem', height: 20 }}
+                                />
+                              </Box>
+                              
+                              <Typography variant="body2" color="text.secondary" noWrap sx={{ mb: 0.5 }}>
+                                {patient 
+                                  ? `${patient.prenom} ${patient.nom}` 
+                                  : ex.identifiant_patient || ex.patient_id}
+                              </Typography>
+                              
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {new Date(ex.date_examen).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </Typography>
+                              
+                              {ex.medecin_referent && (
+                                <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                                  Dr. {ex.medecin_referent}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            )}
           </Paper>
         )}
       </Box>

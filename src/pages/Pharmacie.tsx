@@ -140,6 +140,7 @@ const Pharmacie: React.FC = () => {
   const [openDispensation, setOpenDispensation] = useState(false);
   const [openRapport, setOpenRapport] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<MedicamentDetail | null>(null);
+  const [selectedDispensation, setSelectedDispensation] = useState<any>(null);
 
   // Conversion des données du hook en format local
   const medicaments = useMemo(() => {
@@ -764,7 +765,10 @@ const Pharmacie: React.FC = () => {
                                   <TableCell>
                                     <Box sx={{ display: 'flex', gap: 1 }}>
                                       <Tooltip title="Voir détails">
-                                        <IconButton size="small">
+                                        <IconButton 
+                                          size="small"
+                                          onClick={() => setSelectedDispensation(dispensation)}
+                                        >
                                           <Visibility />
                                         </IconButton>
                                       </Tooltip>
@@ -953,6 +957,163 @@ const Pharmacie: React.FC = () => {
           utilisateurId="current-user-id"
           utilisateurNom="Pharmacien/Infirmier"
         />
+
+        {/* Dialog Détails Médicament */}
+        <Dialog 
+          open={selectedMedicament !== null} 
+          onClose={() => setSelectedMedicament(null)} 
+          maxWidth="md" 
+          fullWidth
+        >
+          <DialogTitle>
+            Détails du Médicament - {selectedMedicament?.nom}
+          </DialogTitle>
+          <DialogContent>
+            {selectedMedicament && (
+              <Box>
+                <Grid container spacing={3} sx={{ mt: 1 }}>
+                  <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Informations Générales
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Typography variant="body2">
+                          <strong>Code:</strong> {selectedMedicament.code}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Nom:</strong> {selectedMedicament.nom}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>DCI:</strong> {selectedMedicament.dci || 'Non spécifié'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Forme:</strong> {selectedMedicament.forme || 'Non spécifiée'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Dosage:</strong> {selectedMedicament.dosage || 'Non spécifié'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Unité:</strong> {selectedMedicament.unite}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Stock et Prix
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Typography variant="body2">
+                          <strong>Stock Actuel:</strong> {selectedMedicament.quantiteRestante} {selectedMedicament.unite}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Quantité Reçue:</strong> {selectedMedicament.quantiteRecue} {selectedMedicament.unite}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Quantité Dispensée:</strong> {selectedMedicament.quantiteDispensée} {selectedMedicament.unite}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Seuil Minimum:</strong> {selectedMedicament.seuilMinimum} {selectedMedicament.unite}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Prix Unitaire:</strong> {selectedMedicament.prixUnitaire.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Emplacement:</strong> {selectedMedicament.emplacement || 'Non spécifié'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  {selectedMedicament.observations && (
+                    <Grid item xs={12}>
+                      <Paper sx={{ p: 2 }}>
+                        <Typography variant="h6" gutterBottom>
+                          Observations
+                        </Typography>
+                        <Typography variant="body2">
+                          {selectedMedicament.observations}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+                </Grid>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSelectedMedicament(null)}>Fermer</Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialog Détails Dispensation */}
+        <Dialog 
+          open={selectedDispensation !== null} 
+          onClose={() => setSelectedDispensation(null)} 
+          maxWidth="md" 
+          fullWidth
+        >
+          <DialogTitle>
+            Détails de la Dispensation
+          </DialogTitle>
+          <DialogContent>
+            {selectedDispensation && (
+              <Box>
+                <Grid container spacing={3} sx={{ mt: 1 }}>
+                  <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Informations Générales
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Typography variant="body2">
+                          <strong>Date:</strong> {new Date(selectedDispensation.dateDispensation).toLocaleDateString('fr-FR')}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Médicament:</strong> {medicaments.find(m => m.id === selectedDispensation.medicamentId)?.nom || 'Médicament inconnu'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Code:</strong> {medicaments.find(m => m.id === selectedDispensation.medicamentId)?.code || '-'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Quantité:</strong> {selectedDispensation.quantite} {medicaments.find(m => m.id === selectedDispensation.medicamentId)?.unite || ''}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Statut:</strong> {selectedDispensation.statut}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Destinataire et Prescription
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Typography variant="body2">
+                          <strong>Destinataire:</strong> {selectedDispensation.patientNom || selectedDispensation.serviceNom || 'N/A'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Type:</strong> {selectedDispensation.patientId ? 'Patient' : 'Service'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Prescripteur:</strong> {selectedDispensation.prescripteur || 'N/A'}
+                        </Typography>
+                        <Typography variant="body2">
+                          <strong>Motif:</strong> {selectedDispensation.motif || 'Non spécifié'}
+                        </Typography>
+                      </Box>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSelectedDispensation(null)}>Fermer</Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Dialog Rapport */}
         <Dialog open={openRapport} onClose={() => setOpenRapport(false)} maxWidth="sm" fullWidth>

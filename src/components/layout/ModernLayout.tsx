@@ -63,6 +63,8 @@ import PatientSelector from '../shared/PatientSelector';
 import { Patient } from '../../services/supabase';
 import MonProfilModal from '../profil/MonProfilModal';
 import ParametresUtilisateur from '../profil/ParametresUtilisateur';
+import { NotificationService } from '../../services/notificationService';
+import { supabase } from '../../services/supabase';
 
 const drawerWidth = 280;
 
@@ -88,12 +90,12 @@ const menuItemsConfig: MenuItemConfig[] = [
   { text: 'Vaccination', icon: <Vaccines />, path: '/vaccination', badge: null, module: 'vaccination' },
   { text: 'Laboratoire', icon: <Science />, path: '/laboratoire', badge: null, module: 'laboratoire' },
   { text: 'Imagerie Médicale', icon: <ImageIcon />, path: '/imagerie', badge: null, module: 'imagerie' },
-  { text: 'Pharmacie', icon: <LocalPharmacy />, path: '/pharmacie', badge: 3, module: 'pharmacie' },
+  { text: 'Pharmacie', icon: <LocalPharmacy />, path: '/pharmacie', badge: null, module: 'pharmacie' },
   { text: 'Maternité', icon: <PregnantWoman />, path: '/maternite', badge: null, module: 'maternite' },
   { text: 'Stock Médicaments', icon: <Inventory />, path: '/stock-medicaments', badge: null, module: 'stock' },
   { text: 'Bilan', icon: <Assessment />, path: '/bilan', badge: null, module: null },
   { text: 'Caisse', icon: <Receipt />, path: '/caisse', badge: null, module: 'caisse' },
-  { text: 'Rendez-vous', icon: <Event />, path: '/rendez-vous', badge: 5, module: 'rendezvous' },
+  { text: 'Rendez-vous', icon: <Event />, path: '/rendez-vous', badge: null, module: 'rendezvous' },
   { text: 'Gestion Patients', icon: <People />, path: '/patients', badge: null, module: 'patients' },
   { text: "Utilisateur et permission", icon: <AccountCircle />, path: '/utilisateurs-permissions', badge: null, module: 'utilisateurs', requiresAdmin: true },
   { text: "Gestion Récupération", icon: <Lock />, path: '/account-recovery-management', badge: null, module: null, requiresAdmin: true },
@@ -150,6 +152,8 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
     emailAlerts: true,
     autoUpdates: true,
   });
+  // Comptes de notifications par module
+  const [notificationCounts, setNotificationCounts] = useState<Record<string, number>>({});
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -254,6 +258,47 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
     return () => window.removeEventListener('keydown', handleShortcut);
   }, []);
 
+  // Charger les comptes de notifications par module
+  useEffect(() => {
+    const loadNotificationCounts = async () => {
+      if (!user?.id) return;
+
+      try {
+        const counts = await NotificationService.getUnreadCountsByModule(user.id);
+        setNotificationCounts(counts);
+      } catch (error) {
+        console.error('Erreur lors du chargement des notifications:', error);
+      }
+    };
+
+    loadNotificationCounts();
+
+    // Rafraîchir toutes les 30 secondes
+    const interval = setInterval(loadNotificationCounts, 30000);
+
+    // Écouter les changements de notifications en temps réel
+    const channel = supabase
+      .channel('notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notification_recipients',
+          filter: `user_id=eq.${user?.id}`,
+        },
+        () => {
+          loadNotificationCounts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Logo et Header */}
@@ -278,6 +323,10 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
         <List sx={{ px: 1.5 }}>
           {getFilteredMenuItems(user).map((item) => {
             const isActive = location.pathname === item.path;
+            // Récupérer le compte de notifications pour ce module depuis les notifications réelles
+            const notificationCount = notificationCounts[item.path] || 0;
+            const showBadge = notificationCount > 0;
+            
             return (
               <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
                 <ListItemButton
@@ -312,8 +361,8 @@ const ModernLayout: React.FC<ModernLayoutProps> = ({ children, user, onLogout })
                       color: isActive ? theme.palette.primary.main : 'inherit',
                     }}
                   >
-                    {item.badge ? (
-                      <Badge badgeContent={item.badge} color="error">
+                    {showBadge ? (
+                      <Badge badgeContent={notificationCount} color="error">
                         {item.icon}
                       </Badge>
                     ) : (

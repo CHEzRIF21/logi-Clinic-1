@@ -29,6 +29,7 @@ import {
   Tabs,
   Tab,
   Tooltip,
+  Paper,
 } from '@mui/material';
 import { LocalPharmacy, MedicalServices, Receipt } from '@mui/icons-material';
 import TraceabiliteLots from '../components/stock/TraceabiliteLots';
@@ -41,6 +42,7 @@ import { StockService } from '../services/stockService';
 import { MedicamentService } from '../services/medicamentService';
 import { MedicamentFormData } from '../services/stockSupabase';
 import { supabase } from '../services/supabase';
+import { MouvementService } from '../services/mouvementService';
 import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
@@ -66,6 +68,7 @@ import {
   Delete,
   CheckCircle,
   ErrorOutline,
+  Search,
 } from '@mui/icons-material';
 import Snackbar from '@mui/material/Snackbar';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -115,6 +118,8 @@ interface Mouvement {
   motif: string;
   utilisateur: string;
   reference?: string;
+  magasinSource?: 'gros' | 'detail' | 'externe';
+  magasinDestination?: 'gros' | 'detail' | 'patient' | 'service';
 }
 
 interface Alerte {
@@ -330,6 +335,7 @@ const StockMedicaments: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [transfertsEnAttente, setTransfertsEnAttente] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
   
   // Mettre à jour les médicaments locaux quand les médicaments Supabase changent
   useEffect(() => {
@@ -413,6 +419,26 @@ const StockMedicaments: React.FC = () => {
       // Charger les lots depuis Supabase
       const lotsGros = await StockService.getLotsByMagasin('gros');
       
+      // Charger les mouvements depuis Supabase
+      const mouvementsSupabase = await MouvementService.getAllMouvements();
+      
+      // Convertir les mouvements Supabase en format local
+      const mouvementsConvertis: Mouvement[] = mouvementsSupabase.map(mouv => ({
+        id: mouv.id,
+        type: mouv.type as 'reception' | 'transfert' | 'retour' | 'perte' | 'inventaire',
+        medicamentId: mouv.medicament_id,
+        lotId: mouv.lot_id || undefined,
+        quantite: mouv.quantite,
+        date: new Date(mouv.date_mouvement),
+        motif: mouv.motif,
+        utilisateur: mouv.utilisateur_id,
+        reference: mouv.reference_document,
+        magasinSource: mouv.magasin_source,
+        magasinDestination: mouv.magasin_destination
+      }));
+      
+      setMouvements(mouvementsConvertis);
+      
       if (lotsGros && lotsGros.length > 0) {
         // Convertir les lots Supabase en format local
         const lotsConvertis: Lot[] = lotsGros.map(lot => ({
@@ -428,43 +454,62 @@ const StockMedicaments: React.FC = () => {
           statut: lot.statut as 'actif' | 'expire' | 'epuise'
         }));
         
-        setLots(prev => [...prev, ...lotsConvertis.filter(l => 
-          !prev.some(p => p.id === l.id)
-        )]);
+        setLots(lotsConvertis);
         
-        // Extraire les médicaments uniques des lots
+        // Calculer le stock actuel pour chaque médicament (somme des quantités disponibles des lots)
+        const stockParMedicament = new Map<string, number>();
+        lotsConvertis.forEach(lot => {
+          const current = stockParMedicament.get(lot.medicamentId) || 0;
+          stockParMedicament.set(lot.medicamentId, current + lot.quantiteDisponible);
+        });
+        
+        // Créer un Map des médicaments existants pour préserver leurs données
+        const medicamentsMap = new Map<string, Medicament>();
+        medicaments.forEach(med => medicamentsMap.set(med.id, med));
+        
+        // Extraire les médicaments uniques des lots et mettre à jour le stock
         const medicamentsFromLots = lotsGros
           .filter(lot => lot.medicaments)
           .map(lot => {
             const med = lot.medicaments as any;
             const prixUnitaire = med.prix_unitaire || 0;
+            const stockActuel = stockParMedicament.get(lot.medicament_id) || 0;
+            
+            // Récupérer le médicament existant s'il existe, sinon créer un nouveau
+            const medicamentExistant = medicamentsMap.get(lot.medicament_id);
+            
             return {
               id: lot.medicament_id,
-              code: med.code || `MED-${lot.medicament_id.substring(0, 6)}`,
-              nom: med.nom || 'Inconnu',
-              dci: med.dci || '',
-              forme: med.forme || '',
-              dosage: med.dosage || '',
-              unite: med.unite || 'Unité',
-              fournisseur: lot.fournisseur || '',
-              quantiteStock: lot.quantite_disponible,
-              seuilMinimum: med.seuil_alerte || 50,
-              seuilMaximum: med.seuil_maximum || 500,
-              prixUnitaireEntree: med.prix_unitaire_entree || Math.floor(prixUnitaire * 0.7),
-              prixTotalEntree: med.prix_total_entree || 0,
-              prixUnitaireDetail: med.prix_unitaire_detail || prixUnitaire,
-              prixUnitaire: prixUnitaire,
-              emplacement: med.emplacement || '',
-              observations: med.observations || ''
+              code: med.code || medicamentExistant?.code || `MED-${lot.medicament_id.substring(0, 6)}`,
+              nom: med.nom || medicamentExistant?.nom || 'Inconnu',
+              dci: med.dci || medicamentExistant?.dci || '',
+              forme: med.forme || medicamentExistant?.forme || '',
+              dosage: med.dosage || medicamentExistant?.dosage || '',
+              unite: med.unite || medicamentExistant?.unite || 'Unité',
+              fournisseur: lot.fournisseur || medicamentExistant?.fournisseur || '',
+              quantiteStock: stockActuel, // Utiliser le stock calculé depuis les lots
+              seuilMinimum: med.seuil_alerte || medicamentExistant?.seuilMinimum || 50,
+              seuilMaximum: med.seuil_maximum || medicamentExistant?.seuilMaximum || 500,
+              prixUnitaireEntree: med.prix_unitaire_entree || medicamentExistant?.prixUnitaireEntree || Math.floor(prixUnitaire * 0.7),
+              prixTotalEntree: med.prix_total_entree || medicamentExistant?.prixTotalEntree || 0,
+              prixUnitaireDetail: med.prix_unitaire_detail || medicamentExistant?.prixUnitaireDetail || prixUnitaire,
+              prixUnitaire: prixUnitaire || medicamentExistant?.prixUnitaire || 0,
+              emplacement: med.emplacement || medicamentExistant?.emplacement || '',
+              observations: med.observations || medicamentExistant?.observations || ''
             };
           });
         
-        // Fusionner avec les médicaments existants
+        // Fusionner avec les médicaments existants (les médicaments des lots ont priorité pour le stock)
         const uniqueMeds = new Map<string, Medicament>();
-        [...medicaments, ...medicamentsFromLots].forEach(med => {
-          if (!uniqueMeds.has(med.id) || medicamentsFromLots.some(m => m.id === med.id)) {
-            uniqueMeds.set(med.id, med);
-          }
+        
+        // D'abord ajouter tous les médicaments existants
+        medicaments.forEach(med => {
+          uniqueMeds.set(med.id, med);
+        });
+        
+        // Ensuite mettre à jour avec les médicaments des lots (pour mettre à jour le stock)
+        medicamentsFromLots.forEach(med => {
+          uniqueMeds.set(med.id, med);
         });
         
         setMedicaments(Array.from(uniqueMeds.values()));
@@ -799,7 +844,12 @@ const StockMedicaments: React.FC = () => {
         prixTotal: 0,
       }]);
       
-      showNotification(`${receptionLines.length} ligne(s) de réception enregistrée(s) avec succès.`, 'success');
+      // Recharger toutes les données pour mettre à jour le tableau
+      await loadRealData();
+      // Rafraîchir aussi les médicaments
+      await refreshMedicaments();
+      
+      showNotification(`${receptionLines.length} ligne(s) de réception enregistrée(s) avec succès. Les données ont été mises à jour.`, 'success');
     } catch (error) {
       console.error('Erreur lors de la réception:', error);
       showNotification('Erreur lors de la réception. Vérifiez les informations et réessayez.', 'error');
@@ -1086,20 +1136,6 @@ const StockMedicaments: React.FC = () => {
                   icon={<LocalShipping />} 
                   color="warning" 
                 />
-                {transfertsEnAttente > 0 && (
-                  <Button 
-                    variant="outlined" 
-                    size="small"
-                    startIcon={<LocalShipping />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveTab(2);
-                    }}
-                    sx={{ mt: 1, width: '100%' }}
-                  >
-                    Gérer les Transferts
-                  </Button>
-                )}
               </GlassCard>
               <GlassCard sx={{ p: 2 }}>
                 <StatBadge label="Alertes Actives" value={stats.alertesActives} icon={<Warning />} color="warning" />
@@ -1224,6 +1260,44 @@ const StockMedicaments: React.FC = () => {
                     </Button>
                   </Box>
         </Box>
+                
+                {/* Barre de recherche discrète */}
+                <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <TextField
+                    placeholder="Rechercher un médicament..."
+                    variant="outlined"
+                    size="small"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <Search sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} />
+                      ),
+                    }}
+                    sx={{
+                      flexGrow: 1,
+                      maxWidth: 400,
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: (theme) => 
+                          theme.palette.mode === 'dark' 
+                            ? 'rgba(255, 255, 255, 0.05)' 
+                            : 'rgba(0, 0, 0, 0.02)',
+                        '&:hover': {
+                          backgroundColor: (theme) => 
+                            theme.palette.mode === 'dark' 
+                              ? 'rgba(255, 255, 255, 0.08)' 
+                              : 'rgba(0, 0, 0, 0.04)',
+                        },
+                        '&.Mui-focused': {
+                          backgroundColor: (theme) => 
+                            theme.palette.mode === 'dark' 
+                              ? 'rgba(255, 255, 255, 0.1)' 
+                              : 'rgba(0, 0, 0, 0.06)',
+                        },
+                      },
+                    }}
+                  />
+                </Box>
 
                 <TableContainer>
                   <Table>
@@ -1240,18 +1314,44 @@ const StockMedicaments: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {medicaments.map((medicament) => {
+                      {medicaments
+                        .filter((medicament) => {
+                          if (!searchTerm) return true;
+                          const searchLower = searchTerm.toLowerCase();
+                          return (
+                            medicament.nom.toLowerCase().includes(searchLower) ||
+                            medicament.code.toLowerCase().includes(searchLower) ||
+                            medicament.dci.toLowerCase().includes(searchLower) ||
+                            medicament.forme.toLowerCase().includes(searchLower) ||
+                            medicament.dosage.toLowerCase().includes(searchLower)
+                          );
+                        })
+                        .map((medicament) => {
                         const medicamentLots = getLotsByMedicament(medicament.id);
                         const medicamentMouvements = getMouvementsByMedicament(medicament.id);
-                        const entrees = medicamentMouvements.filter(m => m.type === 'reception').reduce((sum, m) => sum + m.quantite, 0);
-                        const sorties = medicamentMouvements.filter(m => m.type === 'transfert').reduce((sum, m) => sum + m.quantite, 0);
+                        
+                        // Calculer le stock actuel depuis les lots (somme des quantités disponibles)
+                        const stockActuel = medicamentLots.reduce((sum, lot) => sum + lot.quantiteDisponible, 0);
+                        
+                        // Calculer les entrées cumulées (mouvements de type 'reception' vers magasin 'gros')
+                        const entrees = medicamentMouvements
+                          .filter(m => m.type === 'reception' && m.magasinDestination === 'gros')
+                          .reduce((sum, m) => sum + m.quantite, 0);
+                        
+                        // Calculer les sorties vers détail (mouvements de type 'transfert' depuis 'gros' vers 'detail')
+                        const sorties = medicamentMouvements
+                          .filter(m => m.type === 'transfert' && m.magasinSource === 'gros' && m.magasinDestination === 'detail')
+                          .reduce((sum, m) => sum + m.quantite, 0);
+                        
+                        // Trouver les lots avec péremption proche (dans les 3 prochains mois)
                         const peremptionProche = medicamentLots.find(lot => {
                           const expiration = new Date(lot.dateExpiration);
                           const now = new Date();
                           const diffMonths = (expiration.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30);
                           return diffMonths <= 3 && diffMonths > 0;
                         });
-                        const isStockFaible = medicament.quantiteStock <= medicament.seuilMinimum;
+                        
+                        const isStockFaible = stockActuel <= medicament.seuilMinimum;
 
                         return (
                           <TableRow key={medicament.id} sx={{ 
@@ -1277,7 +1377,7 @@ const StockMedicaments: React.FC = () => {
                             </TableCell>
                             <TableCell>
                               <Typography variant="body2" fontWeight="bold" sx={{ color: 'text.primary' }}>
-                                {medicament.quantiteStock} {medicament.unite}
+                                {stockActuel} {medicament.unite}
                               </Typography>
                               {isStockFaible && (
                                 <Chip label="Stock faible" color="warning" size="small" />
@@ -1744,7 +1844,116 @@ const StockMedicaments: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-        {/* Dialog Rapport */}
+        {/* Dialog Détails Médicament */}
+      <Dialog 
+        open={selectedMedicament !== null} 
+        onClose={() => setSelectedMedicament(null)} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle>
+          Détails du Médicament - {selectedMedicament?.nom}
+        </DialogTitle>
+        <DialogContent>
+          {selectedMedicament && (
+            <Box>
+              <Grid container spacing={3} sx={{ mt: 1 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Informations Générales
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Code:</strong> {selectedMedicament.code}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Nom:</strong> {selectedMedicament.nom}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>DCI:</strong> {selectedMedicament.dci || 'Non spécifié'}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Forme:</strong> {selectedMedicament.forme}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Dosage:</strong> {selectedMedicament.dosage}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Unité:</strong> {selectedMedicament.unite}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Fournisseur:</strong> {selectedMedicament.fournisseur || 'Non spécifié'}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Stock et Prix
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Stock Actuel:</strong> {selectedMedicament.quantiteStock} {selectedMedicament.unite}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Seuil Minimum:</strong> {selectedMedicament.seuilMinimum} {selectedMedicament.unite}
+                      </Typography>
+                      {selectedMedicament.seuilMaximum && (
+                        <Typography variant="body2">
+                          <strong>Seuil Maximum:</strong> {selectedMedicament.seuilMaximum} {selectedMedicament.unite}
+                        </Typography>
+                      )}
+                      <Typography variant="body2">
+                        <strong>Prix Unitaire Entrée:</strong> {selectedMedicament.prixUnitaireEntree.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Prix Unitaire Détail:</strong> {selectedMedicament.prixUnitaireDetail.toLocaleString('fr-FR', { style: 'currency', currency: 'XOF' })}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Emplacement:</strong> {selectedMedicament.emplacement || 'Non spécifié'}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
+                {selectedMedicament.observations && (
+                  <Grid item xs={12}>
+                    <Paper sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>
+                        Observations
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedMedicament.observations}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+                <Grid item xs={12}>
+                  <Paper sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Lots et Mouvements
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Nombre de lots:</strong> {getLotsByMedicament(selectedMedicament.id).length}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Mouvements:</strong> {getMouvementsByMedicament(selectedMedicament.id).length}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSelectedMedicament(null)}>Fermer</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Rapport */}
         <Dialog open={openRapport} onClose={() => setOpenRapport(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Générer Rapport - Magasin Gros</DialogTitle>
         <DialogContent>

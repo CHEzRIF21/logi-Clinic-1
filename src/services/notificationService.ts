@@ -418,4 +418,194 @@ export class NotificationService {
 
     return count || 0;
   }
+
+  /**
+   * Récupère le nombre de notifications non lues par module/path pour un utilisateur
+   */
+  static async getUnreadCountByPath(userId: string, path: string): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from('notification_recipients')
+        .select(`
+          *,
+          notification:notifications!inner(lien)
+        `, { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('lu', false)
+        .eq('notifications.lien', path);
+
+      if (error) {
+        // Si la jointure ne fonctionne pas, essayer une autre approche
+        const { data: recipients, error: recipientsError } = await supabase
+          .from('notification_recipients')
+          .select('notification_id')
+          .eq('user_id', userId)
+          .eq('lu', false);
+
+        if (recipientsError) {
+          console.error('Erreur lors du comptage par path:', recipientsError);
+          return 0;
+        }
+
+        if (!recipients || recipients.length === 0) return 0;
+
+        const notificationIds = recipients.map(r => r.notification_id);
+        const { count: countByPath, error: notifError } = await supabase
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .in('id', notificationIds)
+          .eq('lien', path);
+
+        if (notifError) {
+          console.error('Erreur lors du comptage par path (fallback):', notifError);
+          return 0;
+        }
+
+        return countByPath || 0;
+      }
+
+      return count || 0;
+    } catch (error) {
+      console.error('Erreur lors du comptage par path:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Récupère les comptes de notifications non lues par module pour un utilisateur
+   * Inclut les notifications système + alertes + transferts + rendez-vous
+   */
+  static async getUnreadCountsByModule(userId: string): Promise<Record<string, number>> {
+    try {
+      const counts: Record<string, number> = {};
+      const clinicId = await getMyClinicId();
+
+      // 1. Notifications système (via notification_recipients)
+      const { data: recipients, error: recipientsError } = await supabase
+        .from('notification_recipients')
+        .select('notification_id')
+        .eq('user_id', userId)
+        .eq('lu', false);
+
+      if (!recipientsError && recipients && recipients.length > 0) {
+        const notificationIds = recipients.map(r => r.notification_id);
+        const { data: notifications } = await supabase
+          .from('notifications')
+          .select('id, lien')
+          .in('id', notificationIds);
+
+        if (notifications) {
+          notifications.forEach(notif => {
+            if (notif.lien) {
+              const normalizedPath = notif.lien.split('?')[0].split('#')[0];
+              counts[normalizedPath] = (counts[normalizedPath] || 0) + 1;
+            }
+          });
+        }
+      }
+
+      // 2. Transferts en attente et validés pour Pharmacie (/pharmacie)
+      try {
+        // Transferts en attente de validation
+        const { count: transfertsEnAttente } = await supabase
+          .from('transferts')
+          .select('*', { count: 'exact', head: true })
+          .eq('statut', 'en_attente')
+          .eq('magasin_source', 'gros')
+          .eq('magasin_destination', 'detail');
+
+        // Transferts validés en attente de réception
+        const { count: transfertsValides } = await supabase
+          .from('transferts')
+          .select('*', { count: 'exact', head: true })
+          .in('statut', ['valide', 'partiel'])
+          .eq('magasin_source', 'gros')
+          .eq('magasin_destination', 'detail');
+
+        const totalTransferts = (transfertsEnAttente || 0) + (transfertsValides || 0);
+        if (totalTransferts > 0) {
+          counts['/pharmacie'] = (counts['/pharmacie'] || 0) + totalTransferts;
+        }
+      } catch (e) {
+        console.warn('Erreur comptage transferts pharmacie:', e);
+      }
+
+      // 3. Alertes actives pour Pharmacie et Stock
+      try {
+        let query = supabase
+          .from('alertes_stock')
+          .select('*', { count: 'exact', head: true })
+          .eq('statut', 'active');
+        
+        // Filtrer par clinic_id si la colonne existe
+        if (clinicId) {
+          // Essayer avec clinic_id, mais ne pas échouer si la colonne n'existe pas
+          query = query.eq('clinic_id', clinicId);
+        }
+
+        const { count: alertesActives, error: alertesError } = await query;
+
+        // Si l'erreur est due à une colonne manquante, réessayer sans le filtre
+        if (alertesError && alertesError.code === '42703' && clinicId) {
+          const { count: alertesActivesRetry } = await supabase
+            .from('alertes_stock')
+            .select('*', { count: 'exact', head: true })
+            .eq('statut', 'active');
+
+          if (alertesActivesRetry && alertesActivesRetry > 0) {
+            // Les alertes concernent à la fois pharmacie et stock
+            counts['/pharmacie'] = (counts['/pharmacie'] || 0) + alertesActivesRetry;
+            counts['/stock-medicaments'] = (counts['/stock-medicaments'] || 0) + alertesActivesRetry;
+          }
+        } else if (alertesActives && alertesActives > 0) {
+          // Les alertes concernent à la fois pharmacie et stock
+          counts['/pharmacie'] = (counts['/pharmacie'] || 0) + alertesActives;
+          counts['/stock-medicaments'] = (counts['/stock-medicaments'] || 0) + alertesActives;
+        }
+      } catch (e) {
+        console.warn('Erreur comptage alertes:', e);
+      }
+
+      // 4. Rendez-vous en attente pour Rendez-vous (/rendez-vous)
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let query = supabase
+          .from('rendez_vous')
+          .select('*', { count: 'exact', head: true })
+          .eq('statut', 'planifie')
+          .gte('date_heure', today.toISOString());
+
+        // Filtrer par clinic_id si disponible
+        if (clinicId) {
+          query = query.eq('clinic_id', clinicId);
+        }
+
+        const { count: rendezVousAttente, error: rdvError } = await query;
+
+        // Si l'erreur est due à une colonne manquante, réessayer sans le filtre
+        if (rdvError && rdvError.code === '42703' && clinicId) {
+          const { count: rendezVousAttenteRetry } = await supabase
+            .from('rendez_vous')
+            .select('*', { count: 'exact', head: true })
+            .eq('statut', 'planifie')
+            .gte('date_heure', today.toISOString());
+
+          if (rendezVousAttenteRetry && rendezVousAttenteRetry > 0) {
+            counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttenteRetry;
+          }
+        } else if (rendezVousAttente && rendezVousAttente > 0) {
+          counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttente;
+        }
+      } catch (e) {
+        console.warn('Erreur comptage rendez-vous:', e);
+      }
+
+
+      return counts;
+    } catch (error) {
+      console.error('Erreur lors du comptage par module:', error);
+      return {};
+    }
+  }
 }

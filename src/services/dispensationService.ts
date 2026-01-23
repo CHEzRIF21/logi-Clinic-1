@@ -455,52 +455,80 @@ export class DispensationService {
 
       if (lignesError) throw lignesError;
 
-      // Mettre à jour le stock (décrémenter les lots)
+      // Mettre à jour le stock (décrémenter les lots) et enregistrer les mouvements
       for (const ligne of data.lignes) {
+        // Récupérer le lot AVANT la décrémentation pour avoir la quantité initiale
+        const { data: lotAvant, error: lotAvantError } = await supabase
+          .from('lots')
+          .select('quantite_disponible, magasin')
+          .eq('id', ligne.lot_id)
+          .single();
+
+        if (lotAvantError) throw lotAvantError;
+
+        // Vérifier que le lot est bien dans le magasin détail
+        if (lotAvant.magasin !== 'detail') {
+          throw new Error(`Le lot ${ligne.lot_id} n'est pas dans le magasin détail`);
+        }
+
+        const quantiteAvant = lotAvant.quantite_disponible;
+        const quantiteApres = quantiteAvant - ligne.quantite_delivree;
+
+        // Vérifier que le stock est suffisant
+        if (quantiteAvant < ligne.quantite_delivree) {
+          throw new Error(`Stock insuffisant pour le médicament. Disponible: ${quantiteAvant}, Demandé: ${ligne.quantite_delivree}`);
+        }
+
+        // Décrémenter le stock via la fonction RPC (avec fallback manuel)
         const { error: stockError } = await supabase.rpc('decrementer_stock_lot', {
           lot_id_param: ligne.lot_id,
           quantite_param: ligne.quantite_delivree,
         });
 
         if (stockError) {
-          // Si la fonction RPC n'existe pas, faire manuellement
-          const { data: lot } = await supabase
+          // Si la fonction RPC n'existe pas ou échoue, faire manuellement
+          const { error: updateError } = await supabase
             .from('lots')
-            .select('quantite_disponible')
-            .eq('id', ligne.lot_id)
-            .single();
+            .update({ 
+              quantite_disponible: quantiteApres,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', ligne.lot_id);
 
-          if (lot) {
+          if (updateError) throw updateError;
+
+          // Mettre à jour le statut si le stock est épuisé
+          if (quantiteApres === 0) {
             await supabase
               .from('lots')
-              .update({ quantite_disponible: lot.quantite_disponible - ligne.quantite_delivree })
+              .update({ statut: 'epuise' })
               .eq('id', ligne.lot_id);
           }
         }
-      }
 
-      // Enregistrer le mouvement de stock
-      for (const ligne of data.lignes) {
-        const { data: lot } = await supabase
-          .from('lots')
-          .select('quantite_disponible')
-          .eq('id', ligne.lot_id)
-          .single();
-
-        await supabase.from('mouvements_stock').insert({
+        // Enregistrer le mouvement de stock avec les valeurs correctes
+        const { error: mouvementError } = await supabase.from('mouvements_stock').insert({
           type: 'dispensation',
           medicament_id: ligne.medicament_id,
           lot_id: ligne.lot_id,
           quantite: ligne.quantite_delivree,
-          quantite_avant: (lot?.quantite_disponible || 0) + ligne.quantite_delivree,
-          quantite_apres: lot?.quantite_disponible || 0,
-          motif: `Dispensation ${dispensation.numero_dispensation}`,
+          quantite_avant: quantiteAvant,
+          quantite_apres: quantiteApres,
+          motif: `Dispensation ${dispensation.numero_dispensation} - ${data.type_dispensation === 'patient' ? 'Patient' : 'Service'}`,
           utilisateur_id: utilisateurId,
           date_mouvement: new Date().toISOString(),
           magasin_source: 'detail',
           magasin_destination: data.type_dispensation === 'patient' ? 'patient' : 'service',
           reference_document: dispensation.numero_dispensation,
         });
+
+        if (mouvementError) {
+          logger.error('Erreur enregistrement mouvement stock', { 
+            lotId: ligne.lot_id, 
+            error: mouvementError 
+          });
+          throw mouvementError;
+        }
       }
 
       // Mettre à jour les quantités dispensées dans les prescriptions
