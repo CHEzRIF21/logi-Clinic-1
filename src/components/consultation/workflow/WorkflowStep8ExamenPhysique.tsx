@@ -22,6 +22,14 @@ export const WorkflowStep8ExamenPhysique: React.FC<WorkflowStep8ExamenPhysiquePr
   userId
 }) => {
   const [constantes, setConstantes] = useState<ConsultationConstantes | null>(null);
+  const [patientConstantes, setPatientConstantes] = useState<{
+    taille_cm?: number;
+    poids_kg?: number;
+    temperature_c?: number;
+    pouls_bpm?: number;
+    ta_systolique?: number;
+    ta_diastolique?: number;
+  } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   
   // États pour l'examen physique détaillé
@@ -48,7 +56,8 @@ export const WorkflowStep8ExamenPhysique: React.FC<WorkflowStep8ExamenPhysiquePr
 
   useEffect(() => {
     loadConstantes();
-  }, [consultationId]);
+    loadPatientConstantes();
+  }, [consultationId, patientId]);
 
   const loadConstantes = async () => {
     try {
@@ -56,6 +65,33 @@ export const WorkflowStep8ExamenPhysique: React.FC<WorkflowStep8ExamenPhysiquePr
       setConstantes(data);
     } catch (error) {
       console.error('Erreur chargement constantes:', error);
+    }
+  };
+
+  const loadPatientConstantes = async () => {
+    try {
+      // Charger les constantes du patient depuis patient_constantes ou consultation_constantes
+      const latestConstantes = await ConsultationService.getPatientLatestConstantes(patientId);
+      if (latestConstantes) {
+        setPatientConstantes({
+          taille_cm: latestConstantes.taille_cm,
+          poids_kg: latestConstantes.poids_kg,
+          temperature_c: latestConstantes.temperature_c,
+          pouls_bpm: latestConstantes.pouls_bpm,
+          ta_systolique: latestConstantes.ta_bras_gauche_systolique || latestConstantes.ta_bras_droit_systolique,
+          ta_diastolique: latestConstantes.ta_bras_gauche_diastolique || latestConstantes.ta_bras_droit_diastolique,
+        });
+        // Mettre à jour aussi les constantes dans le formulaire si elles ne sont pas déjà présentes
+        if (constantes && (!constantes.frequence_respiratoire || !constantes.saturation_o2)) {
+          setConstantes(prev => ({
+            ...prev,
+            frequence_respiratoire: prev?.frequence_respiratoire || latestConstantes.frequence_respiratoire,
+            saturation_o2: prev?.saturation_o2 || latestConstantes.saturation_o2,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erreur chargement constantes patient:', error);
     }
   };
 
@@ -89,6 +125,7 @@ export const WorkflowStep8ExamenPhysique: React.FC<WorkflowStep8ExamenPhysiquePr
             consultationId={consultationId}
             patientId={patientId}
             initialConstantes={constantes}
+            patientConstantes={patientConstantes || undefined}
             onSave={handleSaveConstantes}
             userId={userId}
           />

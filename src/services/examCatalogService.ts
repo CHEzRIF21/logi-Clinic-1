@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './apiClient';
+import { supabase } from './supabase';
 
 export type ExamModule =
   | 'LABORATOIRE'
@@ -54,14 +55,48 @@ const buildQuery = (filters?: ExamCatalogFilters) => {
 export const ExamCatalogService = {
   async list(filters?: ExamCatalogFilters): Promise<ExamCatalogEntry[]> {
     try {
-      // apiClient gère déjà le préfixe /api si nécessaire
-      // Utiliser /exams car apiClient ajoute déjà API_BASE_URL qui peut contenir /api
-      return await apiGet(`/exams${buildQuery(filters)}`);
+      // Essayer d'abord d'utiliser directement Supabase
+      let query = supabase
+        .from('exam_catalog')
+        .select('*')
+        .order('categorie', { ascending: true })
+        .order('nom', { ascending: true });
+
+      if (filters?.module) {
+        query = query.eq('module_cible', filters.module);
+      }
+
+      if (filters?.categorie) {
+        query = query.eq('categorie', filters.categorie);
+      }
+
+      if (filters?.actif !== undefined) {
+        query = query.eq('actif', filters.actif);
+      }
+
+      if (filters?.search) {
+        query = query.or(`nom.ilike.%${filters.search}%,code.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      return (data || []) as ExamCatalogEntry[];
     } catch (error: any) {
-      console.error('Erreur lors du chargement du catalogue d\'examens:', error);
-      // Si l'API n'est pas disponible, retourner un tableau vide plutôt que de planter
-      // Le composant utilisera alors la liste de fallback
-      return [];
+      console.error('Erreur lors du chargement du catalogue d\'examens depuis Supabase:', error);
+      
+      // Fallback : essayer l'API si Supabase échoue
+      try {
+        return await apiGet(`/exams${buildQuery(filters)}`);
+      } catch (apiError: any) {
+        console.error('Erreur lors du chargement du catalogue d\'examens depuis l\'API:', apiError);
+        // Si l'API n'est pas disponible non plus, retourner un tableau vide
+        // Le composant utilisera alors la liste de fallback
+        return [];
+      }
     }
   },
 

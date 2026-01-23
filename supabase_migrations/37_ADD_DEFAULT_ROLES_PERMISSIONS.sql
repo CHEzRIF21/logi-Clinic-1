@@ -114,9 +114,6 @@ SELECT insert_role_permissions('medecin', 'gestion_patients', ARRAY['read', 'wri
 SELECT insert_role_permissions('medecin', 'consultations', ARRAY['read', 'write'],
   '[{"submodule": "liste", "actions": ["read"]}, {"submodule": "historique", "actions": ["read"]}, {"submodule": "details", "actions": ["read", "write"]}, {"submodule": "prescriptions", "actions": ["read", "write"]}]'::jsonb);
 
-SELECT insert_role_permissions('medecin', 'nouvelle_consultation', ARRAY['read', 'write'],
-  '[{"submodule": "creation", "actions": ["read", "write"]}, {"submodule": "workflow", "actions": ["read", "write"]}, {"submodule": "validation", "actions": ["read", "write"]}]'::jsonb);
-
 SELECT insert_role_permissions('medecin', 'laboratoire', ARRAY['read', 'write'],
   '[{"submodule": "demandes", "actions": ["read", "write"]}, {"submodule": "resultats", "actions": ["read"]}]'::jsonb);
 
@@ -127,18 +124,12 @@ SELECT insert_role_permissions('infirmier', 'gestion_patients', ARRAY['read'],
 SELECT insert_role_permissions('infirmier', 'consultations', ARRAY['read', 'write'],
   '[{"submodule": "liste", "actions": ["read"]}, {"submodule": "details", "actions": ["read", "write"]}]'::jsonb);
 
-SELECT insert_role_permissions('infirmier', 'nouvelle_consultation', ARRAY['read', 'write'],
-  '[{"submodule": "workflow", "actions": ["read", "write"]}]'::jsonb);
-
 -- Insertion des permissions pour Sage-femme (même que infirmier + maternité)
 SELECT insert_role_permissions('sage_femme', 'gestion_patients', ARRAY['read'],
   '[{"submodule": "dossier", "actions": ["read"]}, {"submodule": "historique", "actions": ["read"]}]'::jsonb);
 
 SELECT insert_role_permissions('sage_femme', 'consultations', ARRAY['read', 'write'],
   '[{"submodule": "liste", "actions": ["read"]}, {"submodule": "details", "actions": ["read", "write"]}]'::jsonb);
-
-SELECT insert_role_permissions('sage_femme', 'nouvelle_consultation', ARRAY['read', 'write'],
-  '[{"submodule": "workflow", "actions": ["read", "write"]}]'::jsonb);
 
 SELECT insert_role_permissions('sage_femme', 'maternite', ARRAY['read', 'write'],
   '[{"submodule": "dossiers", "actions": ["read", "write"]}, {"submodule": "cpn", "actions": ["read", "write"]}, {"submodule": "accouchements", "actions": ["read", "write"]}, {"submodule": "post_partum", "actions": ["read", "write"]}]'::jsonb);

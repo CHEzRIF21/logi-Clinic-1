@@ -44,15 +44,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
       ],
     },
     {
-      module: 'nouvelle_consultation',
-      actions: ['read', 'write', 'admin'],
-      submodules: [
-        { submodule: 'creation', actions: ['read', 'write', 'admin'] },
-        { submodule: 'workflow', actions: ['read', 'write', 'admin'] },
-        { submodule: 'validation', actions: ['read', 'write', 'admin'] },
-      ],
-    },
-    {
       module: 'pharmacie',
       actions: ['read', 'write', 'delete', 'export', 'admin'],
       submodules: [
@@ -136,15 +127,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
       ],
     },
     {
-      module: 'nouvelle_consultation',
-      actions: ['read', 'write'],
-      submodules: [
-        { submodule: 'creation', actions: ['read', 'write'] },
-        { submodule: 'workflow', actions: ['read', 'write'] },
-        { submodule: 'validation', actions: ['read', 'write'] },
-      ],
-    },
-    {
       module: 'laboratoire',
       actions: ['read', 'write'],
       submodules: [
@@ -190,13 +172,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
       ],
     },
     {
-      module: 'nouvelle_consultation',
-      actions: ['read', 'write'],
-      submodules: [
-        { submodule: 'workflow', actions: ['read', 'write'] },
-      ],
-    },
-    {
       module: 'laboratoire',
       actions: ['read', 'write'],
       submodules: [
@@ -231,13 +206,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
       submodules: [
         { submodule: 'liste', actions: ['read'] },
         { submodule: 'details', actions: ['read', 'write'] },
-      ],
-    },
-    {
-      module: 'nouvelle_consultation',
-      actions: ['read', 'write'],
-      submodules: [
-        { submodule: 'workflow', actions: ['read', 'write'] },
       ],
     },
     {

@@ -29,6 +29,7 @@ import { supabase } from '../../../services/supabase';
 interface WorkflowStep7BilansProps {
   patient: Patient;
   consultationId: string;
+  onBilansChange?: (bilans: { labRequests: LabRequest[]; bilansAntérieurs: BilanAntérieur[] }) => void;
 }
 
 interface BilanAntérieur {
@@ -42,7 +43,8 @@ interface BilanAntérieur {
 
 export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
   patient,
-  consultationId
+  consultationId,
+  onBilansChange
 }) => {
   const [labRequests, setLabRequests] = useState<LabRequest[]>([]);
   const [bilansAntérieurs, setBilansAntérieurs] = useState<BilanAntérieur[]>([]);
@@ -60,6 +62,14 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
       setLoading(true);
       const requests = await ConsultationService.getLabRequests(consultationId);
       setLabRequests(requests || []);
+      
+      // Notifier le parent
+      if (onBilansChange) {
+        onBilansChange({
+          labRequests: requests || [],
+          bilansAntérieurs: bilansAntérieurs
+        });
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des bilans:', error);
     } finally {
@@ -96,9 +106,36 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
     }
   };
 
-  const handleBilanSaved = () => {
-    loadBilansAntérieurs();
-    loadLabRequests();
+  const handleBilanSaved = async () => {
+    await loadBilansAntérieurs();
+    await loadLabRequests();
+    
+    // Notifier le parent après rechargement
+    if (onBilansChange) {
+      const requests = await ConsultationService.getLabRequests(consultationId);
+      const { data } = await supabase
+        .from('lab_prescriptions')
+        .select('*')
+        .eq('patient_id', patient.id)
+        .order('date_prescription', { ascending: false })
+        .limit(20);
+      
+      const bilans: BilanAntérieur[] = (data || []).map((prescription: any) => ({
+        id: prescription.id,
+        date_bilan: prescription.date_prescription,
+        type_examen: prescription.type_examen,
+        tests: prescription.details || '',
+        statut: prescription.statut,
+        fichier_url: prescription.details?.includes('Fichier joint:') 
+          ? prescription.details.split('Fichier joint:')[1]?.trim()
+          : undefined
+      }));
+      
+      onBilansChange({
+        labRequests: requests || [],
+        bilansAntérieurs: bilans
+      });
+    }
   };
 
   return (

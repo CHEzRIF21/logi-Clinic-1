@@ -3,7 +3,6 @@
 export type ModuleName = 
   | 'dashboard'
   | 'consultations'
-  | 'nouvelle_consultation'
   | 'vaccination'
   | 'laboratoire'
   | 'imagerie'
@@ -51,10 +50,6 @@ export const ALL_MODULES: Record<ModuleName, { label: string; submodules?: strin
   consultations: {
     label: 'Consultations',
     submodules: ['liste', 'historique', 'details', 'prescriptions']
-  },
-  nouvelle_consultation: {
-    label: 'Nouvelle Consultation',
-    submodules: ['creation', 'workflow', 'validation']
   },
   vaccination: {
     label: 'Vaccination',

@@ -12,7 +12,7 @@ import {
   CheckCircle,
 } from '@mui/icons-material';
 import { Consultation } from '../../services/consultationService';
-import { Patient } from '../../services/supabase';
+import { Patient, supabase } from '../../services/supabase';
 import { ConsultationService } from '../../services/consultationService';
 import { ModernConsultationLayout } from './ModernConsultationLayout';
 import { WorkflowStep1Motif } from './workflow/WorkflowStep1Motif';
@@ -63,46 +63,89 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
 
   // Initialiser stepData depuis consultation au montage
   useEffect(() => {
-    const initialData: Record<number, any> = {};
+    const loadStepData = async () => {
+      const initialData: Record<number, any> = {};
+      
+      // Charger les données depuis consultation_steps
+      const { data: stepsData } = await supabase
+        .from('consultation_steps')
+        .select('step_number, data')
+        .eq('consult_id', consultation.id);
+      
+      // Mapper les données des étapes
+      if (stepsData) {
+        stepsData.forEach((step: any) => {
+          initialData[step.step_number - 1] = step.data;
+        });
+      }
+      
+      // Étape 1: Motifs
+      if (consultation.motifs && consultation.motifs.length > 0) {
+        initialData[0] = initialData[0] || {
+          motif: consultation.motifs[0],
+          categorie_motif: (consultation as any).categorie_motif || '',
+        };
+      }
+      
+      // Étape 2: Anamnèse
+      if (consultation.anamnese) {
+        initialData[1] = initialData[1] || { anamnese: consultation.anamnese };
+      }
+      
+      // Étape 3: Traitement en cours
+      if (consultation.traitement_en_cours) {
+        initialData[2] = initialData[2] || { traitement_en_cours: consultation.traitement_en_cours };
+      }
+      
+      // Étape 4: Antécédents
+      if ((consultation as any).antecedents_consultation) {
+        initialData[3] = initialData[3] || { antecedents: (consultation as any).antecedents_consultation };
+      }
+      
+      // Étape 5: Prévention - Initialiser depuis stepData si disponible, sinon vide
+      if (!initialData[4]) {
+        initialData[4] = { prevention: { vaccinations: [], deparasitages: [] } };
+      }
+      
+      // Étape 6: Allergies - Initialiser depuis patient
+      if (!initialData[5] && patient.allergies) {
+        initialData[5] = { allergies: patient.allergies };
+      }
+      
+      // Étape 7: Bilans - Initialiser depuis stepData si disponible, sinon charger depuis consultation
+      if (!initialData[6]) {
+        try {
+          const labRequests = await ConsultationService.getLabRequests(consultation.id);
+          initialData[6] = {
+            bilans: {
+              labRequests: labRequests || [],
+              bilansAntérieurs: []
+            }
+          };
+        } catch (error) {
+          console.error('Erreur chargement bilans:', error);
+          initialData[6] = { bilans: { labRequests: [], bilansAntérieurs: [] } };
+        }
+      }
+      
+      // Étape 8: Examens cliniques
+      if (consultation.examens_cliniques) {
+        initialData[7] = initialData[7] || { examens_cliniques: consultation.examens_cliniques };
+      }
+      
+      // Étape 9: Diagnostics
+      if (consultation.diagnostics) {
+        initialData[8] = initialData[8] || {
+          diagnostics: consultation.diagnostics,
+          diagnostics_detail: (consultation as any).diagnostics_detail || [],
+        };
+      }
+      
+      setStepData(initialData);
+    };
     
-    // Étape 1: Motifs
-    if (consultation.motifs && consultation.motifs.length > 0) {
-      initialData[0] = {
-        motif: consultation.motifs[0],
-        categorie_motif: (consultation as any).categorie_motif || '',
-      };
-    }
-    
-    // Étape 2: Anamnèse
-    if (consultation.anamnese) {
-      initialData[1] = { anamnese: consultation.anamnese };
-    }
-    
-    // Étape 3: Traitement en cours
-    if (consultation.traitement_en_cours) {
-      initialData[2] = { traitement_en_cours: consultation.traitement_en_cours };
-    }
-    
-    // Étape 4: Antécédents
-    if ((consultation as any).antecedents_consultation) {
-      initialData[3] = { antecedents: (consultation as any).antecedents_consultation };
-    }
-    
-    // Étape 8: Examens cliniques
-    if (consultation.examens_cliniques) {
-      initialData[7] = { examens_cliniques: consultation.examens_cliniques };
-    }
-    
-    // Étape 9: Diagnostics
-    if (consultation.diagnostics) {
-      initialData[8] = {
-        diagnostics: consultation.diagnostics,
-        diagnostics_detail: (consultation as any).diagnostics_detail || [],
-      };
-    }
-    
-    setStepData(initialData);
-  }, [consultation]);
+    loadStepData();
+  }, [consultation, patient]);
 
   // Vérifier quelles étapes sont complètes
   useEffect(() => {
@@ -120,8 +163,26 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     // Étape 4: Antécédents (vérifier si modifiés)
     if ((consultation as any).antecedents_consultation) completed.add(3);
     
+    // Étape 5: Prévention (vérifier dans stepData ou consultation_steps)
+    if (stepData[4]?.prevention) {
+      const prevention = stepData[4].prevention;
+      if ((prevention.vaccinations && prevention.vaccinations.length > 0) || 
+          (prevention.deparasitages && prevention.deparasitages.length > 0)) {
+        completed.add(4);
+      }
+    }
+    
     // Étape 6: Allergies
-    if (patient.allergies) completed.add(5);
+    if (patient.allergies || stepData[5]?.allergies) completed.add(5);
+    
+    // Étape 7: Bilans (vérifier dans stepData ou consultation_steps)
+    if (stepData[6]?.bilans) {
+      const bilans = stepData[6].bilans;
+      if ((bilans.labRequests && bilans.labRequests.length > 0) || 
+          (bilans.bilansAntérieurs && bilans.bilansAntérieurs.length > 0)) {
+        completed.add(6);
+      }
+    }
     
     // Étape 8: Examens cliniques
     if (consultation.examens_cliniques && Object.keys(consultation.examens_cliniques).length > 0) completed.add(7);
@@ -133,7 +194,7 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     if (consultation.status === 'CLOTURE') completed.add(10);
     
     setCompletedSteps(completed);
-  }, [consultation, patient]);
+  }, [consultation, patient, stepData]);
 
   const handleNext = async () => {
     const currentStep = STEPS[activeStep];
@@ -276,14 +337,31 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
           />
         );
       case 5:
-        return <WorkflowStep5Prevention patient={patient} />;
+        return (
+          <WorkflowStep5Prevention
+            patient={patient}
+            onPreventionChange={(prevention) =>
+              updateStepData(stepIndex, { prevention })
+            }
+          />
+        );
       case 6:
-        return <WorkflowStep6Allergies patient={patient} onAllergiesChange={() => {}} />;
+        return (
+          <WorkflowStep6Allergies
+            patient={patient}
+            onAllergiesChange={(allergies) =>
+              updateStepData(stepIndex, { allergies })
+            }
+          />
+        );
       case 7:
         return (
           <WorkflowStep7Bilans
             patient={patient}
             consultationId={consultation.id}
+            onBilansChange={(bilans) =>
+              updateStepData(stepIndex, { bilans })
+            }
           />
         );
       case 8:

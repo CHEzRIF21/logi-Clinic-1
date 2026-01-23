@@ -27,7 +27,7 @@ export interface Consultation {
 
 export interface ConsultationConstantes {
   id: string;
-  consult_id: string;
+  consultation_id: string;
   patient_id: string;
   clinic_id: string;
   taille_cm?: number;
@@ -317,7 +317,7 @@ export class ConsultationService {
     const { data, error } = await supabase
       .from('consultation_constantes')
       .select('*')
-      .eq('consult_id', consultationId)
+      .eq('consultation_id', consultationId)
       .single();
 
     if (error) {
@@ -328,10 +328,43 @@ export class ConsultationService {
   }
 
   /**
-   * Récupérer les dernières constantes médicales du patient depuis les consultations précédentes
+   * Récupérer les dernières constantes médicales du patient
+   * Priorité : patient_constantes (constantes synchronisées) > consultation_constantes (dernières consultations)
    */
   static async getPatientLatestConstantes(patientId: string): Promise<ConsultationConstantes | null> {
     try {
+      // D'abord, essayer de récupérer depuis patient_constantes (constantes synchronisées)
+      const { data: patientConstantes, error: patientError } = await supabase
+        .from('patient_constantes')
+        .select('*')
+        .eq('patient_id', patientId)
+        .maybeSingle();
+
+      if (!patientError && patientConstantes) {
+        // Convertir patient_constantes en ConsultationConstantes
+        return {
+          id: patientConstantes.id,
+          consultation_id: patientConstantes.last_consultation_id || '',
+          patient_id: patientConstantes.patient_id,
+          clinic_id: patientConstantes.clinic_id,
+          taille_cm: patientConstantes.taille_cm,
+          poids_kg: patientConstantes.poids_kg,
+          imc: patientConstantes.imc,
+          temperature_c: patientConstantes.temperature_c,
+          pouls_bpm: patientConstantes.pouls_bpm,
+          frequence_respiratoire: patientConstantes.frequence_respiratoire,
+          saturation_o2: patientConstantes.saturation_o2,
+          glycemie_mg_dl: patientConstantes.glycemie_mg_dl,
+          ta_bras_gauche_systolique: patientConstantes.ta_systolique,
+          ta_bras_gauche_diastolique: patientConstantes.ta_diastolique,
+          ta_bras_droit_systolique: patientConstantes.ta_systolique,
+          ta_bras_droit_diastolique: patientConstantes.ta_diastolique,
+          hauteur_uterine: patientConstantes.hauteur_uterine,
+          created_at: patientConstantes.created_at
+        } as ConsultationConstantes;
+      }
+
+      // Fallback : récupérer depuis consultation_constantes (dernières consultations)
       const { data, error } = await supabase
         .from('consultation_constantes')
         .select('*')
@@ -361,18 +394,43 @@ export class ConsultationService {
       .from('consultation_constantes')
       .upsert({
         ...data,
-        consult_id: consultationId,
+        consultation_id: consultationId,
         patient_id: patientId,
         clinic_id: clinicId,
         created_by: userId,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'consult_id' });
+      }, { onConflict: 'consultation_id' });
 
     if (error) throw error;
 
-    // Si syncToPatient est activé, on peut mettre à jour une table de constantes du patient
-    // Pour l'instant, on garde juste les constantes dans consultation_constantes
-    // Les dernières constantes seront récupérées via getPatientLatestConstantes
+    // Si syncToPatient est activé, synchroniser vers patient_constantes
+    if (syncToPatient) {
+      const { error: syncError } = await supabase
+        .from('patient_constantes')
+        .upsert({
+          patient_id: patientId,
+          clinic_id: clinicId,
+          taille_cm: data.taille_cm,
+          poids_kg: data.poids_kg,
+          imc: data.imc,
+          temperature_c: data.temperature_c,
+          pouls_bpm: data.pouls_bpm,
+          frequence_respiratoire: data.frequence_respiratoire,
+          saturation_o2: data.saturation_o2,
+          ta_systolique: data.ta_bras_gauche_systolique || data.ta_bras_droit_systolique,
+          ta_diastolique: data.ta_bras_gauche_diastolique || data.ta_bras_droit_diastolique,
+          last_consultation_id: consultationId,
+          last_updated_by: userId,
+          last_updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'patient_id' });
+
+      if (syncError) {
+        console.error('Erreur lors de la synchronisation vers patient_constantes:', syncError);
+        // Ne pas bloquer la sauvegarde si la synchronisation échoue
+        // mais logger l'erreur pour le débogage
+      }
+    }
   }
 
   /**
@@ -408,15 +466,15 @@ export class ConsultationService {
   ): Promise<any> {
     const clinicId = await getMyClinicId();
     
-    // 1. Créer la prescription
+    // 1. Créer la prescription avec statut PRESCRIT pour qu'elle soit visible dans le module Pharmacie
     const { data: prescription, error: prescError } = await supabase
       .from('prescriptions')
       .insert({
         consultation_id: consultationId,
         patient_id: patientId,
         clinic_id: clinicId,
-        medecin_id: userId,
-        created_by: userId
+        created_by: userId,
+        statut: 'PRESCRIT' // Statut explicite pour que la prescription soit visible dans le module Pharmacie
       })
       .select()
       .single();

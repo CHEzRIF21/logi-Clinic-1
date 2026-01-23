@@ -35,10 +35,12 @@ import { fr } from 'date-fns/locale';
 
 interface WorkflowStep5PreventionProps {
   patient: Patient;
+  onPreventionChange?: (prevention: { vaccinations: PatientVaccination[]; deparasitages: Deparasitage[] }) => void;
 }
 
 export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = ({
-  patient
+  patient,
+  onPreventionChange
 }) => {
   const [vaccinations, setVaccinations] = useState<PatientVaccination[]>([]);
   const [deparasitages, setDeparasitages] = useState<Deparasitage[]>([]);
@@ -111,6 +113,16 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
 
       // Charger les deux services en parallèle mais indépendamment
       await Promise.allSettled([loadVaccinations(), loadDeparasitages()]);
+      
+      // Notifier le parent après le chargement initial
+      if (onPreventionChange) {
+        const vaccData = await VaccinationService.getPatientCard(patient.id);
+        const deparasitageData = await DeparasitageService.getPatientDeparasitage(patient.id);
+        onPreventionChange({
+          vaccinations: vaccData.doses || [],
+          deparasitages: deparasitageData || []
+        });
+      }
     } catch (error) {
       console.error('Erreur lors du chargement:', error);
     } finally {
@@ -128,6 +140,16 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
         date_administration: newDeparasitage.date_administration
       });
       await loadData();
+      
+      // Notifier le parent du changement
+      if (onPreventionChange) {
+        const updatedDeparasitages = await DeparasitageService.getPatientDeparasitage(patient.id);
+        onPreventionChange({
+          vaccinations: vaccinations,
+          deparasitages: updatedDeparasitages || []
+        });
+      }
+      
       setDeparasitageDialogOpen(false);
       setNewDeparasitage({ molecule: '', date_administration: '' });
     } catch (error) {
@@ -183,6 +205,15 @@ export const WorkflowStep5Prevention: React.FC<WorkflowStep5PreventionProps> = (
 
       // Recharger les données et fermer le dialog
       await loadData();
+      
+      // Notifier le parent du changement
+      if (onPreventionChange) {
+        const updatedVaccinations = await VaccinationService.getPatientCard(patient.id);
+        onPreventionChange({
+          vaccinations: updatedVaccinations.doses || [],
+          deparasitages: deparasitages
+        });
+      }
       
       // Réinitialiser le formulaire
       setNewVaccination({

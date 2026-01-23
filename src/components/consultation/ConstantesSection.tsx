@@ -20,6 +20,8 @@ import {
   LocalFireDepartment,
   Favorite,
   MonitorHeart,
+  AirlineSeatFlat,
+  WaterDrop,
 } from '@mui/icons-material';
 import { ConsultationConstantes } from '../../services/consultationApiService';
 import { ConsultationService } from '../../services/consultationService';
@@ -45,27 +47,80 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
   consultationId,
   patientId,
   initialConstantes,
-  patientConstantes,
+  patientConstantes: propPatientConstantes,
   onSave,
   userId,
 }) => {
+  const [patientConstantes, setPatientConstantes] = useState(propPatientConstantes);
   const [constantes, setConstantes] = useState<Partial<ConsultationConstantes>>({
     taille_cm: initialConstantes?.taille_cm || patientConstantes?.taille_cm,
     poids_kg: initialConstantes?.poids_kg || patientConstantes?.poids_kg,
     temperature_c: initialConstantes?.temperature_c || patientConstantes?.temperature_c,
     pouls_bpm: initialConstantes?.pouls_bpm || patientConstantes?.pouls_bpm,
+    frequence_respiratoire: initialConstantes?.frequence_respiratoire,
+    saturation_o2: initialConstantes?.saturation_o2,
     ta_bras_gauche_systolique: initialConstantes?.ta_bras_gauche_systolique || patientConstantes?.ta_systolique,
     ta_bras_gauche_diastolique: initialConstantes?.ta_bras_gauche_diastolique || patientConstantes?.ta_diastolique,
-    ta_bras_droit_systolique: initialConstantes?.ta_bras_droit_systolique,
-    ta_bras_droit_diastolique: initialConstantes?.ta_bras_droit_diastolique,
-    hauteur_uterine: initialConstantes?.hauteur_uterine,
+    ta_bras_droit_systolique: initialConstantes?.ta_bras_droit_systolique || patientConstantes?.ta_systolique,
+    ta_bras_droit_diastolique: initialConstantes?.ta_bras_droit_diastolique || patientConstantes?.ta_diastolique,
   });
 
-  const [imc, setImc] = useState<number | undefined>(initialConstantes?.imc);
+  const [imc, setImc] = useState<number | undefined>(() => {
+    if (initialConstantes?.imc) return initialConstantes.imc;
+    if (patientConstantes?.taille_cm && patientConstantes?.poids_kg) {
+      const tailleEnMetres = patientConstantes.taille_cm / 100;
+      return Number(((patientConstantes.poids_kg / (tailleEnMetres * tailleEnMetres))).toFixed(1));
+    }
+    return undefined;
+  });
   const [syncToPatient, setSyncToPatient] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Mettre à jour patientConstantes quand la prop change
+  useEffect(() => {
+    if (propPatientConstantes) {
+      setPatientConstantes(propPatientConstantes);
+    }
+  }, [propPatientConstantes]);
+
+  // Charger les constantes du patient si non fournies
+  useEffect(() => {
+    const loadPatientConstantesIfNeeded = async () => {
+      if (!propPatientConstantes && !initialConstantes) {
+        try {
+          const latestConstantes = await ConsultationService.getPatientLatestConstantes(patientId);
+          if (latestConstantes) {
+            const pc = {
+              taille_cm: latestConstantes.taille_cm,
+              poids_kg: latestConstantes.poids_kg,
+              temperature_c: latestConstantes.temperature_c,
+              pouls_bpm: latestConstantes.pouls_bpm,
+              ta_systolique: latestConstantes.ta_bras_gauche_systolique || latestConstantes.ta_bras_droit_systolique,
+              ta_diastolique: latestConstantes.ta_bras_gauche_diastolique || latestConstantes.ta_bras_droit_diastolique,
+            };
+            setPatientConstantes(pc);
+            // Pré-remplir le formulaire avec les constantes du patient
+            setConstantes(prev => ({
+              ...prev,
+              taille_cm: prev.taille_cm || pc.taille_cm,
+              poids_kg: prev.poids_kg || pc.poids_kg,
+              temperature_c: prev.temperature_c || pc.temperature_c,
+              pouls_bpm: prev.pouls_bpm || pc.pouls_bpm,
+              frequence_respiratoire: prev.frequence_respiratoire || latestConstantes.frequence_respiratoire,
+              saturation_o2: prev.saturation_o2 || latestConstantes.saturation_o2,
+              ta_bras_gauche_systolique: prev.ta_bras_gauche_systolique || pc.ta_systolique,
+              ta_bras_gauche_diastolique: prev.ta_bras_gauche_diastolique || pc.ta_diastolique,
+            }));
+          }
+        } catch (error) {
+          console.error('Erreur chargement constantes patient:', error);
+        }
+      }
+    };
+    loadPatientConstantesIfNeeded();
+  }, [patientId, propPatientConstantes, initialConstantes]);
 
   // Calculer l'IMC automatiquement
   useEffect(() => {
@@ -94,16 +149,14 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
         setConstantes({
           taille_cm: latestConstantes.taille_cm,
           poids_kg: latestConstantes.poids_kg,
-          temperature_c: latestConstantes.temperature_c,
-          pouls_bpm: latestConstantes.pouls_bpm,
-          frequence_respiratoire: latestConstantes.frequence_respiratoire,
-          saturation_o2: latestConstantes.saturation_o2,
-          glycemie_mg_dl: latestConstantes.glycemie_mg_dl,
-          ta_bras_gauche_systolique: latestConstantes.ta_bras_gauche_systolique,
-          ta_bras_gauche_diastolique: latestConstantes.ta_bras_gauche_diastolique,
-          ta_bras_droit_systolique: latestConstantes.ta_bras_droit_systolique,
-          ta_bras_droit_diastolique: latestConstantes.ta_bras_droit_diastolique,
-          hauteur_uterine: latestConstantes.hauteur_uterine,
+            temperature_c: latestConstantes.temperature_c,
+            pouls_bpm: latestConstantes.pouls_bpm,
+            frequence_respiratoire: latestConstantes.frequence_respiratoire,
+            saturation_o2: latestConstantes.saturation_o2,
+            ta_bras_gauche_systolique: latestConstantes.ta_bras_gauche_systolique || latestConstantes.ta_bras_droit_systolique,
+            ta_bras_gauche_diastolique: latestConstantes.ta_bras_gauche_diastolique || latestConstantes.ta_bras_droit_diastolique,
+            ta_bras_droit_systolique: latestConstantes.ta_bras_droit_systolique || latestConstantes.ta_bras_gauche_systolique,
+            ta_bras_droit_diastolique: latestConstantes.ta_bras_droit_diastolique || latestConstantes.ta_bras_gauche_diastolique,
         });
         setImc(latestConstantes.imc);
         setSaved(true);
@@ -140,9 +193,30 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
         syncToPatient
       );
       setSaved(true);
+      if (syncToPatient) {
+        // Recharger les constantes du patient après synchronisation
+        const latestConstantes = await ConsultationService.getPatientLatestConstantes(patientId);
+        if (latestConstantes) {
+          setPatientConstantes({
+            taille_cm: latestConstantes.taille_cm,
+            poids_kg: latestConstantes.poids_kg,
+            temperature_c: latestConstantes.temperature_c,
+            pouls_bpm: latestConstantes.pouls_bpm,
+            ta_systolique: latestConstantes.ta_bras_gauche_systolique || latestConstantes.ta_bras_droit_systolique,
+            ta_diastolique: latestConstantes.ta_bras_gauche_diastolique || latestConstantes.ta_bras_droit_diastolique,
+          });
+          // Mettre à jour aussi les champs FR et SpO₂ dans le formulaire
+          setConstantes(prev => ({
+            ...prev,
+            frequence_respiratoire: latestConstantes.frequence_respiratoire !== undefined ? latestConstantes.frequence_respiratoire : prev.frequence_respiratoire,
+            saturation_o2: latestConstantes.saturation_o2 !== undefined ? latestConstantes.saturation_o2 : prev.saturation_o2,
+          }));
+        }
+      }
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Erreur lors de la sauvegarde des constantes:', error);
+      alert('Erreur lors de la sauvegarde des constantes. Veuillez réessayer.');
     } finally {
       setSaving(false);
     }
@@ -157,7 +231,9 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
           </Typography>
           {saved && (
             <Alert severity="success" sx={{ py: 0 }}>
-              Constantes sauvegardées
+              {syncToPatient 
+                ? 'Constantes sauvegardées et synchronisées au dossier patient' 
+                : 'Constantes sauvegardées'}
             </Alert>
           )}
         </Box>
@@ -231,88 +307,92 @@ export const ConstantesSection: React.FC<ConstantesSectionProps> = ({
             />
           </Grid>
 
-          {/* Pouls */}
+          {/* Pouls / FC */}
           <Grid item xs={12} sm={6} md={3}>
             <TextField
               fullWidth
-              label="Pouls (BPM)"
+              label="FC (bpm)"
               type="number"
               value={constantes.pouls_bpm || ''}
               onChange={(e) => handleChange('pouls_bpm', parseInt(e.target.value) || undefined)}
               InputProps={{
                 startAdornment: <Favorite sx={{ mr: 1, color: 'text.secondary' }} />,
               }}
+              helperText="Fréquence cardiaque"
             />
           </Grid>
 
-          {/* Tension Artérielle - Bras Gauche */}
+          {/* Fréquence Respiratoire */}
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              label="FR (/min)"
+              type="number"
+              value={constantes.frequence_respiratoire || ''}
+              onChange={(e) => handleChange('frequence_respiratoire', parseInt(e.target.value) || undefined)}
+              InputProps={{
+                startAdornment: <AirlineSeatFlat sx={{ mr: 1, color: 'text.secondary' }} />,
+              }}
+              helperText="Fréquence respiratoire"
+            />
+          </Grid>
+
+          {/* Saturation en Oxygène */}
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              label="SpO₂ (%)"
+              type="number"
+              value={constantes.saturation_o2 || ''}
+              onChange={(e) => handleChange('saturation_o2', parseInt(e.target.value) || undefined)}
+              InputProps={{
+                startAdornment: <WaterDrop sx={{ mr: 1, color: 'text.secondary' }} />,
+              }}
+              helperText="Saturation en oxygène"
+              inputProps={{ min: 0, max: 100 }}
+            />
+          </Grid>
+
+          {/* Tension Artérielle */}
           <Grid item xs={12} sm={6} md={4}>
             <Typography variant="subtitle2" gutterBottom>
-              Tension Artérielle - Bras Gauche
+              Tension Artérielle (mmHg)
             </Typography>
             <Box display="flex" gap={1}>
               <TextField
                 fullWidth
-                label="Systolique"
+                label="TA Systolique"
                 type="number"
-                value={constantes.ta_bras_gauche_systolique || ''}
-                onChange={(e) =>
-                  handleChange('ta_bras_gauche_systolique', parseInt(e.target.value) || undefined)
-                }
+                value={constantes.ta_bras_gauche_systolique || constantes.ta_bras_droit_systolique || ''}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || undefined;
+                  handleChange('ta_bras_gauche_systolique', value);
+                  // Synchroniser aussi avec le bras droit pour cohérence
+                  if (value !== undefined) {
+                    handleChange('ta_bras_droit_systolique', value);
+                  }
+                }}
                 InputProps={{
                   startAdornment: <MonitorHeart sx={{ mr: 1, color: 'text.secondary' }} />,
                 }}
               />
               <TextField
                 fullWidth
-                label="Diastolique"
+                label="TA Diastolique"
                 type="number"
-                value={constantes.ta_bras_gauche_diastolique || ''}
-                onChange={(e) =>
-                  handleChange('ta_bras_gauche_diastolique', parseInt(e.target.value) || undefined)
-                }
+                value={constantes.ta_bras_gauche_diastolique || constantes.ta_bras_droit_diastolique || ''}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || undefined;
+                  handleChange('ta_bras_gauche_diastolique', value);
+                  // Synchroniser aussi avec le bras droit pour cohérence
+                  if (value !== undefined) {
+                    handleChange('ta_bras_droit_diastolique', value);
+                  }
+                }}
               />
             </Box>
           </Grid>
 
-          {/* Tension Artérielle - Bras Droit */}
-          <Grid item xs={12} sm={6} md={4}>
-            <Typography variant="subtitle2" gutterBottom>
-              Tension Artérielle - Bras Droit
-            </Typography>
-            <Box display="flex" gap={1}>
-              <TextField
-                fullWidth
-                label="Systolique"
-                type="number"
-                value={constantes.ta_bras_droit_systolique || ''}
-                onChange={(e) =>
-                  handleChange('ta_bras_droit_systolique', parseInt(e.target.value) || undefined)
-                }
-              />
-              <TextField
-                fullWidth
-                label="Diastolique"
-                type="number"
-                value={constantes.ta_bras_droit_diastolique || ''}
-                onChange={(e) =>
-                  handleChange('ta_bras_droit_diastolique', parseInt(e.target.value) || undefined)
-                }
-              />
-            </Box>
-          </Grid>
-
-          {/* Hauteur Utérine (pour maternité) */}
-          <Grid item xs={12} sm={6} md={3}>
-            <TextField
-              fullWidth
-              label="Hauteur Utérine (cm)"
-              type="number"
-              value={constantes.hauteur_uterine || ''}
-              onChange={(e) => handleChange('hauteur_uterine', parseFloat(e.target.value) || undefined)}
-              helperText="Pour consultations maternité"
-            />
-          </Grid>
         </Grid>
 
         <Box mt={3} display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
