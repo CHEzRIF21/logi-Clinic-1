@@ -42,6 +42,7 @@ import { ActesService, Acte } from '../../services/actesService';
 import { FacturationService, ServiceFacturable } from '../../services/facturationService';
 import { MedicamentService } from '../../services/medicamentService';
 import { MedicamentSupabase } from '../../services/stockSupabase';
+import { LaboratoireTarificationService } from '../../services/laboratoireTarificationService';
 import { useSnackbar } from 'notistack';
 
 interface SelectionActesFacturablesProps {
@@ -67,6 +68,7 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   const [recherche, setRecherche] = useState('');
   const [openCustomActeDialog, setOpenCustomActeDialog] = useState(false);
   const [typeServiceFiltre, setTypeServiceFiltre] = useState<string>('');
+  const [analysesLaboChargees, setAnalysesLaboChargees] = useState(false);
   
   // Mapper le service consulté vers le type de service pour la facture
   const getTypeServiceFromServiceConsulte = (service: string): string => {
@@ -139,6 +141,45 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     }
   }, [typeConsultation, isUrgent, actesDisponibles.length]);
 
+  // Charger automatiquement toutes les analyses de laboratoire dans les actes disponibles quand le service est "Laboratoire"
+  useEffect(() => {
+    if (serviceConsulte === 'Laboratoire' && !analysesLaboChargees) {
+      const toutesAnalyses = LaboratoireTarificationService.getAllTarifs();
+      // Convertir les analyses en format ServiceFacturable pour les ajouter aux actes disponibles
+      const analysesDisponibles: ServiceFacturable[] = toutesAnalyses.map((analyse) => ({
+        id: `labo-${analyse.code || analyse.numero}`,
+        code: analyse.code || `LAB-${analyse.numero}`,
+        nom: `${analyse.numero}. ${analyse.nom}`,
+        type_service: 'laboratoire' as const,
+        tarif_base: analyse.prix,
+        unite: 'analyse',
+        description: analyse.tube ? `Tube: ${analyse.tube}` : undefined,
+        actif: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+      
+      if (analysesDisponibles.length > 0) {
+        // Ajouter les analyses aux actes disponibles (pas au panier)
+        setActesDisponibles(prev => {
+          // Filtrer les analyses de laboratoire existantes pour éviter les doublons
+          const autresActes = prev.filter(
+            acte => acte.type_service !== 'laboratoire' || !acte.code?.startsWith('LAB-')
+          );
+          return [...autresActes, ...analysesDisponibles];
+        });
+        setAnalysesLaboChargees(true);
+        enqueueSnackbar(
+          `${analysesDisponibles.length} analyses de laboratoire disponibles pour sélection`,
+          { variant: 'info' }
+        );
+      }
+    } else if (serviceConsulte !== 'Laboratoire') {
+      // Réinitialiser le flag si le service change
+      setAnalysesLaboChargees(false);
+    }
+  }, [serviceConsulte, analysesLaboChargees, enqueueSnackbar]);
+
   useEffect(() => {
     onActesChange(actesSelectionnes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,7 +190,13 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     try {
       setLoading(true);
       const actes = await ActesService.getActesDisponibles();
-      setActesDisponibles(actes);
+      // Préserver les analyses de laboratoire déjà chargées
+      setActesDisponibles(prev => {
+        const analysesLabo = prev.filter(
+          acte => acte.type_service === 'laboratoire' && (acte.code?.startsWith('LAB-') || acte.id?.startsWith('labo-'))
+        );
+        return [...actes, ...analysesLabo];
+      });
     } catch (error: any) {
       console.error('Erreur chargement actes:', error);
       enqueueSnackbar('Erreur lors du chargement des actes', { variant: 'error' });

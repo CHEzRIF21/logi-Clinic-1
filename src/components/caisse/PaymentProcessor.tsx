@@ -40,6 +40,7 @@ import { useSnackbar } from 'notistack';
 import { FacturationService, Facture, Paiement } from '../../services/facturationService';
 import { PAYMENT_METHODS, getPaymentMethodLabel, getPaymentMethodConfig } from '../../constants/paymentMethods';
 import { getMyClinicId } from '../../services/clinicService';
+import { supabase, Patient } from '../../services/supabase';
 
 interface PaymentProcessorProps {
   factureId: string;
@@ -62,6 +63,7 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
   const { enqueueSnackbar } = useSnackbar();
   const [paymentConfirmed, setPaymentConfirmed] = React.useState(false);
   const [facture, setFacture] = useState<Facture | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [formPaiement, setFormPaiement] = useState<Partial<Paiement>>({
@@ -91,6 +93,19 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
       setLoading(true);
       const factureData = await FacturationService.getFactureById(factureId);
       setFacture(factureData);
+      
+      // Récupérer les informations du patient
+      if (factureData.patient_id) {
+        const { data: patientData, error: patientError } = await supabase
+          .from('patients')
+          .select('id, nom, prenom, identifiant, telephone')
+          .eq('id', factureData.patient_id)
+          .single();
+        
+        if (!patientError && patientData) {
+          setPatient(patientData);
+        }
+      }
     } catch (error: any) {
       console.error('Erreur chargement facture:', error);
       enqueueSnackbar('Erreur lors du chargement de la facture', { variant: 'error' });
@@ -236,6 +251,19 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
                 <Typography variant="h6" gutterBottom>
                   Informations de la Facture
                 </Typography>
+                {patient && (
+                  <Box mb={2} p={1.5} sx={{ bgcolor: 'background.default', borderRadius: 1 }}>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Patient
+                    </Typography>
+                    <Typography variant="body1" fontWeight="bold" color="primary">
+                      {patient.prenom} {patient.nom}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ID: {patient.identifiant} {patient.telephone && `| Tél: ${patient.telephone}`}
+                    </Typography>
+                  </Box>
+                )}
                 <Grid container spacing={2}>
                   <Grid item xs={6}>
                     <Typography variant="body2" color="text.secondary">

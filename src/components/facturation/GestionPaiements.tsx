@@ -39,16 +39,23 @@ import { FacturationService, Facture, Paiement } from '../../services/facturatio
 import { useFacturationPermissions } from '../../hooks/useFacturationPermissions';
 import { PAYMENT_METHODS, getPaymentMethodLabel, getPaymentMethodConfig } from '../../constants/paymentMethods';
 import { PaymentProcessor } from '../caisse/PaymentProcessor';
+import { supabase, Patient } from '../../services/supabase';
 
 interface GestionPaiementsProps {
   factureId?: string;
   patientId?: string;
 }
 
+interface FactureAvecPatient extends Facture {
+  patient_nom?: string;
+  patient_prenom?: string;
+  patient_identifiant?: string;
+}
+
 const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientId }) => {
   const permissions = useFacturationPermissions();
-  const [factures, setFactures] = useState<Facture[]>([]);
-  const [factureSelectionnee, setFactureSelectionnee] = useState<Facture | null>(null);
+  const [factures, setFactures] = useState<FactureAvecPatient[]>([]);
+  const [factureSelectionnee, setFactureSelectionnee] = useState<FactureAvecPatient | null>(null);
   const [paiements, setPaiements] = useState<Paiement[]>([]);
   const [openPaiementDialog, setOpenPaiementDialog] = useState(false);
   const [openPaymentProcessor, setOpenPaymentProcessor] = useState(false);
@@ -81,13 +88,40 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
       if (factureId) {
         const facture = await FacturationService.getFactureById(factureId);
         data = [facture];
-        setFactureSelectionnee(facture);
+        setFactureSelectionnee(facture as FactureAvecPatient);
       } else if (patientId) {
         data = await FacturationService.getFacturesByPatient(patientId);
       } else {
         data = await FacturationService.getFactures({ statut: 'en_attente' });
       }
-      setFactures(data);
+      
+      // Enrichir les factures avec les informations des patients
+      const patientIds = [...new Set(data.map(f => f.patient_id))];
+      const { data: patientsData } = await supabase
+        .from('patients')
+        .select('id, nom, prenom, identifiant')
+        .in('id', patientIds);
+      
+      const patientsMap = new Map((patientsData || []).map(p => [p.id, {
+        nom: p.nom,
+        prenom: p.prenom,
+        identifiant: p.identifiant,
+      }]));
+      
+      const facturesAvecPatients: FactureAvecPatient[] = data.map(f => {
+        const patientInfo = patientsMap.get(f.patient_id);
+        return {
+          ...f,
+          patient_nom: patientInfo?.nom || 'N/A',
+          patient_prenom: patientInfo?.prenom || 'N/A',
+          patient_identifiant: patientInfo?.identifiant || 'N/A',
+        };
+      });
+      
+      setFactures(facturesAvecPatients);
+      if (factureId && facturesAvecPatients.length > 0) {
+        setFactureSelectionnee(facturesAvecPatients[0]);
+      }
     } catch (err: any) {
       setError('Erreur lors du chargement des factures: ' + err.message);
     }
@@ -181,6 +215,14 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
                           size="small"
                         />
                       </Box>
+                      <Box mb={1}>
+                        <Typography variant="body2" fontWeight="bold" color="primary">
+                          {facture.patient_prenom} {facture.patient_nom}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ID: {facture.patient_identifiant}
+                        </Typography>
+                      </Box>
                       <Typography variant="body2" color="text.secondary" gutterBottom>
                         {new Date(facture.date_facture).toLocaleDateString()}
                       </Typography>
@@ -213,6 +255,10 @@ const GestionPaiements: React.FC<GestionPaiementsProps> = ({ factureId, patientI
           {factureSelectionnee && (
             <>
               <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Patient:</strong> {factureSelectionnee.patient_prenom} {factureSelectionnee.patient_nom} 
+                  {factureSelectionnee.patient_identifiant && ` (ID: ${factureSelectionnee.patient_identifiant})`}
+                </Typography>
                 <Typography variant="body2">
                   <strong>Facture:</strong> {factureSelectionnee.numero_facture} | 
                   <strong> Total:</strong> {factureSelectionnee.montant_total.toLocaleString()} FCFA | 

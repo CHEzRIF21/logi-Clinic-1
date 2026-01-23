@@ -90,7 +90,7 @@ export const PaiementsEnAttente: React.FC = () => {
         .select(`
           *,
           consultations(id, statut_paiement),
-          patients(id, identifiant)
+          patients(id, identifiant, nom, prenom)
         `)
         .in('patient_id', patientIds)
         .in('statut', ['en_attente', 'partiellement_payee'])
@@ -117,19 +117,28 @@ export const PaiementsEnAttente: React.FC = () => {
           // Filtrer par patientIds
           const filteredFactures = allFactures.filter(f => patientIds.includes(f.patient_id));
           
-          // Récupérer les identifiants des patients
+          // Récupérer les informations des patients (identifiant, nom, prénom)
           const { data: patientsData } = await supabase
             .from('patients')
-            .select('id, identifiant')
+            .select('id, identifiant, nom, prenom')
             .in('id', [...new Set(filteredFactures.map(f => f.patient_id))]);
           
-          const patientsMap = new Map((patientsData || []).map(p => [p.id, p.identifiant]));
+          const patientsMap = new Map((patientsData || []).map(p => [p.id, {
+            identifiant: p.identifiant,
+            nom: p.nom,
+            prenom: p.prenom,
+          }]));
           
-          // Ajouter l'identifiant à chaque facture
-          const facturesWithIdentifiant = filteredFactures.map(f => ({
-            ...f,
-            patient_identifiant: patientsMap.get(f.patient_id) || 'N/A',
-          }));
+          // Ajouter les informations du patient à chaque facture
+          const facturesWithIdentifiant = filteredFactures.map(f => {
+            const patientInfo = patientsMap.get(f.patient_id);
+            return {
+              ...f,
+              patient_identifiant: patientInfo?.identifiant || 'N/A',
+              patient_nom: patientInfo?.nom || 'N/A',
+              patient_prenom: patientInfo?.prenom || 'N/A',
+            };
+          });
           
           facturesWithIdentifiant.sort((a, b) => 
             new Date(b.date_facture).getTime() - new Date(a.date_facture).getTime()
@@ -141,11 +150,13 @@ export const PaiementsEnAttente: React.FC = () => {
           enqueueSnackbar('Erreur lors du chargement des factures', { variant: 'error' });
         }
       } else {
-        // Filtrer et formater les factures avec l'identifiant du patient
+        // Filtrer et formater les factures avec les informations du patient
         const allFactures = (facturesData || []).map((f: any) => ({
           ...f,
           consultation_id: f.consultation_id || f.consultations?.[0]?.id,
           patient_identifiant: f.patients?.identifiant || 'N/A',
+          patient_nom: f.patients?.nom || 'N/A',
+          patient_prenom: f.patients?.prenom || 'N/A',
         }));
         
         console.log(`✅ ${allFactures.length} factures récupérées pour clinic_id: ${clinicId}`);
@@ -186,6 +197,8 @@ export const PaiementsEnAttente: React.FC = () => {
     return (
       facture.numero_facture.toLowerCase().includes(searchLower) ||
       (factureAny.patient_identifiant && factureAny.patient_identifiant.toLowerCase().includes(searchLower)) ||
+      (factureAny.patient_nom && factureAny.patient_nom.toLowerCase().includes(searchLower)) ||
+      (factureAny.patient_prenom && factureAny.patient_prenom.toLowerCase().includes(searchLower)) ||
       facture.patient_id.toLowerCase().includes(searchLower) ||
       (facture.service_origine && facture.service_origine.toLowerCase().includes(searchLower)) ||
       facture.montant_total.toString().includes(searchLower) ||
@@ -213,7 +226,7 @@ export const PaiementsEnAttente: React.FC = () => {
       <Fade in={true} timeout={500}>
         <Card 
           sx={{ 
-            mb: 3,
+            mb: 1.5,
             background: (theme) => 
               theme.palette.mode === 'dark'
                 ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.background.paper, 0.95)} 100%)`
@@ -224,49 +237,46 @@ export const PaiementsEnAttente: React.FC = () => {
                 ? '0 8px 32px rgba(0, 0, 0, 0.3)'
                 : '0 4px 20px rgba(0, 0, 0, 0.08)',
             transition: 'all 0.3s ease-in-out',
-            '&:hover': {
-              boxShadow: (theme) => 
-                theme.palette.mode === 'dark'
-                  ? '0 12px 40px rgba(0, 0, 0, 0.4)'
-                  : '0 8px 30px rgba(0, 0, 0, 0.12)',
-            },
           }}
         >
-          <CardContent>
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
-              <Box display="flex" alignItems="center" gap={2}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
+              <Box display="flex" alignItems="center" gap={1.5}>
                 <Box
                   sx={{
-                    p: 1.5,
-                    borderRadius: 2,
+                    p: 1,
+                    borderRadius: 1.5,
                     background: (theme) => 
                       `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                    boxShadow: (theme) => `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`,
+                    boxShadow: (theme) => `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
                   }}
                 >
-                  <Payment sx={{ color: 'white', fontSize: 28 }} />
+                  <Payment sx={{ color: 'white', fontSize: 20 }} />
                 </Box>
                 <Box>
-                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                  <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1rem', mb: 0 }}>
                     Paiements en Attente
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                     Gérez les factures en attente de paiement
                   </Typography>
                 </Box>
               </Box>
               <Button
                 variant="outlined"
+                size="small"
                 onClick={loadFacturesEnAttente}
                 disabled={loading}
                 startIcon={<Refresh />}
                 sx={{
-                  borderRadius: 2,
+                  borderRadius: 1.5,
                   textTransform: 'none',
-                  px: 3,
+                  px: 2,
+                  py: 0.75,
+                  fontSize: '0.8125rem',
                   transition: 'all 0.2s',
                   '&:hover': {
-                    transform: 'translateY(-2px)',
+                    transform: 'translateY(-1px)',
                     boxShadow: 2,
                   },
                 }}
@@ -275,130 +285,105 @@ export const PaiementsEnAttente: React.FC = () => {
               </Button>
             </Box>
 
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6} md={4}>
-                <Zoom in={true} timeout={600}>
-                  <Card 
-                    variant="outlined"
-                    sx={{
-                      height: '100%',
-                      background: (theme) => 
-                        theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.primary.main, 0.1)
-                          : alpha(theme.palette.primary.main, 0.05),
-                      border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                      transition: 'all 0.3s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
-                        borderColor: (theme) => theme.palette.primary.main,
-                      },
-                    }}
-                  >
-                    <CardContent>
-                      <Box display="flex" alignItems="center" gap={2} mb={1}>
-                        <ReceiptLong color="primary" />
-                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
-                          Nombre de factures
-                        </Typography>
-                      </Box>
-                      <Typography variant="h3" color="primary" fontWeight="bold">
-                        {loading ? <Skeleton width={60} /> : nombreFactures}
+            <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
+              <Grid item xs={12} sm={4}>
+                <Card 
+                  variant="outlined"
+                  sx={{
+                    background: (theme) => 
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.primary.main, 0.1)
+                        : alpha(theme.palette.primary.main, 0.05),
+                    border: (theme) => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                  }}
+                >
+                  <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                      <ReceiptLong sx={{ fontSize: 18, color: 'primary.main' }} />
+                      <Typography variant="caption" color="text.secondary" fontWeight="medium" sx={{ fontSize: '0.7rem' }}>
+                        Nombre de factures
                       </Typography>
-                    </CardContent>
-                  </Card>
-                </Zoom>
+                    </Box>
+                    <Typography variant="h5" color="primary" fontWeight="bold" sx={{ fontSize: '1.25rem' }}>
+                      {loading ? <Skeleton width={40} height={28} /> : nombreFactures}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Zoom in={true} timeout={800}>
-                  <Card 
-                    variant="outlined"
-                    sx={{
-                      height: '100%',
-                      background: (theme) => 
-                        theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.warning.main, 0.1)
-                          : alpha(theme.palette.warning.main, 0.05),
-                      border: (theme) => `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
-                      transition: 'all 0.3s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
-                        borderColor: (theme) => theme.palette.warning.main,
-                      },
-                    }}
-                  >
-                    <CardContent>
-                      <Box display="flex" alignItems="center" gap={2} mb={1}>
-                        <AttachMoney color="warning" />
-                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
-                          Montant total en attente
-                        </Typography>
-                      </Box>
-                      <Typography variant="h3" color="warning.main" fontWeight="bold">
-                        {loading ? <Skeleton width={120} /> : `${totalEnAttente.toLocaleString()} XOF`}
+              <Grid item xs={12} sm={4}>
+                <Card 
+                  variant="outlined"
+                  sx={{
+                    background: (theme) => 
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.warning.main, 0.1)
+                        : alpha(theme.palette.warning.main, 0.05),
+                    border: (theme) => `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                  }}
+                >
+                  <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                      <AttachMoney sx={{ fontSize: 18, color: 'warning.main' }} />
+                      <Typography variant="caption" color="text.secondary" fontWeight="medium" sx={{ fontSize: '0.7rem' }}>
+                        Montant total
                       </Typography>
-                    </CardContent>
-                  </Card>
-                </Zoom>
+                    </Box>
+                    <Typography variant="h5" color="warning.main" fontWeight="bold" sx={{ fontSize: '1.25rem' }}>
+                      {loading ? <Skeleton width={80} height={28} /> : `${totalEnAttente.toLocaleString()} XOF`}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
-                <Zoom in={true} timeout={1000}>
-                  <Card 
-                    variant="outlined"
-                    sx={{
-                      height: '100%',
-                      background: (theme) => 
-                        theme.palette.mode === 'dark'
-                          ? alpha(theme.palette.success.main, 0.1)
-                          : alpha(theme.palette.success.main, 0.05),
-                      border: (theme) => `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
-                      transition: 'all 0.3s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
-                        borderColor: (theme) => theme.palette.success.main,
-                      },
-                    }}
-                  >
-                    <CardContent>
-                      <Box display="flex" alignItems="center" gap={2} mb={1}>
-                        <TrendingUp color="success" />
-                        <Typography variant="body2" color="text.secondary" fontWeight="medium">
-                          Montant moyen
-                        </Typography>
-                      </Box>
-                      <Typography variant="h3" color="success.main" fontWeight="bold">
-                        {loading ? (
-                          <Skeleton width={100} />
-                        ) : (
-                          `${nombreFactures > 0 
-                            ? Math.round(totalEnAttente / nombreFactures).toLocaleString() 
-                            : '0'} XOF`
-                        )}
+              <Grid item xs={12} sm={4}>
+                <Card 
+                  variant="outlined"
+                  sx={{
+                    background: (theme) => 
+                      theme.palette.mode === 'dark'
+                        ? alpha(theme.palette.success.main, 0.1)
+                        : alpha(theme.palette.success.main, 0.05),
+                    border: (theme) => `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                  }}
+                >
+                  <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                      <TrendingUp sx={{ fontSize: 18, color: 'success.main' }} />
+                      <Typography variant="caption" color="text.secondary" fontWeight="medium" sx={{ fontSize: '0.7rem' }}>
+                        Montant moyen
                       </Typography>
-                    </CardContent>
-                  </Card>
-                </Zoom>
+                    </Box>
+                    <Typography variant="h5" color="success.main" fontWeight="bold" sx={{ fontSize: '1.25rem' }}>
+                      {loading ? (
+                        <Skeleton width={70} height={28} />
+                      ) : (
+                        `${nombreFactures > 0 
+                          ? Math.round(totalEnAttente / nombreFactures).toLocaleString() 
+                          : '0'} XOF`
+                      )}
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
             </Grid>
 
             <TextField
               fullWidth
+              size="small"
               placeholder="Rechercher par numéro facture, identifiant patient, type service, montant, date, statut..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Search />
+                    <Search sx={{ fontSize: 18 }} />
                   </InputAdornment>
                 ),
               }}
               sx={{ 
-                mb: 2,
+                mb: 0,
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
+                  borderRadius: 1.5,
+                  fontSize: '0.8125rem',
                   transition: 'all 0.2s',
                   '&:hover': {
                     boxShadow: 1,
@@ -442,33 +427,79 @@ export const PaiementsEnAttente: React.FC = () => {
           <TableContainer 
             component={Paper}
             sx={{
-              borderRadius: 2,
+              borderRadius: 3,
               boxShadow: (theme) => 
                 theme.palette.mode === 'dark'
                   ? '0 8px 32px rgba(0, 0, 0, 0.3)'
                   : '0 4px 20px rgba(0, 0, 0, 0.08)',
-              overflow: 'hidden',
+              overflowX: 'auto',
+              overflowY: 'auto',
+              maxHeight: 'calc(100vh - 200px)',
+              border: (theme) => `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+              '&::-webkit-scrollbar': {
+                height: 10,
+                width: 10,
+              },
+              '&::-webkit-scrollbar-track': {
+                background: (theme) => 
+                  theme.palette.mode === 'dark' 
+                    ? alpha(theme.palette.background.paper, 0.1)
+                    : alpha(theme.palette.grey[300], 0.1),
+                borderRadius: 1,
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: (theme) => alpha(theme.palette.primary.main, 0.4),
+                borderRadius: 1,
+                '&:hover': {
+                  background: (theme) => alpha(theme.palette.primary.main, 0.6),
+                },
+              },
             }}
           >
-            <Table>
+            <Table sx={{ minWidth: 1000 }}>
               <TableHead>
                 <TableRow
                   sx={{
                     background: (theme) => 
                       theme.palette.mode === 'dark'
-                        ? alpha(theme.palette.primary.main, 0.1)
-                        : alpha(theme.palette.primary.main, 0.05),
+                        ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.2)} 0%, ${alpha(theme.palette.primary.dark, 0.15)} 100%)`
+                        : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.light, 0.05)} 100%)`,
+                    borderBottom: (theme) => `2px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                    '& th': {
+                      borderRight: (theme) => `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                      '&:last-child': {
+                        borderRight: 'none',
+                      },
+                    },
                   }}
                 >
-                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Numéro Facture</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Identifiant</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', py: 2 }}>Type de service</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Total</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Payé</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 'bold', py: 2 }}>Reste</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold', py: 2 }}>Statut</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 'bold', py: 2 }}>Actions</TableCell>
+                  <TableCell sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Numéro Facture
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Date
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Patient
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Type de service
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Total
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Payé
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Reste
+                  </TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Statut
+                  </TableCell>
+                  <TableCell align="center" sx={{ fontWeight: 700, py: 2.5, fontSize: '0.875rem', color: 'primary.main' }}>
+                    Actions
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -477,23 +508,44 @@ export const PaiementsEnAttente: React.FC = () => {
                     <TableRow 
                       hover
                       sx={{
-                        transition: 'all 0.2s',
+                        transition: 'all 0.2s ease-in-out',
+                        backgroundColor: (theme) => 
+                          index % 2 === 0
+                            ? theme.palette.mode === 'dark'
+                              ? alpha(theme.palette.background.paper, 0.3)
+                              : alpha(theme.palette.grey[50], 0.5)
+                            : 'transparent',
+                        borderBottom: (theme) => `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                        '& td': {
+                          borderRight: (theme) => `1px solid ${alpha(theme.palette.divider, 0.05)}`,
+                          py: 2,
+                          '&:last-child': {
+                            borderRight: 'none',
+                          },
+                        },
                         '&:hover': {
                           background: (theme) => 
                             theme.palette.mode === 'dark'
-                              ? alpha(theme.palette.primary.main, 0.1)
-                              : alpha(theme.palette.primary.main, 0.05),
-                          transform: 'scale(1.01)',
+                              ? alpha(theme.palette.primary.main, 0.15)
+                              : alpha(theme.palette.primary.main, 0.08),
+                          transform: 'translateX(4px)',
+                          boxShadow: (theme) => 
+                            theme.palette.mode === 'dark'
+                              ? `0 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`
+                              : `0 2px 8px ${alpha(theme.palette.primary.main, 0.15)}`,
+                        },
+                        '&:last-child td': {
+                          borderBottom: 'none',
                         },
                       }}
                     >
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="bold" color="primary">
+                      <TableCell sx={{ minWidth: 150 }}>
+                        <Typography variant="body2" fontWeight={600} color="primary" sx={{ fontSize: '0.875rem' }}>
                           {facture.numero_facture}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
+                      <TableCell sx={{ minWidth: 120 }}>
+                        <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
                           {new Date(facture.date_facture).toLocaleDateString('fr-FR', {
                             day: '2-digit',
                             month: 'short',
@@ -501,12 +553,17 @@ export const PaiementsEnAttente: React.FC = () => {
                           })}
                         </Typography>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight="medium" color="primary">
-                          {(facture as any).patient_identifiant || 'N/A'}
-                        </Typography>
+                      <TableCell sx={{ minWidth: 180 }}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.875rem', mb: 0.5 }}>
+                            {(facture as any).patient_prenom || 'N/A'} {(facture as any).patient_nom || ''}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                            ID: {(facture as any).patient_identifiant || 'N/A'}
+                          </Typography>
+                        </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ minWidth: 140 }}>
                         <Chip
                           label={facture.service_origine 
                             ? facture.service_origine
@@ -517,37 +574,41 @@ export const PaiementsEnAttente: React.FC = () => {
                           color="info"
                           variant="outlined"
                           sx={{
-                            fontWeight: 'medium',
+                            fontWeight: 500,
+                            fontSize: '0.75rem',
+                            borderWidth: 1.5,
                           }}
                         />
                       </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" fontWeight="bold">
+                      <TableCell align="right" sx={{ minWidth: 100 }}>
+                        <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.875rem' }}>
                           {facture.montant_total.toLocaleString()} XOF
                         </Typography>
                       </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color="success.main" fontWeight="medium">
+                      <TableCell align="right" sx={{ minWidth: 100 }}>
+                        <Typography variant="body2" color="success.main" fontWeight={600} sx={{ fontSize: '0.875rem' }}>
                           {facture.montant_paye.toLocaleString()} XOF
                         </Typography>
                       </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" color="warning.main" fontWeight="bold">
+                      <TableCell align="right" sx={{ minWidth: 100 }}>
+                        <Typography variant="body2" color="warning.main" fontWeight={700} sx={{ fontSize: '0.875rem' }}>
                           {facture.montant_restant.toLocaleString()} XOF
                         </Typography>
                       </TableCell>
-                      <TableCell align="center">
+                      <TableCell align="center" sx={{ minWidth: 120 }}>
                         <Chip
                           label={facture.statut.replace('_', ' ')}
                           color={getStatutColor(facture.statut) as any}
                           size="small"
                           sx={{
-                            fontWeight: 'medium',
+                            fontWeight: 600,
+                            fontSize: '0.75rem',
                             textTransform: 'capitalize',
+                            minWidth: 90,
                           }}
                         />
                       </TableCell>
-                      <TableCell align="center">
+                      <TableCell align="center" sx={{ minWidth: 160 }}>
                         <Button
                           variant="contained"
                           color="primary"
@@ -557,16 +618,19 @@ export const PaiementsEnAttente: React.FC = () => {
                           sx={{
                             borderRadius: 2,
                             textTransform: 'none',
-                            fontWeight: 'medium',
-                            px: 2,
-                            transition: 'all 0.2s',
+                            fontWeight: 600,
+                            fontSize: '0.8125rem',
+                            px: 2.5,
+                            py: 1,
+                            transition: 'all 0.2s ease-in-out',
+                            boxShadow: 2,
                             '&:hover': {
                               transform: 'translateY(-2px)',
-                              boxShadow: 4,
+                              boxShadow: 6,
                             },
                           }}
                         >
-                          Payer maintenant
+                          Payer
                         </Button>
                       </TableCell>
                     </TableRow>
