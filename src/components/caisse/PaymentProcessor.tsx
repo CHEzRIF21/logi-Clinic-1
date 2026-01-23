@@ -98,12 +98,12 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
       if (factureData.patient_id) {
         const { data: patientData, error: patientError } = await supabase
           .from('patients')
-          .select('id, nom, prenom, identifiant, telephone')
+          .select('id, nom, prenom, identifiant, telephone, sexe, date_naissance, age, date_enregistrement, adresse, email')
           .eq('id', factureData.patient_id)
           .single();
         
         if (!patientError && patientData) {
-          setPatient(patientData);
+          setPatient(patientData as Patient);
         }
       }
     } catch (error: any) {
