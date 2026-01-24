@@ -884,9 +884,8 @@ export class FacturationService {
   }
   
   static async imprimerFacture(factureId: string): Promise<void> {
-    const facture = await this.getFactureById(factureId);
-    // Logique d'impression côté client
-    window.print();
+    const { InvoicePrintService } = await import('./invoicePrintService');
+    await InvoicePrintService.printInvoice(factureId);
   }
 
   // ============================================

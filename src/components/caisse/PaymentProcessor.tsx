@@ -158,21 +158,25 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
         { variant: 'success' }
       );
 
-      // Réinitialiser le formulaire
+      // Attendre un peu pour que les triggers SQL mettent à jour la facture
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Recharger la facture pour obtenir les valeurs mises à jour par les triggers SQL
+      const updatedFacture = await FacturationService.getFactureById(factureId);
+      
+      // Réinitialiser le formulaire avec le nouveau montant restant
       setFormPaiement({
-        montant: facture.montant_restant - formPaiement.montant!,
+        montant: updatedFacture.montant_restant,
         mode_paiement: 'especes',
         date_paiement: new Date().toISOString().split('T')[0],
       });
 
-      // Si la facture est complètement payée, appeler le callback
-      const nouveauMontantRestant = facture.montant_restant - formPaiement.montant!;
-      if (nouveauMontantRestant <= 0) {
-        const updatedFacture = await FacturationService.getFactureById(factureId);
+      // Appeler le callback pour mettre à jour l'affichage (paiement partiel ou complet)
+      onPaymentComplete?.(updatedFacture);
+      
+      // Si la facture est complètement payée
+      if (updatedFacture.montant_restant <= 0) {
         setPaymentConfirmed(true);
-        onPaymentComplete?.(updatedFacture);
-        
-        // Afficher un message de confirmation
         enqueueSnackbar(
           '✅ Paiement effectué avec succès ! Le patient peut maintenant accéder aux services.',
           { variant: 'success', autoHideDuration: 5000 }
@@ -186,9 +190,14 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
     }
   };
 
-  const handlePrintReceipt = () => {
-    // TODO: Implémenter l'impression du reçu
-    enqueueSnackbar('Fonction d\'impression à implémenter', { variant: 'info' });
+  const handlePrintReceipt = async () => {
+    try {
+      if (!facture) return;
+      await FacturationService.imprimerFacture(facture.id);
+      enqueueSnackbar('Impression de la facture lancée', { variant: 'success' });
+    } catch (error: any) {
+      enqueueSnackbar('Erreur lors de l\'impression: ' + error.message, { variant: 'error' });
+    }
   };
 
   const getStatutColor = (statut: string) => {
@@ -553,11 +562,12 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
               </Button>
             )}
             <Button
-              variant="outlined"
+              variant="contained"
+              color="primary"
               startIcon={<Print />}
               onClick={handlePrintReceipt}
             >
-              Imprimer le Reçu
+              Imprimer la Facture
             </Button>
             <Button onClick={onClose} startIcon={<Close />}>
               Fermer
@@ -581,11 +591,12 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
             )}
             {facture.montant_restant === 0 && (
               <Button
-                variant="outlined"
+                variant="contained"
+                color="primary"
                 startIcon={<Print />}
                 onClick={handlePrintReceipt}
               >
-                Imprimer le Reçu
+                Imprimer la Facture
               </Button>
             )}
           </>

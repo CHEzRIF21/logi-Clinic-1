@@ -90,7 +90,7 @@ export const PaiementsEnAttente: React.FC = () => {
         .from('factures')
         .select(`
           *,
-          consultations(id, statut_paiement),
+          consultations(id, statut_paiement, type),
           patients(id, identifiant, nom, prenom)
         `)
         .in('patient_id', patientIds)
@@ -135,14 +135,30 @@ export const PaiementsEnAttente: React.FC = () => {
             prenom: p.prenom,
           }]));
           
-          // Ajouter les informations du patient à chaque facture
+          // Récupérer les types de consultation pour les factures liées à des consultations
+          const facturesAvecConsultation = filteredFactures.filter(f => f.consultation_id);
+          const consultationIds = [...new Set(facturesAvecConsultation.map(f => f.consultation_id).filter(Boolean))];
+          
+          let consultationsMap = new Map();
+          if (consultationIds.length > 0) {
+            const { data: consultationsData } = await supabase
+              .from('consultations')
+              .select('id, type')
+              .in('id', consultationIds);
+            
+            consultationsMap = new Map((consultationsData || []).map(c => [c.id, c.type]));
+          }
+          
+          // Ajouter les informations du patient et le type de consultation à chaque facture
           const facturesWithIdentifiant = filteredFactures.map(f => {
             const patientInfo = patientsMap.get(f.patient_id);
+            const consultationType = f.consultation_id ? consultationsMap.get(f.consultation_id) : null;
             return {
               ...f,
               patient_identifiant: patientInfo?.identifiant || 'N/A',
               patient_nom: patientInfo?.nom || 'N/A',
               patient_prenom: patientInfo?.prenom || 'N/A',
+              consultation_type: consultationType || null,
             };
           });
           
@@ -163,6 +179,7 @@ export const PaiementsEnAttente: React.FC = () => {
           .map((f: any) => ({
             ...f,
             consultation_id: f.consultation_id || f.consultations?.[0]?.id,
+            consultation_type: f.consultations?.[0]?.type || f.consultations?.type || null,
             patient_identifiant: f.patients?.identifiant || 'N/A',
             patient_nom: f.patients?.nom || 'N/A',
             patient_prenom: f.patients?.prenom || 'N/A',
@@ -197,15 +214,45 @@ export const PaiementsEnAttente: React.FC = () => {
       // Attendre un peu pour que les triggers SQL s'exécutent complètement
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Vérifier le statut de la facture après paiement (les triggers SQL ont dû la mettre à jour)
+      // Récupérer la facture complète mise à jour (les triggers SQL ont dû la mettre à jour)
       const { data: factureUpdated, error: factureError } = await supabase
         .from('factures')
-        .select('statut, montant_restant')
+        .select(`
+          *,
+          consultations(id, statut_paiement, type),
+          patients(id, identifiant, nom, prenom)
+        `)
         .eq('id', facture.id)
         .single();
 
       if (factureError) {
         console.error('Erreur récupération facture:', factureError);
+      }
+
+      // Mettre à jour la facture dans l'état local immédiatement (pour paiement partiel ou complet)
+      if (factureUpdated) {
+        const factureFormatee: any = {
+          ...factureUpdated,
+          consultation_id: factureUpdated.consultation_id || factureUpdated.consultations?.[0]?.id,
+          consultation_type: factureUpdated.consultations?.[0]?.type || factureUpdated.consultations?.type || (facture as any).consultation_type || null,
+          patient_identifiant: factureUpdated.patients?.identifiant || (facture as any).patient_identifiant || 'N/A',
+          patient_nom: factureUpdated.patients?.nom || (facture as any).patient_nom || 'N/A',
+          patient_prenom: factureUpdated.patients?.prenom || (facture as any).patient_prenom || 'N/A',
+        };
+        
+        // Mettre à jour la facture dans la liste
+        setFactures(prevFactures => 
+          prevFactures.map(f => 
+            f.id === facture.id ? factureFormatee : f
+          )
+        );
+        
+        console.log('✅ Facture mise à jour dans l\'état local:', {
+          id: factureUpdated.id,
+          statut: factureUpdated.statut,
+          montant_paye: factureUpdated.montant_paye,
+          montant_restant: factureUpdated.montant_restant
+        });
       }
 
       // Si la facture est complètement payée, vérifier la synchronisation complète
@@ -265,12 +312,37 @@ export const PaiementsEnAttente: React.FC = () => {
         // - Journal de caisse mis à jour (trigger_mettre_a_jour_journal_caisse)
         // - Consultation débloquée (trigger_update_consultation_from_invoice)
         // - Stock décrémenté (trigger_decrement_stock_on_payment)
+      } else if (factureUpdated && factureUpdated.statut === 'partiellement_payee') {
+        // Pour un paiement partiel, afficher un message spécifique
+        console.log('✅ Paiement partiel enregistré:', {
+          montant_paye: factureUpdated.montant_paye,
+          montant_restant: factureUpdated.montant_restant,
+          statut: factureUpdated.statut
+        });
       }
 
-      enqueueSnackbar('Paiement enregistré avec succès. Toutes les actions ont été synchronisées automatiquement.', { 
-        variant: 'success',
-        autoHideDuration: 4000
-      });
+      // Message de succès adapté selon le statut
+      if (factureUpdated && factureUpdated.statut === 'payee' && factureUpdated.montant_restant <= 0) {
+        enqueueSnackbar('Paiement enregistré avec succès. Toutes les actions ont été synchronisées automatiquement.', { 
+          variant: 'success',
+          autoHideDuration: 4000
+        });
+      } else if (factureUpdated && factureUpdated.statut === 'partiellement_payee') {
+        enqueueSnackbar(
+          `Paiement partiel enregistré : ${factureUpdated.montant_paye?.toLocaleString()} XOF payés, reste ${factureUpdated.montant_restant?.toLocaleString()} XOF.`, 
+          { 
+            variant: 'success',
+            autoHideDuration: 4000
+          }
+        );
+      } else {
+        enqueueSnackbar('Paiement enregistré avec succès.', { 
+          variant: 'success',
+          autoHideDuration: 4000
+        });
+      }
+      
+      // Recharger les factures pour s'assurer que tout est à jour
       await loadFacturesEnAttente();
       setOpenPaymentDialog(false);
       setSelectedFacture(null);
@@ -659,11 +731,13 @@ export const PaiementsEnAttente: React.FC = () => {
                       </TableCell>
                       <TableCell sx={{ minWidth: 140 }}>
                         <Chip
-                          label={facture.service_origine 
-                            ? facture.service_origine
-                                .replace(/_/g, ' ')
-                                .replace(/\b\w/g, (l) => l.toUpperCase())
-                            : 'Autre'}
+                          label={(facture as any).consultation_type 
+                            ? (facture as any).consultation_type
+                            : facture.service_origine 
+                              ? facture.service_origine
+                                  .replace(/_/g, ' ')
+                                  .replace(/\b\w/g, (l) => l.toUpperCase())
+                              : 'Autre'}
                           size="small"
                           color="info"
                           variant="outlined"
