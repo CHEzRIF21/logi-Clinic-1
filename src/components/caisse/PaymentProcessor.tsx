@@ -138,6 +138,10 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
       const userData = localStorage.getItem('user');
       const caissierId = userData ? JSON.parse(userData).id : undefined;
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PaymentProcessor.tsx:141',message:'Avant enregistrement paiement - formPaiement complet',data:{formPaiement:formPaiement,mode_paiement:formPaiement.mode_paiement,type_mode_paiement:typeof formPaiement.mode_paiement,facture_id:facture.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+
       await FacturationService.enregistrerPaiement({
         facture_id: facture.id,
         montant: formPaiement.montant!,
@@ -390,7 +394,12 @@ export const PaymentProcessor: React.FC<PaymentProcessorProps> = ({
                       <InputLabel>Mode de Paiement</InputLabel>
                       <Select
                         value={formPaiement.mode_paiement}
-                        onChange={(e) => setFormPaiement({ ...formPaiement, mode_paiement: e.target.value as any })}
+                        onChange={(e) => {
+                          // #region agent log
+                          fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PaymentProcessor.tsx:393',message:'Changement mode paiement dans Select',data:{value:e.target.value,type:typeof e.target.value,rawEvent:e.target},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                          // #endregion
+                          setFormPaiement({ ...formPaiement, mode_paiement: e.target.value as any });
+                        }}
                         label="Mode de Paiement"
                       >
                         {PAYMENT_METHODS.map((method) => (

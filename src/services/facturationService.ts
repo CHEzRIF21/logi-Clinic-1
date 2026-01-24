@@ -512,6 +512,67 @@ export class FacturationService {
   // ============================================
   
   static async enregistrerPaiement(paiement: Paiement, caissierId?: string): Promise<Paiement> {
+    // Normaliser le mode de paiement pour s'assurer qu'il correspond aux valeurs autorisées
+    const validModes = [
+      'especes',
+      'orange_money',
+      'mtn_mobile_money',
+      'moov_money',
+      'wave',
+      'flooz',
+      't_money',
+      'carte_bancaire',
+      'virement',
+      'cheque',
+      'prise_en_charge'
+    ];
+    
+    // Mapper les labels vers les valeurs si nécessaire
+    const modeMapping: Record<string, string> = {
+      'Espèces': 'especes',
+      'Orange Money': 'orange_money',
+      'MTN Mobile Money': 'mtn_mobile_money',
+      'Moov Money': 'moov_money',
+      'Wave': 'wave',
+      'Flooz': 'flooz',
+      'T-Money': 't_money',
+      'Carte Bancaire': 'carte_bancaire',
+      'Virement Bancaire': 'virement',
+      'Chèque': 'cheque',
+      'Prise en Charge': 'prise_en_charge',
+      // Ajouter aussi les variantes possibles
+      'mobile_money': 'mtn_mobile_money', // Fallback pour ancien système
+    };
+    
+    let normalizedMode = paiement.mode_paiement;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:547',message:'Mode paiement reçu dans enregistrerPaiement',data:{mode_paiement:paiement.mode_paiement,type:typeof paiement.mode_paiement,length:paiement.mode_paiement?.length,charCode:paiement.mode_paiement?.split('').map(c=>c.charCodeAt(0)),validModes},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    // Si la valeur n'est pas dans la liste valide, essayer de la mapper
+    if (!validModes.includes(normalizedMode)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:553',message:'Mode paiement non valide - avant mapping',data:{normalizedMode,modeMappingKeys:Object.keys(modeMapping),hasMapping:!!modeMapping[normalizedMode]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      normalizedMode = modeMapping[normalizedMode] || normalizedMode;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:555',message:'Mode paiement après mapping',data:{normalizedMode,isValid:validModes.includes(normalizedMode)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+    }
+    
+    // Vérifier que le mode normalisé est valide
+    if (!validModes.includes(normalizedMode)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:560',message:'Mode paiement invalide après normalisation - ERREUR',data:{original:paiement.mode_paiement,normalized:normalizedMode,validModes},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      throw new Error(`Mode de paiement invalide: ${paiement.mode_paiement}. Valeurs autorisées: ${validModes.join(', ')}`);
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:568',message:'Mode paiement validé - avant insertion DB',data:{normalizedMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
     // Générer le numéro de paiement
     const annee = new Date().getFullYear();
     const { data: dernierPaiement } = await supabase
@@ -532,16 +593,32 @@ export class FacturationService {
     
     const numeroPaiement = `PAY-${annee}-${String(numeroSeq).padStart(6, '0')}`;
     
+    // Créer l'objet d'insertion en s'assurant que mode_paiement normalisé écrase celui de paiement
+    const paiementToInsert = {
+      ...paiement,
+      mode_paiement: normalizedMode, // DOIT être après le spread pour écraser
+      numero_paiement: numeroPaiement,
+      caissier_id: caissierId || paiement.caissier_id,
+      date_paiement: paiement.date_paiement || new Date().toISOString()
+    };
+    
+    // #region agent log
+    console.log('🔍 DEBUG: Objet final avant insertion', { mode_paiement: paiementToInsert.mode_paiement, normalizedMode, allKeys: Object.keys(paiementToInsert), paiementToInsert: JSON.stringify(paiementToInsert) });
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:605',message:'Objet final avant insertion DB',data:{mode_paiement:paiementToInsert.mode_paiement,normalizedMode,allKeys:Object.keys(paiementToInsert),paiementToInsertJSON:JSON.stringify(paiementToInsert)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch((e)=>{console.error('Log fetch error:',e);});
+    // #endregion
+    
     const { data, error } = await supabase
       .from('paiements')
-      .insert([{
-        ...paiement,
-        numero_paiement: numeroPaiement,
-        caissier_id: caissierId || paiement.caissier_id,
-        date_paiement: paiement.date_paiement || new Date().toISOString()
-      }])
+      .insert([paiementToInsert])
       .select()
       .single();
+    
+    // #region agent log
+    if (error) {
+      console.error('🔍 DEBUG: Erreur insertion DB', { error: error.message, code: error.code, normalizedMode, mode_paiement_in_paiement: paiement.mode_paiement, paiementToInsert: JSON.stringify(paiementToInsert) });
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:620',message:'Erreur insertion DB',data:{error:error.message,code:error.code,normalizedMode,mode_paiement_in_paiement:paiement.mode_paiement,paiementToInsertJSON:JSON.stringify(paiementToInsert)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch((e)=>{console.error('Log fetch error:',e);});
+    }
+    // #endregion
     
     if (error) throw error;
     
