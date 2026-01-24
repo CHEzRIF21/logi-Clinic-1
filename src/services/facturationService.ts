@@ -513,7 +513,7 @@ export class FacturationService {
   
   static async enregistrerPaiement(paiement: Paiement, caissierId?: string): Promise<Paiement> {
     // Normaliser le mode de paiement pour s'assurer qu'il correspond aux valeurs autorisées
-    const validModes = [
+    const validModes: PaymentMethod[] = [
       'especes',
       'orange_money',
       'mtn_mobile_money',
@@ -528,7 +528,7 @@ export class FacturationService {
     ];
     
     // Mapper les labels vers les valeurs si nécessaire
-    const modeMapping: Record<string, string> = {
+    const modeMapping: Record<string, PaymentMethod> = {
       'Espèces': 'especes',
       'Orange Money': 'orange_money',
       'MTN Mobile Money': 'mtn_mobile_money',
@@ -544,7 +544,7 @@ export class FacturationService {
       'mobile_money': 'mtn_mobile_money', // Fallback pour ancien système
     };
     
-    let normalizedMode = paiement.mode_paiement;
+    let normalizedMode: PaymentMethod = (paiement.mode_paiement || 'especes') as PaymentMethod;
     
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:547',message:'Mode paiement reçu dans enregistrerPaiement',data:{mode_paiement:paiement.mode_paiement,type:typeof paiement.mode_paiement,length:paiement.mode_paiement?.length,charCode:paiement.mode_paiement?.split('').map(c=>c.charCodeAt(0)),validModes},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
@@ -555,7 +555,13 @@ export class FacturationService {
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:553',message:'Mode paiement non valide - avant mapping',data:{normalizedMode,modeMappingKeys:Object.keys(modeMapping),hasMapping:!!modeMapping[normalizedMode]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
-      normalizedMode = modeMapping[normalizedMode] || normalizedMode;
+      const mappedMode: PaymentMethod | undefined = modeMapping[normalizedMode];
+      if (mappedMode && validModes.includes(mappedMode)) {
+        normalizedMode = mappedMode;
+      } else {
+        // Si aucun mapping trouvé, utiliser 'especes' comme valeur par défaut
+        normalizedMode = 'especes' as PaymentMethod;
+      }
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:555',message:'Mode paiement après mapping',data:{normalizedMode,isValid:validModes.includes(normalizedMode)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
