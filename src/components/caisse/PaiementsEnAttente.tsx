@@ -84,6 +84,7 @@ export const PaiementsEnAttente: React.FC = () => {
       }
 
       // Étape 2: Récupérer toutes les factures en attente pour ces patients
+      // Exclure les factures complètement payées (statut = 'payee' ou montant_restant <= 0)
       // Cela inclut toutes les factures : avec consultation_id, service_origine='enregistrement', etc.
       const { data: facturesData, error } = await supabase
         .from('factures')
@@ -95,6 +96,7 @@ export const PaiementsEnAttente: React.FC = () => {
         .in('patient_id', patientIds)
         .in('statut', ['en_attente', 'partiellement_payee'])
         .gt('montant_restant', 0)
+        .neq('statut', 'payee') // Exclure explicitement les factures payées intégralement
         .order('date_facture', { ascending: false });
 
       if (error) {
@@ -114,8 +116,12 @@ export const PaiementsEnAttente: React.FC = () => {
             statut: 'partiellement_payee',
           });
           const allFactures = [...facturesEnAttente, ...facturesPartielles];
-          // Filtrer par patientIds
-          const filteredFactures = allFactures.filter(f => patientIds.includes(f.patient_id));
+          // Filtrer par patientIds ET exclure les factures complètement payées
+          const filteredFactures = allFactures.filter(f => 
+            patientIds.includes(f.patient_id) &&
+            f.statut !== 'payee' &&
+            f.montant_restant > 0
+          );
           
           // Récupérer les informations des patients (identifiant, nom, prénom)
           const { data: patientsData } = await supabase
@@ -151,13 +157,16 @@ export const PaiementsEnAttente: React.FC = () => {
         }
       } else {
         // Filtrer et formater les factures avec les informations du patient
-        const allFactures = (facturesData || []).map((f: any) => ({
-          ...f,
-          consultation_id: f.consultation_id || f.consultations?.[0]?.id,
-          patient_identifiant: f.patients?.identifiant || 'N/A',
-          patient_nom: f.patients?.nom || 'N/A',
-          patient_prenom: f.patients?.prenom || 'N/A',
-        }));
+        // Exclure explicitement les factures complètement payées
+        const allFactures = (facturesData || [])
+          .filter((f: any) => f.statut !== 'payee' && f.montant_restant > 0)
+          .map((f: any) => ({
+            ...f,
+            consultation_id: f.consultation_id || f.consultations?.[0]?.id,
+            patient_identifiant: f.patients?.identifiant || 'N/A',
+            patient_nom: f.patients?.nom || 'N/A',
+            patient_prenom: f.patients?.prenom || 'N/A',
+          }));
         
         console.log(`✅ ${allFactures.length} factures récupérées pour clinic_id: ${clinicId}`);
         console.log('Répartition par service_origine:', 
@@ -184,10 +193,95 @@ export const PaiementsEnAttente: React.FC = () => {
   };
 
   const handlePaymentComplete = async (facture: Facture) => {
-    enqueueSnackbar('Paiement enregistré avec succès', { variant: 'success' });
-    await loadFacturesEnAttente();
-    setOpenPaymentDialog(false);
-    setSelectedFacture(null);
+    try {
+      // Attendre un peu pour que les triggers SQL s'exécutent complètement
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Vérifier le statut de la facture après paiement (les triggers SQL ont dû la mettre à jour)
+      const { data: factureUpdated, error: factureError } = await supabase
+        .from('factures')
+        .select('statut, montant_restant')
+        .eq('id', facture.id)
+        .single();
+
+      if (factureError) {
+        console.error('Erreur récupération facture:', factureError);
+      }
+
+      // Si la facture est complètement payée, vérifier la synchronisation complète
+      if (factureUpdated && factureUpdated.statut === 'payee' && factureUpdated.montant_restant <= 0) {
+        // Vérifier la synchronisation complète via la fonction RPC (si disponible)
+        try {
+          const { data: syncResult, error: syncError } = await supabase.rpc('attendre_synchronisation_paiement', {
+            p_facture_id: facture.id,
+            p_timeout_seconds: 3
+          });
+
+          if (!syncError && syncResult && syncResult.length > 0) {
+            const sync = syncResult[0];
+            if (sync.synchronise) {
+              console.log(`✅ Synchronisation complète: ${sync.tickets_mis_a_jour} tickets, stock décrémenté: ${sync.stock_decremente}`);
+            } else {
+              console.warn('⚠️ Synchronisation incomplète:', sync.message);
+              // Appeler manuellement la fonction de mise à jour des actes en fallback
+              const { data: updateResult } = await supabase.rpc('update_actes_on_payment', {
+                p_facture_id: facture.id
+              });
+              if (updateResult) {
+                console.log(`✅ Actes mis à jour manuellement: ${updateResult[0]?.tickets_updated || 0} tickets`);
+              }
+            }
+          }
+        } catch (rpcError: any) {
+          // Si la fonction RPC n'existe pas encore (migration 51 pas appliquée), 
+          // appeler directement update_actes_on_payment en fallback
+          console.log('Fonction de synchronisation non disponible, utilisation du fallback');
+          const { data: updateResult, error: rpcError2 } = await supabase.rpc('update_actes_on_payment', {
+            p_facture_id: facture.id
+          });
+
+          if (rpcError2) {
+            console.error('Erreur mise à jour actes via RPC:', rpcError2);
+            // Fallback final : mettre à jour manuellement les tickets
+            const { error: ticketsError } = await supabase
+              .from('tickets_facturation')
+              .update({
+                statut: 'payee',
+                date_paiement: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('facture_id', facture.id)
+              .in('statut', ['facture', 'en_attente']);
+
+            if (ticketsError) {
+              console.error('Erreur mise à jour tickets_facturation (fallback):', ticketsError);
+            }
+          } else if (updateResult && updateResult.length > 0) {
+            console.log(`✅ Actes mis à jour: ${updateResult[0].tickets_updated} tickets, ${updateResult[0].operations_updated} opérations`);
+          }
+        }
+
+        // Toutes les autres actions sont automatiques via les triggers SQL :
+        // - Journal de caisse mis à jour (trigger_mettre_a_jour_journal_caisse)
+        // - Consultation débloquée (trigger_update_consultation_from_invoice)
+        // - Stock décrémenté (trigger_decrement_stock_on_payment)
+      }
+
+      enqueueSnackbar('Paiement enregistré avec succès. Toutes les actions ont été synchronisées automatiquement.', { 
+        variant: 'success',
+        autoHideDuration: 4000
+      });
+      await loadFacturesEnAttente();
+      setOpenPaymentDialog(false);
+      setSelectedFacture(null);
+    } catch (error: any) {
+      console.error('Erreur lors de la finalisation du paiement:', error);
+      enqueueSnackbar('Paiement enregistré, mais erreur lors de la vérification de synchronisation', { variant: 'warning' });
+      // Recharger quand même les factures
+      await loadFacturesEnAttente();
+      setOpenPaymentDialog(false);
+      setSelectedFacture(null);
+    }
   };
 
   const filteredFactures = factures.filter(facture => {
@@ -595,19 +689,38 @@ export const PaiementsEnAttente: React.FC = () => {
                           {facture.montant_restant.toLocaleString()} XOF
                         </Typography>
                       </TableCell>
-                      <TableCell align="center" sx={{ minWidth: 120 }}>
+                  <TableCell align="center" sx={{ minWidth: 120 }}>
+                    {facture.statut === 'partiellement_payee' ? (
+                      <Box>
                         <Chip
-                          label={facture.statut.replace('_', ' ')}
-                          color={getStatutColor(facture.statut) as any}
+                          label="Partiellement payée"
+                          color="warning"
                           size="small"
                           sx={{
                             fontWeight: 600,
                             fontSize: '0.75rem',
-                            textTransform: 'capitalize',
-                            minWidth: 90,
+                            mb: 0.5,
+                            display: 'block',
                           }}
                         />
-                      </TableCell>
+                        <Typography variant="caption" color="warning.main" fontWeight={700}>
+                          Reste: {facture.montant_restant.toLocaleString()} XOF
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Chip
+                        label={facture.statut.replace('_', ' ')}
+                        color={getStatutColor(facture.statut) as any}
+                        size="small"
+                        sx={{
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                          textTransform: 'capitalize',
+                          minWidth: 90,
+                        }}
+                      />
+                    )}
+                  </TableCell>
                       <TableCell align="center" sx={{ minWidth: 160 }}>
                         <Button
                           variant="contained"

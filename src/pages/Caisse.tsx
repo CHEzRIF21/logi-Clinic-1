@@ -20,11 +20,11 @@ import { GradientText } from '../components/ui/GradientText';
 import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import CreationFacture from '../components/facturation/CreationFacture';
-import GestionPaiements from '../components/facturation/GestionPaiements';
 import JournalCaisse from '../components/facturation/JournalCaisse';
 import TableauBordFacturation from '../components/facturation/TableauBordFacturation';
 import RapportsFinanciers from '../components/facturation/RapportsFinanciers';
 import { PaiementsEnAttente } from '../components/caisse/PaiementsEnAttente';
+import { HistoriquePaiements } from '../components/caisse/HistoriquePaiements';
 import { usePermissions } from '../hooks/usePermissions';
 
 interface TabPanelProps {
@@ -98,13 +98,13 @@ const Caisse: React.FC = () => {
               iconPosition="start"
             />
             <Tab
-              icon={<Payment />}
-              label="Gestion Paiements"
+              icon={<AccountBalanceWallet />}
+              label="Journal de Caisse"
               iconPosition="start"
             />
             <Tab
-              icon={<AccountBalanceWallet />}
-              label="Journal de Caisse"
+              icon={<History />}
+              label="Historique de Paiement"
               iconPosition="start"
             />
             {canAccessFinancialReports() && (
@@ -131,11 +131,11 @@ const Caisse: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
-          <GestionPaiements />
+          <JournalCaisse />
         </TabPanel>
 
         <TabPanel value={activeTab} index={4}>
-          <JournalCaisse />
+          <HistoriquePaiements />
         </TabPanel>
 
         {canAccessFinancialReports() && (

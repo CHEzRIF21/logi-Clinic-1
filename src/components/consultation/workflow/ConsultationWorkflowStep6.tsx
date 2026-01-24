@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Card, CardContent, Typography, Alert } from '@mui/material';
 import { ConstantesSection } from '../ConstantesSection';
 import { ModalExamensCliniques } from '../ModalExamensCliniques';
+import { ConsultationService } from '../../../services/consultationService';
+import { ConsultationConstantes } from '../../../services/consultationApiService';
 
 interface ConsultationWorkflowStep6Props {
   consultationId: string;
@@ -18,6 +20,15 @@ export const ConsultationWorkflowStep6: React.FC<ConsultationWorkflowStep6Props>
   onExamensChange,
   userId,
 }) => {
+  const handleSaveConstantes = async (constantes: Partial<ConsultationConstantes>, syncToPatient: boolean) => {
+    try {
+      await ConsultationService.saveConstantes(consultationId, patientId, constantes, userId, syncToPatient);
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde des constantes:', error);
+      throw error; // Re-throw pour que ConstantesSection puisse gérer l'erreur
+    }
+  };
+
   return (
     <Box>
       <Card sx={{ mb: 2 }}>
@@ -40,7 +51,7 @@ export const ConsultationWorkflowStep6: React.FC<ConsultationWorkflowStep6Props>
         patientId={patientId}
         initialConstantes={null}
         patientConstantes={undefined}
-        onSave={async () => {}}
+        onSave={handleSaveConstantes}
         userId={userId}
       />
 

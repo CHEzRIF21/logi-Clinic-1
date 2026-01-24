@@ -17,23 +17,31 @@
 DO $$
 DECLARE
   -- Informations de la clinique 1
-  v_clinic1_code TEXT := 'CLIN-2026-001';  -- Code unique de la clinique
-  v_clinic1_name TEXT := 'Clinique Santé Plus';  -- Nom de la clinique
-  v_clinic1_address TEXT := '123 Avenue de la Santé, Cotonou';  -- Adresse
-  v_clinic1_phone TEXT := '+229 00000001';  -- Téléphone
-  v_clinic1_email TEXT := 'contact@santeplus.bj';  -- Email de la clinique
+  v_clinic1_code TEXT := 'CLIN-PLENITUDE-001';  -- Code unique de la clinique
+  v_clinic1_name TEXT := 'Clinique Santé PLENITUDE';  -- Nom de la clinique
+  v_clinic1_address TEXT := 'LOKOSSA';  -- Adresse
+  v_clinic1_phone TEXT := '+229 0164436342';  -- Téléphone
+  v_clinic1_email TEXT := 'laplenitude.hc@yahoo.com';  -- Email de la clinique
   
-  -- Informations de l'admin 1
-  v_admin1_email TEXT := 'admin1@santeplus.bj';  -- Email de l'admin (OBLIGATOIRE)
-  v_admin1_nom TEXT := 'DUPONT';  -- Nom de l'admin (OBLIGATOIRE)
-  v_admin1_prenom TEXT := 'Jean';  -- Prénom de l'admin (OBLIGATOIRE)
-  v_admin1_password TEXT := 'Admin123!';  -- Mot de passe temporaire (sera changé à la première connexion)
+  -- Informations de l'admin 1 (premier admin)
+  v_admin1_email TEXT := 'laplenitude.hc@yahoo.com';  -- Email de l'admin (OBLIGATOIRE)
+  v_admin1_nom TEXT := 'BOKO';  -- Nom de l'admin (OBLIGATOIRE)
+  v_admin1_prenom TEXT := 'Chantal';  -- Prénom de l'admin (OBLIGATOIRE)
+  v_admin1_password TEXT := 'Admin1234!';  -- Mot de passe temporaire (sera changé à la première connexion)
   
+  -- Informations de l'admin 2 (deuxième admin pour la même clinique)
+  v_admin2_email TEXT := 'hakpovi95@yahoo.fr';  -- Email de l'admin (OBLIGATOIRE)
+  v_admin2_nom TEXT := 'AKPOVI';  -- Nom de l'admin (OBLIGATOIRE)
+  v_admin2_prenom TEXT := 'Hilaire';  -- Prénom de l'admin (OBLIGATOIRE)
+  v_admin2_password TEXT := 'Admin1234!';  -- Mot de passe temporaire (sera changé à la première connexion)
+
   -- Variables internes
   v_clinic1_id UUID;
   v_admin1_id UUID;
+  v_admin2_id UUID;
   v_super_admin_id UUID;
   v_admin1_password_hash TEXT;
+  v_admin2_password_hash TEXT;
 BEGIN
   -- Récupérer le Super Admin
   SELECT id INTO v_super_admin_id 
@@ -124,26 +132,73 @@ BEGIN
     NOW()
   )
   ON CONFLICT (email) DO UPDATE SET
-    nom = v_admin1_nom,
-    prenom = v_admin1_prenom,
-    clinic_id = v_clinic1_id,
+    nom = EXCLUDED.nom,
+    prenom = EXCLUDED.prenom,
+    clinic_id = EXCLUDED.clinic_id,
     role = 'CLINIC_ADMIN',
     status = 'PENDING',
     actif = true,
-    password_hash = COALESCE(password_hash, v_admin1_password_hash),
+    password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash),
     updated_at = NOW()
   RETURNING id INTO v_admin1_id;
 
   RAISE NOTICE '✅ Admin 1 créé/vérifié: % % (Email: %, ID: %)', 
     v_admin1_prenom, v_admin1_nom, v_admin1_email, v_admin1_id;
 
+  -- ============================================
+  -- CRÉER L'ADMIN 2 (deuxième admin pour la clinique 1)
+  -- ============================================
+  
+  -- Hasher le mot de passe
+  v_admin2_password_hash := encode(digest(v_admin2_password || 'logi_clinic_salt', 'sha256'), 'hex');
+
+  INSERT INTO users (
+    email,
+    nom,
+    prenom,
+    password_hash,
+    role,
+    status,
+    clinic_id,
+    actif,
+    created_by,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    LOWER(TRIM(v_admin2_email)),
+    v_admin2_nom,
+    v_admin2_prenom,
+    v_admin2_password_hash,
+    'CLINIC_ADMIN',
+    'PENDING',  -- Status PENDING pour forcer le changement de mot de passe à la première connexion
+    v_clinic1_id,
+    true,
+    v_super_admin_id,
+    NOW(),
+    NOW()
+  )
+  ON CONFLICT (email) DO UPDATE SET
+    nom = EXCLUDED.nom,
+    prenom = EXCLUDED.prenom,
+    clinic_id = EXCLUDED.clinic_id,
+    role = 'CLINIC_ADMIN',
+    status = 'PENDING',
+    actif = true,
+    password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash),
+    updated_at = NOW()
+  RETURNING id INTO v_admin2_id;
+
+  RAISE NOTICE '✅ Admin 2 créé/vérifié: % % (Email: %, ID: %)', 
+    v_admin2_prenom, v_admin2_nom, v_admin2_email, v_admin2_id;
+
   RAISE NOTICE '';
   RAISE NOTICE '📋 INFORMATIONS DE CONNEXION CLINIQUE 1:';
   RAISE NOTICE '   Code clinique: %', v_clinic1_code;
-  RAISE NOTICE '   Email admin: %', v_admin1_email;
-  RAISE NOTICE '   Mot de passe temporaire: %', v_admin1_password;
-  RAISE NOTICE '   ⚠️ L''admin devra changer son mot de passe à la première connexion';
-  RAISE NOTICE '   ⚠️ L''admin devra être lié à Supabase Auth (voir guide)';
+  RAISE NOTICE '   Admin 1 - Email: % | Mot de passe: %', v_admin1_email, v_admin1_password;
+  RAISE NOTICE '   Admin 2 - Email: % | Mot de passe: %', v_admin2_email, v_admin2_password;
+  RAISE NOTICE '   ⚠️ Les admins devront changer leur mot de passe à la première connexion';
+  RAISE NOTICE '   ⚠️ Les admins devront être liés à Supabase Auth (voir guide)';
   RAISE NOTICE '';
 
 END $$;
@@ -155,17 +210,17 @@ END $$;
 DO $$
 DECLARE
   -- Informations de la clinique 2
-  v_clinic2_code TEXT := 'CLIN-2026-002';  -- Code unique de la clinique
-  v_clinic2_name TEXT := 'Centre Médical Excellence';  -- Nom de la clinique
-  v_clinic2_address TEXT := '456 Boulevard de la Santé, Porto-Novo';  -- Adresse
-  v_clinic2_phone TEXT := '+229 00000002';  -- Téléphone
-  v_clinic2_email TEXT := 'contact@excellence.bj';  -- Email de la clinique
+  v_clinic2_code TEXT := 'MAMELLES-001';  -- Code unique de la clinique
+  v_clinic2_name TEXT := 'Clinique Santé PLENITUDE';  -- Nom de la clinique
+  v_clinic2_address TEXT := 'Save';  -- Adresse
+  v_clinic2_phone TEXT := '+229 0166997940';  -- Téléphone
+  v_clinic2_email TEXT := 'dieudange@gmail.com';  -- Email de la clinique
   
   -- Informations de l'admin 2
-  v_admin2_email TEXT := 'admin2@excellence.bj';  -- Email de l'admin (OBLIGATOIRE)
-  v_admin2_nom TEXT := 'MARTIN';  -- Nom de l'admin (OBLIGATOIRE)
-  v_admin2_prenom TEXT := 'Marie';  -- Prénom de l'admin (OBLIGATOIRE)
-  v_admin2_password TEXT := 'Admin456!';  -- Mot de passe temporaire (sera changé à la première connexion)
+  v_admin2_email TEXT := 'dieudange@gmail.com';  -- Email de l'admin (OBLIGATOIRE)
+  v_admin2_nom TEXT := 'MINHOU';  -- Nom de l'admin (OBLIGATOIRE)
+  v_admin2_prenom TEXT := 'Ange Kevin Dieudonne';  -- Prénom de l'admin (OBLIGATOIRE)
+  v_admin2_password TEXT := 'Admin1234!';  -- Mot de passe temporaire (sera changé à la première connexion)
   
   -- Variables internes
   v_clinic2_id UUID;
@@ -260,13 +315,13 @@ BEGIN
     NOW()
   )
   ON CONFLICT (email) DO UPDATE SET
-    nom = v_admin2_nom,
-    prenom = v_admin2_prenom,
-    clinic_id = v_clinic2_id,
+    nom = EXCLUDED.nom,
+    prenom = EXCLUDED.prenom,
+    clinic_id = EXCLUDED.clinic_id,
     role = 'CLINIC_ADMIN',
     status = 'PENDING',
     actif = true,
-    password_hash = COALESCE(password_hash, v_admin2_password_hash),
+    password_hash = COALESCE(users.password_hash, EXCLUDED.password_hash),
     updated_at = NOW()
   RETURNING id INTO v_admin2_id;
 
@@ -296,8 +351,8 @@ DECLARE
   v_admin2_count INT;
 BEGIN
   -- Vérifier les cliniques
-  SELECT id INTO v_clinic1_id FROM clinics WHERE code = 'CLIN-2026-001';
-  SELECT id INTO v_clinic2_id FROM clinics WHERE code = 'CLIN-2026-002';
+  SELECT id INTO v_clinic1_id FROM clinics WHERE code = 'CLIN-PLENITUDE-001';
+  SELECT id INTO v_clinic2_id FROM clinics WHERE code = 'MAMELLES-001';
 
   -- Vérifier les admins
   SELECT COUNT(*) INTO v_admin1_count 
@@ -318,10 +373,10 @@ BEGIN
   RAISE NOTICE '========================================';
   RAISE NOTICE '';
   RAISE NOTICE '📊 État final:';
-  RAISE NOTICE '   Clinique 1 (CLIN-2026-001): %', 
+  RAISE NOTICE '   Clinique 1 (CLIN-PLENITUDE-001): %', 
     CASE WHEN v_clinic1_id IS NOT NULL THEN '✅ Créée' ELSE '❌ Non trouvée' END;
   RAISE NOTICE '   Admin(s) clinique 1: %', v_admin1_count;
-  RAISE NOTICE '   Clinique 2 (CLIN-2026-002): %', 
+  RAISE NOTICE '   Clinique 2: %', 
     CASE WHEN v_clinic2_id IS NOT NULL THEN '✅ Créée' ELSE '❌ Non trouvée' END;
   RAISE NOTICE '   Admin(s) clinique 2: %', v_admin2_count;
   RAISE NOTICE '';

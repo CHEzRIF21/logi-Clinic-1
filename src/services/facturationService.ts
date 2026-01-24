@@ -545,7 +545,33 @@ export class FacturationService {
     
     if (error) throw error;
     
-    // Le trigger SQL mettra à jour automatiquement le statut de la facture
+    // Attendre que les triggers SQL s'exécutent et synchronisent tout
+    // Les triggers SQL vont automatiquement :
+    // 1. Mettre à jour le statut de la facture
+    // 2. Mettre à jour le journal de caisse
+    // 3. Mettre à jour le statut de la consultation
+    // 4. Mettre à jour les tickets_facturation
+    // 5. Décrémenter le stock (si prescription liée)
+    
+    // Attendre un peu pour que les triggers s'exécutent
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Vérifier la synchronisation (optionnel, pour debug)
+    try {
+      const { data: syncData } = await supabase.rpc('attendre_synchronisation_paiement', {
+        p_facture_id: paiement.facture_id,
+        p_timeout_seconds: 3
+      });
+      
+      if (syncData && syncData.length > 0 && !syncData[0].synchronise) {
+        console.warn('Synchronisation incomplète après paiement:', syncData[0]);
+      }
+    } catch (syncError) {
+      // Si la fonction n'existe pas encore, ce n'est pas grave
+      // Les triggers fonctionneront quand même
+      console.log('Fonction de synchronisation non disponible (normal si migration 51 pas encore appliquée)');
+    }
+    
     return data;
   }
   
@@ -861,6 +887,114 @@ export class FacturationService {
     const facture = await this.getFactureById(factureId);
     // Logique d'impression côté client
     window.print();
+  }
+
+  // ============================================
+  // 11. HISTORIQUE DE PAIEMENTS
+  // ============================================
+
+  static async getFacturesPayees(filters?: {
+    dateDebut?: string;
+    dateFin?: string;
+    patientId?: string;
+    patientNom?: string;
+    montantMin?: number;
+    montantMax?: number;
+    modePaiement?: string;
+    caissierId?: string;
+    numeroFacture?: string;
+    clinicId?: string;
+  }): Promise<Facture[]> {
+    let query = supabase
+      .from('factures')
+      .select('*')
+      .eq('statut', 'payee')
+      .lte('montant_restant', 0)
+      .order('date_facture', { ascending: false });
+
+    if (filters?.dateDebut) {
+      query = query.gte('date_facture', filters.dateDebut);
+    }
+    if (filters?.dateFin) {
+      query = query.lte('date_facture', filters.dateFin);
+    }
+    if (filters?.patientId) {
+      query = query.eq('patient_id', filters.patientId);
+    }
+    if (filters?.numeroFacture) {
+      query = query.ilike('numero_facture', `%${filters.numeroFacture}%`);
+    }
+    if (filters?.montantMin) {
+      query = query.gte('montant_total', filters.montantMin);
+    }
+    if (filters?.montantMax) {
+      query = query.lte('montant_total', filters.montantMax);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  }
+
+  static async exporterHistoriqueCSV(filters?: {
+    dateDebut?: string;
+    dateFin?: string;
+    patientId?: string;
+    patientNom?: string;
+    montantMin?: number;
+    montantMax?: number;
+    modePaiement?: string;
+    caissierId?: string;
+    numeroFacture?: string;
+  }): Promise<string> {
+    const factures = await this.getFacturesPayees(filters);
+    
+    // En-tête CSV
+    const headers = [
+      'Numéro Facture',
+      'Date Facture',
+      'Patient ID',
+      'Montant Total',
+      'Montant Payé',
+      'Statut',
+      'Mode de Paiement',
+      'Date Paiement',
+    ];
+    
+    const rows = factures.map(facture => {
+      // Récupérer le dernier paiement
+      const dernierPaiement = facture.paiements?.[0];
+      return [
+        facture.numero_facture,
+        new Date(facture.date_facture).toLocaleDateString('fr-FR'),
+        facture.patient_id,
+        facture.montant_total.toString(),
+        facture.montant_paye.toString(),
+        facture.statut,
+        dernierPaiement?.mode_paiement || 'N/A',
+        dernierPaiement ? new Date(dernierPaiement.date_paiement).toLocaleDateString('fr-FR') : 'N/A',
+      ];
+    });
+    
+    // Convertir en CSV
+    const csvContent = [
+      headers.join(';'),
+      ...rows.map(row => row.join(';')),
+    ].join('\n');
+    
+    return csvContent;
+  }
+
+  static async imprimerReçuPaiement(factureId: string): Promise<void> {
+    const facture = await this.getFactureById(factureId);
+    const paiements = await this.getPaiementsByFacture(factureId);
+    
+    if (paiements.length === 0) {
+      throw new Error('Aucun paiement trouvé pour cette facture');
+    }
+    
+    // La logique d'impression est gérée dans le composant HistoriquePaiements
+    // Cette méthode peut être étendue si nécessaire
   }
 
   // ============================================
