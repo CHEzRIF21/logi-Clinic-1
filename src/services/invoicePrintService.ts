@@ -171,7 +171,7 @@ export class InvoicePrintService {
             </div>
             <div class="info-item">
               <span class="info-label">Type:</span>
-              <span class="info-value">${patient?.type_patient === 'externe' ? 'Externe' : 'Interne'}</span>
+              <span class="info-value">Interne</span>
             </div>
           </div>
         </div>
