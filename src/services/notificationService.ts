@@ -573,8 +573,8 @@ export class NotificationService {
         let query = supabase
           .from('rendez_vous')
           .select('*', { count: 'exact', head: true })
-          .eq('statut', 'planifie')
-          .gte('date_heure', today.toISOString());
+          .eq('statut', 'programmé')
+          .gte('date_debut', today.toISOString());
 
         // Filtrer par clinic_id si disponible
         if (clinicId) {
@@ -588,8 +588,8 @@ export class NotificationService {
           const { count: rendezVousAttenteRetry } = await supabase
             .from('rendez_vous')
             .select('*', { count: 'exact', head: true })
-            .eq('statut', 'planifie')
-            .gte('date_heure', today.toISOString());
+            .eq('statut', 'programmé')
+            .gte('date_debut', today.toISOString());
 
           if (rendezVousAttenteRetry && rendezVousAttenteRetry > 0) {
             counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttenteRetry;

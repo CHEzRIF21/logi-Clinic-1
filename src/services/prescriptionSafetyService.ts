@@ -64,16 +64,25 @@ export class PrescriptionSafetyService {
   }
 
   static mapMedicamentRow(row: SupabaseMedicamentRow): MedicamentSafetyInfo {
+    // Filtrer uniquement les lots actifs avec quantité disponible > 0
+    const lotsActifs = row.lots?.filter(
+      (lot) => lot.quantite_disponible > 0
+    ) || [];
+    
     const stockDetail =
-      row.lots?.filter((lot) => lot.magasin === 'detail').reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0) ||
-      0;
+      lotsActifs
+        .filter((lot) => lot.magasin === 'detail')
+        .reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0);
+    
     const stockGros =
-      row.lots?.filter((lot) => lot.magasin === 'gros').reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0) ||
-      0;
-    const molecules =
-      row.medicament_molecules?.map((mol) => mol.molecule).filter((mol): mol is string => Boolean(mol)) || [];
+      lotsActifs
+        .filter((lot) => lot.magasin === 'gros')
+        .reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0);
+    
+    // La table medicament_molecules n'existe pas, donc on retourne un tableau vide
+    const molecules: string[] = [];
 
-    return {
+    const result = {
       id: row.id,
       code: row.code,
       nom: row.nom,
@@ -88,6 +97,8 @@ export class PrescriptionSafetyService {
       stock_total: stockDetail + stockGros,
       molecules,
     };
+    
+    return result;
   }
 
   static async searchMedicaments(query: string): Promise<MedicamentSafetyInfo[]> {
@@ -95,7 +106,10 @@ export class PrescriptionSafetyService {
       return [];
     }
 
-    const { data, error } = await supabase
+    // Récupérer tous les médicaments correspondant à la recherche
+    // La table medicament_molecules n'existe pas, donc on ne l'inclut pas dans la requête
+    // On récupère les lots séparément pour pouvoir filtrer par statut='actif' et quantite_disponible > 0
+    const { data: medicamentsData, error: medicamentsError } = await supabase
       .from('medicaments')
       .select(
         `
@@ -107,21 +121,90 @@ export class PrescriptionSafetyService {
         categorie,
         prescription_requise,
         seuil_alerte,
-        seuil_rupture,
-        medicament_molecules ( molecule ),
-        lots ( quantite_disponible, magasin )
+        seuil_rupture
       `
       )
       .or(`nom.ilike.%${query}%,code.ilike.%${query}%`)
       .order('nom', { ascending: true })
       .limit(20);
 
+    if (medicamentsError) {
+      throw medicamentsError;
+    }
+
+    // Récupérer les lots séparément pour chaque médicament avec filtres appropriés
+    let data = medicamentsData || [];
+    let error = null;
+    
+    if (data.length > 0) {
+      const medicamentIds = data.map(m => m.id);
+      const { data: lotsData, error: lotsError } = await supabase
+        .from('lots')
+        .select('medicament_id, quantite_disponible, magasin, statut')
+        .in('medicament_id', medicamentIds)
+        .eq('statut', 'actif')
+        .gt('quantite_disponible', 0);
+      
+      if (lotsError) {
+        error = lotsError;
+      } else {
+        // Associer les lots aux médicaments
+        data = data.map(med => {
+          const medLots = (lotsData || []).filter(lot => lot.medicament_id === med.id).map(lot => ({
+            quantite_disponible: lot.quantite_disponible,
+            magasin: lot.magasin,
+            statut: lot.statut
+          }));
+          
+          return {
+            ...med,
+            lots: medLots
+          };
+        });
+      }
+    }
+
     if (error) {
       console.error('Erreur lors de la recherche de médicaments:', error);
       throw error;
     }
 
-    return (data || []).map((row) => this.mapMedicamentRow(row as SupabaseMedicamentRow));
+    // Filtrer et mapper les résultats (le filtrage des lots actifs se fait dans mapMedicamentRow)
+    const mapped = (data || []).map((row) => this.mapMedicamentRow(row as SupabaseMedicamentRow));
+    
+    return mapped;
+  }
+
+  /**
+   * Récupère les stocks en temps réel pour un médicament spécifique
+   */
+  static async getMedicamentStock(medicamentId: string): Promise<{ stock_detail: number; stock_gros: number; stock_total: number }> {
+    const { data, error } = await supabase
+      .from('lots')
+      .select('quantite_disponible, magasin, statut')
+      .eq('medicament_id', medicamentId)
+      .eq('statut', 'actif')
+      .gt('quantite_disponible', 0);
+
+    if (error) {
+      console.error('Erreur lors de la récupération du stock:', error);
+      return { stock_detail: 0, stock_gros: 0, stock_total: 0 };
+    }
+
+    const lots = data || [];
+    const stockDetail = lots
+      .filter((lot) => lot.magasin === 'detail')
+      .reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0);
+    
+    const stockGros = lots
+      .filter((lot) => lot.magasin === 'gros')
+      .reduce((sum, lot) => sum + (lot.quantite_disponible || 0), 0);
+
+    return {
+      stock_detail: stockDetail,
+      stock_gros: stockGros,
+      stock_total: stockDetail + stockGros,
+    };
   }
 
   static getStockAlert(medicament: MedicamentSafetyInfo): PrescriptionSafetyAlert | null {

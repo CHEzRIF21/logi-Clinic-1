@@ -110,7 +110,8 @@ export const ConsultationIntegrationService = {
       messages.push('Fiche verrouillée');
       logger.info('Consultation clôturée avec succès', { traceId, consultationId });
 
-      // 3. Mettre à jour les prescriptions liées
+      // 3. Mettre à jour les prescriptions liées (validation uniquement, pas de décrémentation du stock)
+      // Le stock sera décrémenté lors du paiement de la facture liée à la prescription
       try {
         const { data: prescriptions } = await supabase
           .from('prescriptions')
@@ -120,6 +121,7 @@ export const ConsultationIntegrationService = {
 
         if (prescriptions && prescriptions.length > 0) {
           for (const presc of prescriptions) {
+            // Valider la prescription (statut VALIDE)
             await tx.updateWithRollback('prescriptions', presc.id, {
               statut: 'VALIDE',
               validated_at: new Date().toISOString(),

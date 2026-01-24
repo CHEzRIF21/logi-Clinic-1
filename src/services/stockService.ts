@@ -865,7 +865,7 @@ export class StockService {
 
         // Créer la ligne de dispensation
         const { error: ligneError } = await supabase
-          .from('dispensations_lignes')
+          .from('dispensation_lignes')
           .insert({
             dispensation_id: dispensation.id,
             medicament_id: ligne.medicament_id,

@@ -82,7 +82,7 @@ export const useDispensations = (options: UseDispensationsOptions = {}) => {
           utilisateur_id,
           statut,
           observations,
-          dispensations_lignes (
+          dispensation_lignes (
             id,
             medicament_id,
             quantite,
@@ -114,7 +114,7 @@ export const useDispensations = (options: UseDispensationsOptions = {}) => {
       
       if (dispensationsData) {
         dispensationsData.forEach(disp => {
-          const lignes = disp.dispensations_lignes || [];
+          const lignes = disp.dispensation_lignes || [];
           lignes.forEach((ligne: any) => {
             items.push({
               id: `${disp.id}-${ligne.id}`,
