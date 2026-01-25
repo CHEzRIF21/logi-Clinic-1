@@ -42,6 +42,7 @@ import {
   CheckCircleOutline,
   Close,
   Search,
+  Payment,
 } from '@mui/icons-material';
 import {
   DispensationService,
@@ -54,6 +55,7 @@ import { MedicamentService } from '../../services/medicamentService';
 import { AssuranceService, Assurance } from '../../services/assuranceService';
 import { supabase } from '../../services/supabase';
 import { useMedicaments } from '../../hooks/useMedicaments';
+import { useNavigate } from 'react-router-dom';
 
 interface NouvelleDispensationWizardProps {
   open: boolean;
@@ -74,6 +76,7 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   patientIdPreRempli,
   consultationIdPreRempli,
 }) => {
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +194,29 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
       chargerPrescriptionsActives(selectedPatient.id);
     }
   }, [selectedPatient?.id, open]);
+
+  // Rafraîchir automatiquement si paiement/ordonnance change (temps réel)
+  useEffect(() => {
+    if (!open || !selectedPatient?.id) return;
+
+    const channel = supabase
+      .channel('dispensation-prescriptions-payment-gate')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'factures' },
+        () => chargerPrescriptionsActives(selectedPatient.id)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'prescriptions' },
+        () => chargerPrescriptionsActives(selectedPatient.id)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, selectedPatient?.id]);
 
   // Si les assurances se chargent après le patient, tenter l'auto-mapping couverture_sante
   useEffect(() => {
@@ -945,14 +971,44 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
                           <Typography variant="body2" color="text.secondary">
                             {presc.lignes.length} médicament(s)
                           </Typography>
+                          {presc.paiement_requis && (
+                            <Box sx={{ mt: 1 }}>
+                              <Chip
+                                size="small"
+                                color={presc.peut_delivrer ? 'success' : 'warning'}
+                                label={
+                                  presc.peut_delivrer
+                                    ? 'Paiement OK'
+                                    : `Paiement requis${presc.montant_restant != null ? ` (reste ${Number(presc.montant_restant).toLocaleString('fr-FR')} XOF)` : ''}`
+                                }
+                              />
+                            </Box>
+                          )}
                         </Box>
-                        <Button
-                          variant="outlined"
-                          startIcon={<Add />}
-                          onClick={() => ajouterLigneDepuisPrescription(presc)}
-                        >
-                          Ajouter
-                        </Button>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {presc.paiement_requis && !presc.peut_delivrer ? (
+                            <Button
+                              variant="outlined"
+                              color="warning"
+                              startIcon={<Payment />}
+                              onClick={() =>
+                                navigate('/caisse', {
+                                  state: { factureId: presc.facture_id, patientId: selectedPatient?.id },
+                                })
+                              }
+                            >
+                              Aller à la Caisse
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="outlined"
+                            startIcon={<Add />}
+                            onClick={() => ajouterLigneDepuisPrescription(presc)}
+                            disabled={presc.paiement_requis && !presc.peut_delivrer}
+                          >
+                            Ajouter
+                          </Button>
+                        </Box>
                       </Box>
                     </CardContent>
                   </Card>

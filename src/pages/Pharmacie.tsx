@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import {
   Container,
   Typography,
@@ -66,6 +66,8 @@ import { ToolbarBits } from '../components/ui/ToolbarBits';
 import { GlassCard } from '../components/ui/GlassCard';
 import { useStockData } from '../hooks/useStockData';
 import { useDispensations } from '../hooks/useDispensations';
+import { supabase } from '../services/supabase';
+import { getMyClinicId } from '../services/clinicService';
 
 // Types pour les données
 interface MedicamentDetail {
@@ -130,6 +132,10 @@ const Pharmacie: React.FC = () => {
   const goToStockMedicaments = useCallback(() => navigate('/stock-medicaments'), [navigate]);
   const goToConsultations = useCallback(() => navigate('/consultations'), [navigate]);
   const goToCaisse = useCallback(() => navigate('/caisse'), [navigate]);
+  const goToCaisseFacture = useCallback(
+    (factureId?: string) => navigate('/caisse', { state: { factureId } }),
+    [navigate]
+  );
 
   // Fonction utilitaire pour les notifications
   const showNotification = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -141,6 +147,93 @@ const Pharmacie: React.FC = () => {
   const [openRapport, setOpenRapport] = useState(false);
   const [selectedMedicament, setSelectedMedicament] = useState<MedicamentDetail | null>(null);
   const [selectedDispensation, setSelectedDispensation] = useState<any>(null);
+  const [prefillPatientId, setPrefillPatientId] = useState<string | undefined>(undefined);
+  const [prefillConsultationId, setPrefillConsultationId] = useState<string | undefined>(undefined);
+
+  const [ordonnancesEnInstance, setOrdonnancesEnInstance] = useState<any[]>([]);
+  const [ordonnancesLoading, setOrdonnancesLoading] = useState(false);
+
+  const loadOrdonnancesEnInstance = useCallback(async () => {
+    try {
+      setOrdonnancesLoading(true);
+      const clinicId = await getMyClinicId();
+
+      let query = supabase
+        .from('prescriptions')
+        .select(
+          `
+          id,
+          numero_prescription,
+          date_prescription,
+          consultation_id,
+          patient_id,
+          statut,
+          facture_id,
+          patients ( id, identifiant, nom, prenom ),
+          factures ( id, numero_facture, statut, montant_restant )
+        `
+        )
+        .in('statut', ['PRESCRIT', 'PARTIELLEMENT_DISPENSE'])
+        .order('date_prescription', { ascending: false })
+        .limit(20);
+
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const rows = (data || []).map((p: any) => {
+        const facture = Array.isArray(p.factures) ? p.factures[0] : p.factures;
+        const patient = Array.isArray(p.patients) ? p.patients[0] : p.patients;
+        const restant = Number(facture?.montant_restant ?? 0);
+        const payee = facture ? facture?.statut === 'payee' && restant <= 0 : true;
+        const paiementRequis = Boolean(p.facture_id);
+        return {
+          id: p.id,
+          numero_prescription: p.numero_prescription,
+          date_prescription: p.date_prescription,
+          consultation_id: p.consultation_id,
+          patient_id: p.patient_id,
+          statut: p.statut,
+          facture_id: p.facture_id,
+          facture,
+          patient,
+          paiementRequis,
+          peutDelivrer: payee,
+          montantRestant: paiementRequis ? restant : 0,
+        };
+      });
+
+      // "En instance" = paiement requis et non payé
+      setOrdonnancesEnInstance(rows.filter((r) => r.paiementRequis && !r.peutDelivrer));
+    } catch (e) {
+      console.error('Erreur chargement ordonnances en instance:', e);
+      setOrdonnancesEnInstance([]);
+    } finally {
+      setOrdonnancesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOrdonnancesEnInstance();
+    const channel = supabase
+      .channel('pharmacie-ordonnances-instance')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'prescriptions' },
+        () => loadOrdonnancesEnInstance()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'factures' },
+        () => loadOrdonnancesEnInstance()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadOrdonnancesEnInstance]);
 
   // Conversion des données du hook en format local
   const medicaments = useMemo(() => {
@@ -402,7 +495,10 @@ const Pharmacie: React.FC = () => {
                   <Button
                     variant="contained"
                     startIcon={<Add />}
-                    onClick={() => setOpenDispensation(true)}
+                    onClick={(e) => {
+                      (e.currentTarget as HTMLButtonElement).blur();
+                      setOpenDispensation(true);
+                    }}
                     size="medium"
                   >
                     Nouvelle Dispensation
@@ -424,6 +520,123 @@ const Pharmacie: React.FC = () => {
                     Générer Rapport
                   </Button>
                 </Box>
+              </CardContent>
+            </Card>
+
+            {/* Ordonnances en instance (paiement requis) */}
+            <Card sx={{ mb: 4 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">
+                    Ordonnances en instance (paiement requis)
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    startIcon={<Refresh />}
+                    onClick={loadOrdonnancesEnInstance}
+                    disabled={ordonnancesLoading}
+                    size="small"
+                  >
+                    Actualiser
+                  </Button>
+                </Box>
+
+                {ordonnancesLoading ? (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Patient</TableCell>
+                          <TableCell>Prescription</TableCell>
+                          <TableCell>Facture</TableCell>
+                          <TableCell align="right">Reste à payer</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {[...Array(3)].map((_, i) => (
+                          <SkeletonTableRow key={i} />
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                ) : ordonnancesEnInstance.length === 0 ? (
+                  <Alert severity="info">
+                    Aucune ordonnance en attente de paiement.
+                  </Alert>
+                ) : (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Patient</TableCell>
+                          <TableCell>Prescription</TableCell>
+                          <TableCell>Facture</TableCell>
+                          <TableCell align="right">Reste à payer</TableCell>
+                          <TableCell>Actions</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {ordonnancesEnInstance.map((o) => (
+                          <TableRow key={o.id}>
+                            <TableCell>
+                              {o.date_prescription ? new Date(o.date_prescription).toLocaleDateString('fr-FR') : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Box>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {(o.patient?.prenom || '')} {(o.patient?.nom || '')}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  ID: {o.patient?.identifiant || o.patient_id}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {o.numero_prescription || o.id}
+                              </Typography>
+                              <Chip size="small" color="warning" label="Paiement requis" />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2">
+                                {o.facture?.numero_facture || o.facture_id || '-'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" fontWeight="bold" color="warning.main">
+                                {Number(o.montantRestant || 0).toLocaleString('fr-FR')} XOF
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="success"
+                                  startIcon={<AttachMoney />}
+                                  onClick={() => goToCaisseFacture(o.facture_id)}
+                                >
+                                  Caisse
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="contained"
+                                  startIcon={<MedicalServices />}
+                                  disabled
+                                >
+                                  Délivrer
+                                </Button>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
               </CardContent>
             </Card>
 
@@ -480,7 +693,10 @@ const Pharmacie: React.FC = () => {
                     <Button
                       variant="outlined"
                       startIcon={<Add />}
-                      onClick={() => setOpenDispensation(true)}
+                      onClick={(e) => {
+                        (e.currentTarget as HTMLButtonElement).blur();
+                        setOpenDispensation(true);
+                      }}
                     >
                       Nouvelle Dispensation
                     </Button>
@@ -613,7 +829,10 @@ const Pharmacie: React.FC = () => {
                                     <Tooltip title="Dispenser">
                                       <IconButton
                                         size="small"
-                                        onClick={() => setOpenDispensation(true)}
+                                        onClick={(e) => {
+                                          (e.currentTarget as HTMLButtonElement).blur();
+                                          setOpenDispensation(true);
+                                        }}
                                       >
                                         <MedicalServices />
                                       </IconButton>
@@ -658,7 +877,10 @@ const Pharmacie: React.FC = () => {
                     <Button
                       variant="contained"
                       startIcon={<Add />}
-                      onClick={() => setOpenDispensation(true)}
+                      onClick={(e) => {
+                        (e.currentTarget as HTMLButtonElement).blur();
+                        setOpenDispensation(true);
+                      }}
                     >
                       Nouvelle Dispensation
                     </Button>
@@ -952,10 +1174,16 @@ const Pharmacie: React.FC = () => {
         {/* Nouvelle Dispensation Wizard */}
         <NouvelleDispensationWizard
           open={openDispensation}
-          onClose={() => setOpenDispensation(false)}
+          onClose={() => {
+            setOpenDispensation(false);
+            setPrefillPatientId(undefined);
+            setPrefillConsultationId(undefined);
+          }}
           onSuccess={handleDispensationSuccess}
           utilisateurId="current-user-id"
           utilisateurNom="Pharmacien/Infirmier"
+          patientIdPreRempli={prefillPatientId}
+          consultationIdPreRempli={prefillConsultationId}
         />
 
         {/* Dialog Détails Médicament */}

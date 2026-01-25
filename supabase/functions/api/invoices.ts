@@ -5,6 +5,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 export default async function handler(req: Request, path: string): Promise<Response> {
   const method = req.method;
   const pathParts = path.split('/').filter(p => p);
+  const clinicId = req.headers.get('x-clinic-id');
 
   try {
     // GET /api/invoices
@@ -13,11 +14,17 @@ export default async function handler(req: Request, path: string): Promise<Respo
       const page = parseInt(url.searchParams.get('page') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '50');
 
-      const { data, error, count } = await supabase
-        .from('invoices')
+      let query = supabase
+        .from('factures')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range((page - 1) * limit, page * limit - 1);
+
+      if (clinicId) {
+        query = query.eq('clinic_id', clinicId);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) {
         return new Response(
@@ -35,8 +42,12 @@ export default async function handler(req: Request, path: string): Promise<Respo
     // POST /api/invoices
     if (method === 'POST' && pathParts.length === 1) {
       const body = await req.json();
+      if (clinicId) {
+        body.clinic_id = clinicId;
+      }
+
       const { data, error } = await supabase
-        .from('invoices')
+        .from('factures')
         .insert(body)
         .select()
         .single();

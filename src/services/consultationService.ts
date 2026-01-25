@@ -499,6 +499,148 @@ export class ConsultationService {
 
     if (linesError) throw linesError;
 
+    // 3. Créer une facture "pharmacie" (en attente) liée à cette ordonnance,
+    // afin que la délivrance soit possible uniquement après paiement à la Caisse.
+    try {
+      const uniqueMedicamentIds = Array.from(
+        new Set(
+          (lines || [])
+            .map((l: any) => l?.medicament_id)
+            .filter((id: any): id is string => Boolean(id))
+        )
+      );
+
+      const medicamentsMap = new Map<
+        string,
+        { id: string; code?: string | null; nom?: string | null; prix_unitaire_detail?: number | null; prix_unitaire?: number | null }
+      >();
+
+      if (uniqueMedicamentIds.length > 0) {
+        const { data: medsData, error: medsError } = await supabase
+          .from('medicaments')
+          .select('id, code, nom, prix_unitaire_detail, prix_unitaire')
+          .in('id', uniqueMedicamentIds);
+
+        if (medsError) throw medsError;
+        (medsData || []).forEach((m: any) => medicamentsMap.set(m.id, m));
+      }
+
+      const invoiceLines = (lines || []).map((l: any, idx: number) => {
+        const qty = Math.max(1, Number(l?.quantite_totale || 1));
+        const med = l?.medicament_id ? medicamentsMap.get(l.medicament_id) : undefined;
+        const unitPrice = Number(med?.prix_unitaire_detail ?? med?.prix_unitaire ?? 0);
+        const libelle = String(l?.nom_medicament || med?.nom || 'Médicament');
+        const codeService = String(med?.code || `MED-${idx + 1}`);
+        const montantLigne = Math.max(0, unitPrice * qty);
+
+        return {
+          code_service: codeService,
+          libelle,
+          quantite: qty,
+          prix_unitaire: unitPrice,
+          remise_ligne: 0,
+          montant_ligne: montantLigne,
+          ordre: idx + 1,
+        };
+      });
+
+      const montantTotal = invoiceLines.reduce((sum, l) => sum + (Number(l.montant_ligne) || 0), 0);
+      const montantRestant = montantTotal > 0 ? montantTotal : 0;
+      const statutFacture = montantTotal > 0 ? 'en_attente' : 'payee';
+
+      // Générer un numéro de facture (fallback) : FAC-YYYY-000001
+      const annee = new Date().getFullYear();
+      let numeroSeq = 1;
+      const { data: lastFacture, error: lastFactureError } = await supabase
+        .from('factures')
+        .select('numero_facture')
+        .like('numero_facture', `FAC-${annee}-%`)
+        .order('numero_facture', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!lastFactureError && lastFacture?.numero_facture) {
+        const match = String(lastFacture.numero_facture).match(/\d+$/);
+        if (match) numeroSeq = parseInt(match[0], 10) + 1;
+      }
+      const numeroFacture = `FAC-${annee}-${String(numeroSeq).padStart(6, '0')}`;
+
+      const { data: facture, error: factureError } = await supabase
+        .from('factures')
+        .insert({
+          numero_facture: numeroFacture,
+          patient_id: patientId,
+          clinic_id: clinicId,
+          // IMPORTANT: on ne lie pas à consultation_id pour éviter de modifier le statut_paiement de la consultation
+          consultation_id: null,
+          montant_ht: montantTotal,
+          montant_tva: 0,
+          montant_remise: 0,
+          montant_total: montantTotal,
+          montant_paye: montantTotal > 0 ? 0 : montantTotal,
+          montant_restant: montantRestant,
+          statut: statutFacture,
+          type_facture: 'normale',
+          type_facture_detail: 'complementaire',
+          bloque_consultation: false,
+          service_origine: 'pharmacie',
+          reference_externe: prescription.id,
+          notes: `Ordonnance médicamenteuse (Prescription ${prescription.numero_prescription || prescription.id})`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (factureError) throw factureError;
+
+      if (invoiceLines.length > 0) {
+        const { error: lignesFactureError } = await supabase.from('lignes_facture').insert(
+          invoiceLines.map((l) => ({
+            facture_id: facture.id,
+            ...l,
+          }))
+        );
+        if (lignesFactureError) throw lignesFactureError;
+      }
+
+      // Créer un ticket de facturation lié à cette facture (acte caisse)
+      const { error: ticketError } = await supabase.from('tickets_facturation').insert({
+        patient_id: patientId,
+        clinic_id: clinicId,
+        service_origine: 'pharmacie',
+        reference_origine: prescription.id,
+        type_acte: 'ordonnance_medicaments',
+        montant: montantTotal,
+        statut: 'facture',
+        facture_id: facture.id,
+        date_creation: new Date().toISOString(),
+        date_facturation: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (ticketError) throw ticketError;
+
+      // Lier la prescription à la facture pour le "payment gate" côté pharmacie
+      const { error: linkError } = await supabase
+        .from('prescriptions')
+        .update({ facture_id: facture.id, updated_at: new Date().toISOString() })
+        .eq('id', prescription.id);
+      if (linkError) throw linkError;
+    } catch (billingError: any) {
+      console.error('Erreur lors de la création de la facture pharmacie pour la prescription:', billingError);
+      // Pour garantir le workflow "paiement requis avant délivrance", on annule la création de la prescription
+      // si la facturation échoue (évite les prescriptions non facturées).
+      try {
+        await supabase.from('prescription_lines').delete().eq('prescription_id', prescription.id);
+        await supabase.from('prescriptions').delete().eq('id', prescription.id);
+      } catch (rollbackError) {
+        console.error('Rollback impossible après échec facturation (prescription/lines):', rollbackError);
+      }
+
+      const msg = billingError?.message ? String(billingError.message) : 'Erreur inconnue';
+      throw new Error(`Erreur facturation ordonnance: ${msg}`);
+    }
+
     return prescription;
   }
 }

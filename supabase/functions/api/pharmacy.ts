@@ -5,14 +5,21 @@ import { corsHeaders } from '../_shared/cors.ts';
 export default async function handler(req: Request, path: string): Promise<Response> {
   const method = req.method;
   const pathParts = path.split('/').filter(p => p);
+  const clinicId = req.headers.get('x-clinic-id');
 
   try {
     // GET /api/pharmacy/products
     if (method === 'GET' && pathParts[1] === 'products') {
-      const { data, error } = await supabase
-        .from('products')
+      let query = supabase
+        .from('medicaments')
         .select('*')
         .order('nom', { ascending: true });
+
+      if (clinicId) {
+        query = query.eq('clinic_id', clinicId);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         return new Response(

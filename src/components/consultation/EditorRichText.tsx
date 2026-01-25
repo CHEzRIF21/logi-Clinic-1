@@ -222,7 +222,6 @@ export const EditorRichText: React.FC<EditorRichTextProps> = ({
                   size="small"
                   onClick={handleMicClick}
                   color={isListening ? 'error' : 'primary'}
-                  title={isListening ? 'Arrêter la dictée' : 'Démarrer la dictée vocale'}
                   sx={{
                     ...(isListening && {
                       animation: 'pulse 2s infinite',

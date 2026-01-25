@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
@@ -27,17 +27,28 @@ interface HospitalisationFormProps {
   consultationId: string;
   patientId: string;
   onSave: (data: HospitalisationData) => Promise<void>;
+  initialData?: HospitalisationData;
 }
 
 export const HospitalisationForm: React.FC<HospitalisationFormProps> = ({
   consultationId,
   patientId,
   onSave,
+  initialData,
 }) => {
   const [data, setData] = useState<HospitalisationData>({});
   const [loading, setLoading] = useState(false);
+  const [hasUserEdited, setHasUserEdited] = useState(false);
+
+  useEffect(() => {
+    // Pré-remplir avec les données déjà enregistrées (sans écraser une saisie en cours)
+    if (initialData && !hasUserEdited) {
+      setData(initialData);
+    }
+  }, [initialData, hasUserEdited]);
 
   const handleChange = (field: keyof HospitalisationData, val: string) => {
+    setHasUserEdited(true);
     setData({ ...data, [field]: val });
   };
 
@@ -45,6 +56,7 @@ export const HospitalisationForm: React.FC<HospitalisationFormProps> = ({
     setLoading(true);
     try {
       await onSave(data);
+      setHasUserEdited(false);
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error);
     } finally {

@@ -105,6 +105,11 @@ export interface PrescriptionActive {
   consultation_id: string;
   prescripteur_nom: string;
   service_prescripteur?: string;
+  facture_id?: string | null;
+  facture_statut?: string | null;
+  montant_restant?: number | null;
+  paiement_requis?: boolean;
+  peut_delivrer?: boolean;
   lignes: {
     id: string;
     medicament_id?: string;
@@ -147,13 +152,31 @@ export class DispensationService {
           date_prescription,
           consultation_id,
           created_by,
-          statut
+          statut,
+          facture_id
         `)
         .in('consultation_id', consultationIds)
         .in('statut', ['PRESCRIT', 'PARTIELLEMENT_DISPENSE'])
         .order('date_prescription', { ascending: false });
 
       if (error) throw error;
+
+      // Charger les factures associées (si présentes) pour déterminer le statut de paiement
+      const factureIds = Array.from(
+        new Set((prescriptions || []).map((p: any) => p.facture_id).filter((id: any): id is string => Boolean(id)))
+      );
+      const facturesMap = new Map<string, { statut: string | null; montant_restant: number | null }>();
+      if (factureIds.length > 0) {
+        const { data: facturesData, error: facturesError } = await supabase
+          .from('factures')
+          .select('id, statut, montant_restant')
+          .in('id', factureIds);
+        if (!facturesError) {
+          (facturesData || []).forEach((f: any) =>
+            facturesMap.set(f.id, { statut: f.statut ?? null, montant_restant: f.montant_restant ?? null })
+          );
+        }
+      }
 
       // Récupérer les lignes de prescription
       const prescriptionsWithLines: PrescriptionActive[] = [];
@@ -193,6 +216,14 @@ export class DispensationService {
             date_prescription: presc.date_prescription,
             consultation_id: presc.consultation_id,
             prescripteur_nom: 'Dr. ' + (presc.created_by || 'Inconnu'),
+            facture_id: presc.facture_id || null,
+            facture_statut: presc.facture_id ? (facturesMap.get(presc.facture_id)?.statut ?? null) : null,
+            montant_restant: presc.facture_id ? (facturesMap.get(presc.facture_id)?.montant_restant ?? null) : null,
+            paiement_requis: Boolean(presc.facture_id),
+            peut_delivrer: presc.facture_id
+              ? (facturesMap.get(presc.facture_id)?.statut === 'payee' &&
+                Number(facturesMap.get(presc.facture_id)?.montant_restant ?? 1) <= 0)
+              : true,
             lignes: lignesAvecRestantes,
           });
         }
@@ -369,6 +400,40 @@ export class DispensationService {
       // Vérifier que la prescription est active
       if (prescCheck.data?.statut === 'ANNULE') {
         throw new Error('Cette prescription a été annulée');
+      }
+
+      // Payment gate (Pharmacie): si une facture est liée, la délivrance est autorisée uniquement si payée
+      try {
+        const { data: prescRow, error: prescRowError } = await supabase
+          .from('prescriptions')
+          .select('id, facture_id')
+          .eq('id', data.prescription_id)
+          .single();
+
+        if (prescRowError) throw prescRowError;
+
+        if (prescRow?.facture_id) {
+          const { data: facture, error: factureError } = await supabase
+            .from('factures')
+            .select('id, statut, montant_restant')
+            .eq('id', prescRow.facture_id)
+            .single();
+
+          if (factureError) throw factureError;
+
+          const statut = facture?.statut;
+          const restant = Number(facture?.montant_restant ?? 0);
+
+          if (statut !== 'payee' || restant > 0) {
+            throw new Error(
+              `Paiement requis: la facture liée à cette ordonnance est en attente (reste ${restant.toLocaleString('fr-FR')} XOF).`
+            );
+          }
+        }
+      } catch (e: any) {
+        // Bloquer par sécurité si on ne peut pas vérifier le paiement
+        if (e instanceof Error) throw e;
+        throw new Error('Paiement requis: impossible de vérifier le statut de la facture liée à cette ordonnance.');
       }
     }
 

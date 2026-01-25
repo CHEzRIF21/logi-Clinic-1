@@ -6,6 +6,19 @@ import App from './App';
 import './index.css';
 import { ThemeProvider } from './components/providers/ThemeProvider';
 
+// Désactiver les appels de "debug ingest" locaux (évite le spam console si le serveur n'est pas lancé)
+// On ne touche qu'à l'URL de debug utilisée dans le projet.
+if (typeof window !== 'undefined') {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.startsWith('http://127.0.0.1:7242/ingest/')) {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    return originalFetch(input, init);
+  };
+}
+
 // #region agent log
 fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'index.tsx:8',message:'index.tsx loaded',data:{envVars:{supabaseUrl:!!import.meta.env.VITE_SUPABASE_URL,supabaseKey:!!import.meta.env.VITE_SUPABASE_ANON_KEY,apiUrl:!!import.meta.env.VITE_API_URL}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
 // #endregion

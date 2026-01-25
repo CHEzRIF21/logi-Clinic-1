@@ -5,6 +5,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 export default async function handler(req: Request, path: string): Promise<Response> {
   const method = req.method;
   const pathParts = path.split('/').filter(p => p);
+  const clinicId = req.headers.get('x-clinic-id');
 
   try {
     // GET /api/patients
@@ -19,6 +20,10 @@ export default async function handler(req: Request, path: string): Promise<Respo
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range((page - 1) * limit, page * limit - 1);
+
+      if (clinicId) {
+        query = query.eq('clinic_id', clinicId);
+      }
 
       if (search) {
         query = query.or(`nom.ilike.%${search}%,prenom.ilike.%${search}%,telephone.ilike.%${search}%`);
@@ -42,6 +47,9 @@ export default async function handler(req: Request, path: string): Promise<Respo
     // POST /api/patients
     if (method === 'POST' && pathParts.length === 1) {
       const body = await req.json();
+      if (clinicId) {
+        body.clinic_id = clinicId;
+      }
       const { data, error } = await supabase
         .from('patients')
         .insert(body)
@@ -63,11 +71,16 @@ export default async function handler(req: Request, path: string): Promise<Respo
 
     // GET /api/patients/:id
     if (method === 'GET' && pathParts.length === 2) {
-      const { data, error } = await supabase
+      let query = supabase
         .from('patients')
         .select('*')
-        .eq('id', pathParts[1])
-        .single();
+        .eq('id', pathParts[1]);
+
+      if (clinicId) {
+        query = query.eq('clinic_id', clinicId);
+      }
+
+      const { data, error } = await query.single();
 
       if (error || !data) {
         return new Response(
