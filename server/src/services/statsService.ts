@@ -2,6 +2,20 @@ import prisma from '../prisma';
 import SchemaCacheService from './schemaCacheService';
 
 export class StatsService {
+  private static async getInvoiceNumberPrefixForClinic(clinicId?: string, role?: string): Promise<string | null> {
+    // SUPER_ADMIN: pas de filtre
+    if (!clinicId || role === 'SUPER_ADMIN') return null;
+
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { code: true },
+    });
+
+    if (!clinic?.code) return null;
+    // Numéro facture: FAC-CODE-YYYYMM-XXXX
+    return `FAC-${clinic.code}-`;
+  }
+
   /**
    * Statistiques financières avec groupement par période
    */
@@ -9,8 +23,12 @@ export class StatsService {
     startDate: Date;
     endDate: Date;
     groupBy: 'day' | 'month' | 'year';
+    clinicId?: string;
+    role?: string;
   }) {
     return await SchemaCacheService.executeWithRetry(async () => {
+      const invoicePrefix = await this.getInvoiceNumberPrefixForClinic(params.clinicId, params.role);
+
       const invoices = await prisma.invoice.findMany({
         where: {
           createdAt: {
@@ -20,6 +38,13 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
         select: {
           createdAt: true,
@@ -84,8 +109,10 @@ export class StatsService {
   /**
    * Statistiques pour le tableau de bord
    */
-  static async getDashboardStatistics() {
+  static async getDashboardStatistics(params?: { clinicId?: string; role?: string }) {
     return await SchemaCacheService.executeWithRetry(async () => {
+      const invoicePrefix = await this.getInvoiceNumberPrefixForClinic(params?.clinicId, params?.role);
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -100,6 +127,13 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
         _sum: {
           totalTTC: true,
@@ -119,6 +153,13 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
         _sum: {
           totalTTC: true,
@@ -138,6 +179,13 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
         _sum: {
           totalTTC: true,
@@ -152,6 +200,13 @@ export class StatsService {
       const pendingInvoices = await prisma.invoice.count({
         where: {
           status: 'EN_ATTENTE',
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
       });
 
@@ -159,6 +214,13 @@ export class StatsService {
       const partialInvoices = await prisma.invoice.count({
         where: {
           status: 'PARTIELLE',
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
       });
 
@@ -168,6 +230,13 @@ export class StatsService {
           status: {
             in: ['EN_ATTENTE', 'PARTIELLE'],
           },
+          ...(invoicePrefix
+            ? {
+                number: {
+                  startsWith: invoicePrefix,
+                },
+              }
+            : {}),
         },
         select: {
           totalTTC: true,
@@ -185,6 +254,15 @@ export class StatsService {
           createdAt: {
             gte: today,
           },
+          ...(invoicePrefix
+            ? {
+                invoice: {
+                  number: {
+                    startsWith: invoicePrefix,
+                  },
+                },
+              }
+            : {}),
         },
         _sum: {
           amount: true,

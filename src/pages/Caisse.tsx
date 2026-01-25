@@ -93,6 +93,11 @@ const Caisse: React.FC = () => {
               iconPosition="start"
             />
             <Tab
+              icon={<History />}
+              label="Historique des Paiements"
+              iconPosition="start"
+            />
+            <Tab
               icon={<Receipt />}
               label="Création Facture"
               iconPosition="start"
@@ -100,11 +105,6 @@ const Caisse: React.FC = () => {
             <Tab
               icon={<AccountBalanceWallet />}
               label="Journal de Caisse"
-              iconPosition="start"
-            />
-            <Tab
-              icon={<History />}
-              label="Historique de Paiement"
               iconPosition="start"
             />
             {canAccessFinancialReports() && (
@@ -127,15 +127,15 @@ const Caisse: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          <CreationFacture />
+          <HistoriquePaiements />
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
-          <JournalCaisse />
+          <CreationFacture />
         </TabPanel>
 
         <TabPanel value={activeTab} index={4}>
-          <HistoriquePaiements />
+          <JournalCaisse />
         </TabPanel>
 
         {canAccessFinancialReports() && (

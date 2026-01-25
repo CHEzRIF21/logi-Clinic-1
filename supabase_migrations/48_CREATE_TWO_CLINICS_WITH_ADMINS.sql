@@ -211,7 +211,7 @@ DO $$
 DECLARE
   -- Informations de la clinique 2
   v_clinic2_code TEXT := 'MAMELLES-001';  -- Code unique de la clinique
-  v_clinic2_name TEXT := 'Clinique Santé PLENITUDE';  -- Nom de la clinique
+  v_clinic2_name TEXT := 'Clinique Santé LES MAMELLES';  -- Nom de la clinique
   v_clinic2_address TEXT := 'Save';  -- Adresse
   v_clinic2_phone TEXT := '+229 0166997940';  -- Téléphone
   v_clinic2_email TEXT := 'dieudange@gmail.com';  -- Email de la clinique

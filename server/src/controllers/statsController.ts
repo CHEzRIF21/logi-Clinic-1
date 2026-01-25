@@ -1,12 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import StatsService from '../services/statsService';
+import { AuthRequest } from '../middleware/auth';
 
 export class StatsController {
   /**
    * GET /api/statistics/finance
    * Statistiques financières avec groupement par période
    */
-  static async getFinanceStats(req: Request, res: Response) {
+  static async getFinanceStats(req: AuthRequest, res: Response) {
     try {
       const { startDate, endDate, group = 'month' } = req.query;
 
@@ -21,6 +22,8 @@ export class StatsController {
         startDate: new Date(startDate as string),
         endDate: new Date(endDate as string),
         groupBy: group as 'day' | 'month' | 'year',
+        clinicId: req.user?.clinic_id,
+        role: req.user?.role,
       });
 
       res.json({
@@ -40,9 +43,28 @@ export class StatsController {
    * GET /api/statistics/dashboard
    * Statistiques pour le tableau de bord
    */
-  static async getDashboardStats(req: Request, res: Response) {
+  static async getDashboardStats(req: AuthRequest, res: Response) {
     try {
-      const stats = await StatsService.getDashboardStatistics();
+      // SUPER_ADMIN: autorisé sans clinic_id (stats globales)
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentification requise',
+        });
+      }
+
+      if (req.user.role !== 'SUPER_ADMIN' && !req.user.clinic_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Contexte de clinique manquant.',
+          code: 'MISSING_CLINIC_CONTEXT',
+        });
+      }
+
+      const stats = await StatsService.getDashboardStatistics({
+        clinicId: req.user.clinic_id,
+        role: req.user.role,
+      });
 
       res.json({
         success: true,

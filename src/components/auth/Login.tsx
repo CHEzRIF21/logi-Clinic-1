@@ -755,6 +755,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       // 3. Récupérer l'utilisateur dans la table users
       let user = null;
       let userError = null;
+      let authOkButProfileMissing = false;
 
       // Si on a réussi l'authentification Supabase Auth, chercher par auth_user_id
       if (authUser?.id) {
@@ -773,10 +774,31 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             actif
           `)
           .eq('auth_user_id', authUser.id)
-          .eq('clinic_id', clinic.id)
           .maybeSingle();
-        
-        user = userData;
+
+        // Cas fréquent après suppression/recréation d'un compte Supabase Auth:
+        // l'auth fonctionne, mais le profil public.users n'est pas lié au nouveau UID.
+        if (!err && !userData) {
+          authOkButProfileMissing = true;
+        }
+
+        // IMPORTANT:
+        // - Le Super Admin doit pouvoir se connecter avec n'importe quel code clinique (contexte),
+        //   même si son compte n'est pas "attaché" à une clinique spécifique.
+        // - Pour les autres rôles, on impose que l'utilisateur appartienne à la clinique saisie.
+        const roleUpper = (userData?.role || '').toUpperCase();
+        const isSuperAdmin = roleUpper === 'SUPER_ADMIN';
+
+        if (userData && !err) {
+          if (isSuperAdmin) {
+            user = userData;
+          } else if (userData.clinic_id === clinic.id) {
+            user = userData;
+          } else {
+            user = null;
+          }
+        }
+
         userError = err;
       }
 
@@ -842,6 +864,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         user = userData;
         userError = err;
 
+        // Sécurité: si le compte est lié à Supabase Auth (auth_user_id non NULL),
+        // on DOIT avoir une session Supabase Auth valide (sinon contournement mot de passe).
+        if (user && user.auth_user_id && !authUser) {
+          setError('Mot de passe incorrect (connexion Supabase requise).');
+          setIsLoading(false);
+          return;
+        }
+
         // Si l'utilisateur n'a pas d'auth_user_id, vérifier le password_hash
         // C'est le cas pour les comptes démo (CLINIC-001)
         if (user && !user.auth_user_id && user.password_hash) {
@@ -871,7 +901,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:650',message:'User not found error',data:{hasError:!!userError,errorMessage:userError?.message,errorCode:userError?.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C,E'})}).catch(()=>{});
         // #endregion
-        setError('Email ou mot de passe incorrect, ou utilisateur non associé à cette clinique');
+        if (authOkButProfileMissing) {
+          setError('Compte Auth OK, mais profil non lié. Contactez l’administrateur pour relier votre UID Supabase Auth au profil (public.users.auth_user_id).');
+        } else {
+          setError('Email ou mot de passe incorrect, ou utilisateur non associé à cette clinique');
+        }
         setIsLoading(false);
         return;
       }

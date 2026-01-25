@@ -3,6 +3,7 @@ import { User } from '../types/auth';
 import { PatientService } from '../services/patientService';
 import { supabase } from '../services/supabase';
 import { apiGet } from '../services/apiClient';
+import { getMyClinicId, isSuperAdmin } from '../services/clinicService';
 
 interface DashboardStats {
   patients?: {
@@ -73,6 +74,15 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
       try {
         setLoading(true);
         setError(null);
+
+        // Contexte multi-clinique: filtrer par clinic_id (sauf SUPER_ADMIN)
+        const clinicId = await getMyClinicId();
+        const superAdmin = await isSuperAdmin();
+        if (!superAdmin && !clinicId) {
+          setError('Contexte de clinique manquant. Veuillez vous reconnecter.');
+          return;
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const todayEnd = new Date(today);
@@ -105,18 +115,22 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour rendez-vous
         if (user.role === 'admin' || user.role === 'medecin' || user.role === 'secretaire') {
           try {
-            const { data: rendezVousToday } = await supabase
+            let rvTodayQuery = supabase
               .from('rendez_vous')
               .select('*')
               .gte('date_debut', today.toISOString())
               .lte('date_debut', todayEnd.toISOString());
+            if (!superAdmin && clinicId) rvTodayQuery = rvTodayQuery.eq('clinic_id', clinicId);
+            const { data: rendezVousToday } = await rvTodayQuery;
 
-            const { data: rendezVousUpcoming } = await supabase
+            let rvUpcomingQuery = supabase
               .from('rendez_vous')
               .select('*')
               .gte('date_debut', todayEnd.toISOString())
               .eq('statut', 'programmé')
               .limit(10);
+            if (!superAdmin && clinicId) rvUpcomingQuery = rvUpcomingQuery.eq('clinic_id', clinicId);
+            const { data: rendezVousUpcoming } = await rvUpcomingQuery;
 
             newStats.rendezVous = {
               today: rendezVousToday?.length || 0,
@@ -131,21 +145,25 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour stock/pharmacie
         if (user.role === 'admin' || user.role === 'pharmacien') {
           try {
-            const { data: medicaments, error: errMed } = await supabase
-              .from('medicaments')
-              .select('id');
+            let medicamentsQuery = supabase.from('medicaments').select('id');
+            if (!superAdmin && clinicId) medicamentsQuery = medicamentsQuery.eq('clinic_id', clinicId);
+            const { data: medicaments, error: errMed } = await medicamentsQuery;
             if (errMed && errMed.code !== 'PGRST116') throw errMed;
 
-            const { data: alertes, error: errAlertes } = await supabase
+            let alertesQuery = supabase
               .from('alertes_stock')
               .select('id')
               .eq('statut', 'active');
+            if (!superAdmin && clinicId) alertesQuery = alertesQuery.eq('clinic_id', clinicId);
+            const { data: alertes, error: errAlertes } = await alertesQuery;
             if (errAlertes && errAlertes.code !== 'PGRST116') throw errAlertes;
 
-            const { data: lots, error: errLots } = await supabase
+            let lotsQuery = supabase
               .from('lots')
               .select('date_expiration')
               .lt('date_expiration', new Date().toISOString());
+            if (!superAdmin && clinicId) lotsQuery = lotsQuery.eq('clinic_id', clinicId);
+            const { data: lots, error: errLots } = await lotsQuery;
             if (errLots && errLots.code !== 'PGRST116') throw errLots;
 
             newStats.stock = {
@@ -173,6 +191,7 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               const token = localStorage.getItem('token');
               const headers: Record<string, string> = { 'Content-Type': 'application/json' };
               if (token) headers.Authorization = `Bearer ${token}`;
+              if (clinicId) headers['x-clinic-id'] = clinicId;
 
               const response = await fetch(`${API_BASE_URL}/statistics/dashboard`, { headers });
               if (response.ok) {
@@ -194,17 +213,21 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour prescriptions
         if (user.role === 'admin' || user.role === 'medecin' || user.role === 'pharmacien') {
           try {
-            const { data: prescriptionsToday, error: errToday } = await supabase
+            let prescriptionsTodayQuery = supabase
               .from('prescriptions')
               .select('id')
               .gte('date_prescription', today.toISOString())
               .lte('date_prescription', todayEnd.toISOString());
+            if (!superAdmin && clinicId) prescriptionsTodayQuery = prescriptionsTodayQuery.eq('clinic_id', clinicId);
+            const { data: prescriptionsToday, error: errToday } = await prescriptionsTodayQuery;
             if (errToday && errToday.code !== 'PGRST116') throw errToday;
 
-            const { data: prescriptionsPending, error: errPending } = await supabase
+            let prescriptionsPendingQuery = supabase
               .from('prescriptions')
               .select('id')
               .eq('statut', 'PRESCRIT');
+            if (!superAdmin && clinicId) prescriptionsPendingQuery = prescriptionsPendingQuery.eq('clinic_id', clinicId);
+            const { data: prescriptionsPending, error: errPending } = await prescriptionsPendingQuery;
             if (errPending && errPending.code !== 'PGRST116') throw errPending;
 
             newStats.prescriptions = {
@@ -224,17 +247,21 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour laboratoire
         if (user.role === 'admin' || user.role === 'laborantin') {
           try {
-            const { data: labRequestsPending, error: errPending } = await supabase
+            let labPendingQuery = supabase
               .from('lab_requests')
               .select('id')
               .eq('status', 'EN_ATTENTE');
+            if (!superAdmin && clinicId) labPendingQuery = labPendingQuery.eq('clinic_id', clinicId);
+            const { data: labRequestsPending, error: errPending } = await labPendingQuery;
             if (errPending && errPending.code !== 'PGRST116') throw errPending;
 
-            const { data: labRequestsToday, error: errToday } = await supabase
+            let labTodayQuery = supabase
               .from('lab_requests')
               .select('id')
               .gte('created_at', today.toISOString())
               .lte('created_at', todayEnd.toISOString());
+            if (!superAdmin && clinicId) labTodayQuery = labTodayQuery.eq('clinic_id', clinicId);
+            const { data: labRequestsToday, error: errToday } = await labTodayQuery;
             if (errToday && errToday.code !== 'PGRST116') throw errToday;
 
             newStats.lab = {
@@ -286,11 +313,13 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         
         // Récupérer les activités récentes depuis Supabase
         try {
-          const { data: recentPatients } = await supabase
+          let recentPatientsQuery = supabase
             .from('patients')
             .select('id, nom, prenom, created_at')
             .order('created_at', { ascending: false })
             .limit(5);
+          if (!superAdmin && clinicId) recentPatientsQuery = recentPatientsQuery.eq('clinic_id', clinicId);
+          const { data: recentPatients } = await recentPatientsQuery;
           
           if (recentPatients) {
             recentPatients.forEach((p: any) => {
@@ -303,11 +332,13 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
             });
           }
 
-          const { data: recentConsultations } = await supabase
+          let recentConsultationsQuery = supabase
             .from('consultations')
             .select('id, started_at, created_by')
             .order('started_at', { ascending: false })
             .limit(5);
+          if (!superAdmin && clinicId) recentConsultationsQuery = recentConsultationsQuery.eq('clinic_id', clinicId);
+          const { data: recentConsultations } = await recentConsultationsQuery;
           
           if (recentConsultations) {
             recentConsultations.forEach((c: any) => {
