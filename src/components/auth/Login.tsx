@@ -77,6 +77,39 @@ const hashPassword = async (password: string): Promise<string> => {
     .join('');
 };
 
+// Détecter si une erreur ressemble à une panne/maintenance Supabase (réseau / 5xx / indisponibilité)
+const isSupabaseMaintenanceLikeError = (err: any): boolean => {
+  const msg = String(err?.message || err?.error_description || '').toLowerCase();
+  const code = String(err?.code || '').toLowerCase();
+  const statusRaw = err?.status ?? err?.statusCode ?? err?.code;
+  const status = typeof statusRaw === 'number' ? statusRaw : Number(statusRaw);
+
+  // Réseau / fetch
+  if (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('fetcherror') ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    code === 'ecconnrefused' ||
+    code === 'enotfound' ||
+    code === 'etimedout'
+  ) {
+    return true;
+  }
+
+  // Indisponibilité service (Auth/REST) : 5xx / 429
+  if ([429, 500, 502, 503, 504].includes(status)) return true;
+  if (msg.includes('service unavailable') || msg.includes('temporarily unavailable')) return true;
+  if (msg.includes('bad gateway') || msg.includes('gateway timeout')) return true;
+
+  return false;
+};
+
+const supabaseMaintenanceMessage =
+  '🔄 Une mise à jour/maintenance du service est en cours (Supabase). Veuillez réessayer dans quelques minutes.';
+
 interface Feature {
   icon: React.ReactNode;
   title: string;
@@ -579,7 +612,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       
       if (clinicCheckError) {
         console.error('❌ Erreur Supabase lors de la recherche:', clinicCheckError);
-        setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
+        if (isSupabaseMaintenanceLikeError(clinicCheckError)) {
+          setError(supabaseMaintenanceMessage);
+        } else {
+          setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
+        }
         setIsLoading(false);
         return;
       }
@@ -685,7 +722,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       if (clinicCheckError && !tempClinic) {
         console.error('❌ Erreur Supabase lors de la recherche:', clinicCheckError);
-        setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
+        if (isSupabaseMaintenanceLikeError(clinicCheckError)) {
+          setError(supabaseMaintenanceMessage);
+        } else {
+          setError(`Erreur de connexion: ${clinicCheckError.message || 'Impossible de vérifier le code clinique'}`);
+        }
         setIsLoading(false);
         return;
       }
@@ -715,41 +756,56 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       // 2. Authentifier l'utilisateur via Supabase Auth
       // Le username peut être l'email ou un identifiant
-      // IMPORTANT: trim() pour supprimer les espaces avant/après
-      const email = (credentials.username.includes('@') 
+      // IMPORTANT: Normaliser l'email (lowercase, trim) pour éviter les erreurs 400
+      const email = credentials.username.includes('@') 
         ? credentials.username.trim().toLowerCase()
-        : credentials.username.trim()).trim();
+        : credentials.username.trim();
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:563',message:'Auth attempt start',data:{email,clinicId:clinic.id,clinicCode:clinic.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:563',message:'Auth attempt start',data:{email,emailLength:email.length,clinicId:clinic.id,clinicCode:clinic.code},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
 
       // Essayer d'abord avec Supabase Auth
       let authUser = null;
       let authSession = null;
+      let authErrInfo: any = null;
 
       try {
+        // IMPORTANT: S'assurer que l'email est valide et normalisé avant l'appel
+        if (!email || email.length === 0) {
+          throw new Error('Email invalide');
+        }
+
         const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
           email: email,
-          password: credentials.password,
+          password: credentials.password.trim(), // S'assurer que le mot de passe est aussi trimé
         });
+        authErrInfo = authErr;
         
         // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:577',message:'Supabase Auth result',data:{hasUser:!!authData?.user,hasError:!!authErr,errorMessage:authErr?.message,errorCode:authErr?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:577',message:'Supabase Auth result',data:{hasUser:!!authData?.user,hasSession:!!authData?.session,hasError:!!authErr,errorMessage:authErr?.message,errorCode:authErr?.status,errorName:authErr?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         
-        if (authData?.user && !authErr) {
+        if (authData?.user && authData?.session && !authErr) {
           authUser = authData.user;
           authSession = authData.session;
+          console.log('✅ Supabase Auth réussi, session valide obtenue');
         } else {
-          console.log('Supabase Auth échoué, recherche dans la table users');
+          // Erreur 400 = identifiants invalides - ne pas continuer avec un token factice
+          if (authErr?.status === 400 || authErr?.message?.includes('Invalid login credentials')) {
+            console.log('❌ Supabase Auth: Identifiants invalides (400)');
+            // On continuera pour vérifier si c'est un compte démo sans auth_user_id
+          } else {
+            console.log('⚠️ Supabase Auth échoué, recherche dans la table users');
+          }
         }
       } catch (err: any) {
+        authErrInfo = err;
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:585',message:'Supabase Auth exception',data:{errorMessage:err?.message,errorName:err?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
-        // Si Supabase Auth échoue, on essaiera avec la table users
-        console.log('Tentative Supabase Auth échouée, utilisation de la table users');
+        // Si Supabase Auth échoue, on essaiera avec la table users (pour les comptes démo)
+        console.log('⚠️ Tentative Supabase Auth échouée, vérification compte démo');
       }
 
       // 3. Récupérer l'utilisateur dans la table users
@@ -867,7 +923,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         // Sécurité: si le compte est lié à Supabase Auth (auth_user_id non NULL),
         // on DOIT avoir une session Supabase Auth valide (sinon contournement mot de passe).
         if (user && user.auth_user_id && !authUser) {
-          setError('Mot de passe incorrect (connexion Supabase requise).');
+          if (isSupabaseMaintenanceLikeError(authErrInfo)) {
+            setError(supabaseMaintenanceMessage);
+          } else {
+            setError('Mot de passe incorrect (connexion Supabase requise).');
+          }
           setIsLoading(false);
           return;
         }
@@ -1024,11 +1084,54 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 'inactif',
       };
 
-      // 9. Générer un token (ou utiliser celui de Supabase Auth)
-      const token = authSession?.access_token || `token-${user.id}-${Date.now()}`;
+      // 9. Générer un token - UTILISER UNIQUEMENT LE JWT SUPABASE VALIDE
+      // IMPORTANT: Ne jamais générer de token factice - cela cause des erreurs JWT malformé
+      // 
+      // Règles:
+      // - Si l'utilisateur a un auth_user_id, on DOIT avoir une session Supabase Auth valide
+      // - Si l'utilisateur n'a pas d'auth_user_id (compte démo), on peut utiliser password_hash
+      //   mais on ne peut PAS utiliser les endpoints Supabase Auth qui nécessitent un JWT
+      
+      let token: string | null = null;
+
+      if (user.auth_user_id) {
+        // Compte lié à Supabase Auth - on DOIT avoir un JWT valide
+        if (!authSession?.access_token) {
+          console.error('❌ Utilisateur lié à Supabase Auth mais session invalide');
+          if (isSupabaseMaintenanceLikeError(authErrInfo)) {
+            setError(supabaseMaintenanceMessage);
+          } else {
+            // Erreur 400 = identifiants invalides
+            if (authErrInfo?.status === 400 || authErrInfo?.message?.includes('Invalid login credentials')) {
+              setError('Identifiants de connexion invalides. Veuillez vérifier votre email et mot de passe.');
+            } else {
+              setError('Erreur d\'authentification Supabase. Veuillez réessayer ou contacter l\'administrateur.');
+            }
+          }
+          setIsLoading(false);
+          return;
+        }
+        token = authSession.access_token;
+        console.log('✅ JWT Supabase valide obtenu pour utilisateur avec auth_user_id');
+      } else {
+        // Compte démo sans auth_user_id - utilise password_hash
+        // Pour ces comptes, on ne peut pas utiliser les endpoints Supabase Auth
+        // On génère un token interne mais il ne doit JAMAIS être utilisé avec supabase.auth.getUser()
+        console.warn('⚠️ Compte démo détecté (sans auth_user_id) - token interne généré');
+        // Note: Ce token ne fonctionnera PAS avec supabase.auth.getUser() ou les endpoints Supabase Auth
+        // Il est utilisé uniquement pour l'authentification interne de l'application
+        token = `internal-${user.id}-${Date.now()}`;
+      }
+
+      if (!token) {
+        console.error('❌ Aucun token disponible');
+        setError('Erreur lors de la génération du token. Veuillez réessayer.');
+        setIsLoading(false);
+        return;
+      }
 
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:818',message:'Building app user and token',data:{userId:user.id,userStatus:user.status,hasAuthSession:!!authSession,hasToken:!!token},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:818',message:'Building app user and token',data:{userId:user.id,userStatus:user.status,hasAuthSession:!!authSession,hasAuthUserId:!!user.auth_user_id,hasToken:!!token,tokenLength:token?.length,isJWT:token?.includes('.'),isInternalToken:token?.startsWith('internal-')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
       // #endregion
 
       // 10. Mettre à jour last_login
@@ -1076,7 +1179,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       
     } catch (error: any) {
       console.error('Erreur de connexion:', error);
-      setError(error.message || 'Erreur de connexion. Veuillez réessayer.');
+      if (isSupabaseMaintenanceLikeError(error)) {
+        setError(supabaseMaintenanceMessage);
+      } else {
+        setError(error.message || 'Erreur de connexion. Veuillez réessayer.');
+      }
     } finally {
       setIsLoading(false);
     }

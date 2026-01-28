@@ -75,10 +75,32 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Vérifie si un token est un JWT valide (format: xxx.yyy.zzz)
+ */
+function isValidJWT(token: string | null): boolean {
+  if (!token) return false;
+  // Un JWT a 3 parties séparées par des points
+  const parts = token.split('.');
+  return parts.length === 3 && parts.every(part => part.length > 0);
+}
+
+/**
  * Récupère le token JWT depuis le localStorage
+ * IMPORTANT: Ne retourne que les tokens JWT valides pour éviter les erreurs "JWT malformé"
  */
 function getAuthToken(): string | null {
-  return localStorage.getItem('token') || localStorage.getItem('authToken');
+  const token = localStorage.getItem('token') || localStorage.getItem('authToken');
+  
+  // Si le token n'est pas un JWT valide, ne pas l'utiliser avec Supabase Auth
+  // Les tokens internes (comme "internal-xxx" ou "token-xxx") ne doivent pas être utilisés
+  if (token && !isValidJWT(token)) {
+    console.warn('⚠️ Token non-JWT détecté dans localStorage. Ce token ne peut pas être utilisé avec Supabase Auth.');
+    // Pour les comptes démo, on peut retourner null et laisser Supabase gérer la session
+    // Si Supabase Auth a réussi, la session sera automatiquement stockée par le client
+    return null;
+  }
+  
+  return token;
 }
 
 /**

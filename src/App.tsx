@@ -89,7 +89,23 @@ function App() {
 
   const handleLogin = (userData: User, token: string) => {
     setUser(userData);
-    localStorage.setItem('token', token);
+    
+    // IMPORTANT: Ne stocker que les JWT valides dans localStorage
+    // Les tokens internes (comme "internal-xxx") ne doivent pas être stockés
+    // car ils causent des erreurs "JWT malformé" quand utilisés avec Supabase Auth
+    const isValidJWT = token && token.includes('.') && token.split('.').length === 3;
+    
+    if (isValidJWT) {
+      localStorage.setItem('token', token);
+      console.log('✅ JWT valide stocké dans localStorage');
+    } else {
+      // Token interne (compte démo) - ne pas stocker dans localStorage
+      // La session Supabase sera gérée automatiquement par le client Supabase
+      console.warn('⚠️ Token interne détecté - non stocké dans localStorage (compte démo)');
+      // Ne pas stocker le token interne pour éviter les erreurs JWT malformé
+      localStorage.removeItem('token');
+    }
+    
     localStorage.setItem('user', JSON.stringify(userData));
     enqueueSnackbar('Connexion réussie', { variant: 'success' });
   };
