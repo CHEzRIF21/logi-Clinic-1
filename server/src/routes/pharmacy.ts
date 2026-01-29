@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import PharmacyController from '../controllers/pharmacyController';
+import { authenticateToken } from '../middleware/auth';
+import { requireClinicContext } from '../middleware/clinicContext';
 
 const router = Router();
+
+// ✅ TOUTES les routes nécessitent authentification ET contexte de clinique
+router.use(authenticateToken);
+router.use(requireClinicContext);
 
 // Produits (Catalogue médicaments)
 router.get('/products', PharmacyController.getProducts);

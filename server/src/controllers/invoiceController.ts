@@ -2,14 +2,18 @@ import { Request, Response } from 'express';
 import InvoiceService from '../services/invoiceService';
 import PDFService from '../services/pdfService';
 import { AuthRequest } from '../middleware/auth';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 
 export class InvoiceController {
   /**
    * GET /api/invoices
    * Liste les factures avec filtres et pagination
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async list(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
+      
       const {
         startDate,
         endDate,
@@ -19,7 +23,11 @@ export class InvoiceController {
         limit,
       } = req.query;
 
-      const filters: any = {};
+      const filters: any = {
+        clinicId: clinicReq.clinicId,        // ✅ AJOUTER
+        isSuperAdmin: clinicReq.isSuperAdmin, // ✅ AJOUTER
+      };
+      
       if (startDate) filters.startDate = new Date(startDate as string);
       if (endDate) filters.endDate = new Date(endDate as string);
       if (status) filters.status = status;
@@ -46,9 +54,12 @@ export class InvoiceController {
   /**
    * POST /api/invoices
    * Crée une nouvelle facture
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique et assigne clinic_id
    */
   static async create(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
+      
       const {
         patientId,
         lines,
@@ -99,11 +110,12 @@ export class InvoiceController {
         patientId,
         lines,
         comment,
-        createdBy: createdBy || (req as AuthRequest).user?.id,
+        createdBy: createdBy || clinicReq.user?.id,
         modePayment,
         aib: req.body.aib,
         typeFacture: req.body.typeFacture,
         operationIds,
+        clinicId: clinicReq.clinicId, // ✅ AJOUTER - Vérification dans le service
       });
 
       res.status(201).json({
@@ -113,6 +125,7 @@ export class InvoiceController {
       });
     } catch (error: any) {
       const statusCode = error.message.includes('non trouvé') ||
+                        error.message.includes('n\'appartient pas') ||
                         error.message.includes('Stock insuffisant') ||
                         error.message.includes('requis')
         ? 400
@@ -129,19 +142,25 @@ export class InvoiceController {
   /**
    * GET /api/invoices/:id
    * Récupère une facture par son ID
+   * ✅ CORRIGÉ: Vérifie que la facture appartient à la clinique
    */
   static async getById(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
 
-      const invoice = await InvoiceService.getInvoiceById(id);
+      const invoice = await InvoiceService.getInvoiceById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       res.json({
         success: true,
         data: invoice,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvée') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvée') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,

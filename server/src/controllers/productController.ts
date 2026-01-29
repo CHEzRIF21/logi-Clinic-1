@@ -1,16 +1,23 @@
 import { Request, Response } from 'express';
 import ProductService from '../services/productService';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 
 export class ProductController {
   /**
    * GET /api/products
    * Liste tous les produits avec filtres
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async list(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { category, active, search } = req.query;
 
-      const filters: any = {};
+      const filters: any = {
+        clinicId: clinicReq.clinicId,        // ✅ AJOUTER
+        isSuperAdmin: clinicReq.isSuperAdmin, // ✅ AJOUTER
+      };
+      
       if (category) filters.category = category as string;
       if (active !== undefined) filters.active = active === 'true';
       if (search) {
@@ -35,19 +42,25 @@ export class ProductController {
   /**
    * GET /api/products/:id
    * Récupère un produit par son ID
+   * ✅ CORRIGÉ: Vérifie que le produit appartient à la clinique
    */
   static async getById(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
 
-      const product = await ProductService.getProductById(id);
+      const product = await ProductService.getProductById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       res.json({
         success: true,
         data: product,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvé') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,
@@ -60,9 +73,12 @@ export class ProductController {
   /**
    * POST /api/products
    * Crée un nouveau produit
+   * ✅ CORRIGÉ: Assigne automatiquement le clinic_id de l'utilisateur
    */
   static async create(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
+      
       const {
         code,
         label,
@@ -93,6 +109,7 @@ export class ProductController {
         taxPercent,
         stockQty,
         active,
+        clinicId: clinicReq.clinicId, // ✅ AJOUTER - Assignation automatique
       });
 
       res.status(201).json({
@@ -117,11 +134,19 @@ export class ProductController {
   /**
    * PUT /api/products/:id
    * Met à jour un produit
+   * ✅ CORRIGÉ: Vérifie que le produit appartient à la clinique avant modification
    */
   static async update(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
       const updateData = req.body;
+
+      // ✅ Vérifier d'abord que le produit existe et appartient à la clinique
+      await ProductService.getProductById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       const product = await ProductService.updateProduct(id, updateData);
 
@@ -131,7 +156,8 @@ export class ProductController {
         data: product,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvé') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,
@@ -144,10 +170,18 @@ export class ProductController {
   /**
    * DELETE /api/products/:id
    * Supprime un produit (soft delete)
+   * ✅ CORRIGÉ: Vérifie que le produit appartient à la clinique avant suppression
    */
   static async delete(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
+
+      // ✅ Vérifier d'abord que le produit existe et appartient à la clinique
+      await ProductService.getProductById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       await ProductService.deleteProduct(id);
 
@@ -156,7 +190,8 @@ export class ProductController {
         message: 'Produit supprimé avec succès',
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvé') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,

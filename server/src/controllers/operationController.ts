@@ -1,17 +1,24 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 import OperationService from '../services/operationService';
 
 export class OperationController {
   /**
    * GET /api/operations
    * Liste les opérations avec filtres
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async list(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { patientId, month, status } = req.query;
 
-      const filters: any = {};
+      const filters: any = {
+        clinicId: clinicReq.clinicId,        // ✅ AJOUTER
+        isSuperAdmin: clinicReq.isSuperAdmin, // ✅ AJOUTER
+      };
+      
       if (patientId) filters.patientId = patientId as string;
       if (status) filters.status = status as string;
       if (month) {
@@ -38,9 +45,11 @@ export class OperationController {
   /**
    * POST /api/operations
    * Crée une nouvelle opération
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique et assigne clinic_id
    */
   static async create(req: AuthRequest, res: Response): Promise<Response | void> {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { patientId, lines, createdBy } = req.body;
 
       // Validation
@@ -61,7 +70,8 @@ export class OperationController {
       const operation = await OperationService.createOperation({
         patientId,
         lines,
-        createdBy: createdBy || req.user?.id,
+        createdBy: createdBy || clinicReq.user?.id,
+        clinicId: clinicReq.clinicId, // ✅ AJOUTER - Vérification dans le service
       });
 
       return res.status(201).json({
@@ -71,6 +81,7 @@ export class OperationController {
       });
     } catch (error: any) {
       const statusCode = error.message.includes('non trouvé') ||
+                        error.message.includes('n\'appartient pas') ||
                         error.message.includes('requis')
         ? 400
         : 500;
@@ -86,19 +97,25 @@ export class OperationController {
   /**
    * GET /api/operations/:id
    * Récupère une opération par son ID
+   * ✅ CORRIGÉ: Vérifie que l'opération appartient à la clinique
    */
   static async getById(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
 
-      const operation = await OperationService.getOperationById(id);
+      const operation = await OperationService.getOperationById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       res.json({
         success: true,
         data: operation,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvée') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvée') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,

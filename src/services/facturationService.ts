@@ -447,6 +447,10 @@ export class FacturationService {
     patientId?: string;
     clinicId?: string;
   }): Promise<Facture[]> {
+    // ✅ CORRIGÉ: Récupérer clinicId automatiquement si non fourni
+    const { getMyClinicId } = await import('./clinicService');
+    const currentClinicId = filters?.clinicId || await getMyClinicId();
+    
     // Utiliser la vue factures_en_attente si on cherche des factures en attente
     // Sinon utiliser la table factures directement
     const useView = filters?.statut && ['en_attente', 'partiellement_payee'].includes(filters.statut);
@@ -462,11 +466,13 @@ export class FacturationService {
     if (filters?.patientId) {
       query = query.eq('patient_id', filters.patientId);
     }
-    if (filters?.clinicId) {
-      // Si on utilise la vue, on doit joindre avec patients pour filtrer par clinic_id
-      // Sinon, on peut filtrer directement si la table factures a clinic_id
-      // Pour l'instant, on filtre via patient_id si nécessaire
+    
+    // ✅ CORRIGÉ: Filtrer par clinic_id si disponible
+    if (currentClinicId) {
+      // Si la table factures a clinic_id directement
+      query = query.eq('clinic_id', currentClinicId);
     }
+    
     if (filters?.dateDebut) {
       query = query.gte('date_facture', filters.dateDebut);
     }

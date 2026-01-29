@@ -5,6 +5,7 @@ import SchemaCacheService from './schemaCacheService';
 
 export interface CreateOperationInput {
   patientId: string;
+  clinicId?: string; // ✅ AJOUTER - Pour vérification
   lines: Array<{
     productId: string;
     qty: number;
@@ -20,13 +21,19 @@ export class OperationService {
   static async createOperation(input: CreateOperationInput) {
     return await SchemaCacheService.executeWithRetry(async () => {
       return await prisma.$transaction(async (tx) => {
-        // Vérifier que le patient existe
+        // Vérifier que le patient existe ET récupérer son clinic_id
         const patient = await tx.patient.findUnique({
           where: { id: input.patientId },
+          select: { id: true, clinicId: true }, // ✅ Récupérer clinic_id
         });
 
         if (!patient) {
           throw new Error('Patient non trouvé');
+        }
+
+        // ✅ Vérifier que le clinic_id du patient correspond
+        if (input.clinicId && patient.clinicId !== input.clinicId) {
+          throw new Error('Le patient n\'appartient pas à cette clinique');
         }
 
         // Récupérer les produits
@@ -55,11 +62,12 @@ export class OperationService {
           };
         });
 
-        // Créer l'opération
+        // Créer l'opération avec clinic_id
         const operation = await tx.operation.create({
           data: {
             reference,
             patientId: input.patientId,
+            clinicId: patient.clinicId, // ✅ AJOUTER - Depuis le patient
             status: 'EN_ATTENTE',
             createdBy: input.createdBy || null,
             lines: {
@@ -108,7 +116,7 @@ export class OperationService {
       });
 
       if (!operation) {
-        throw new Error('Opération non trouvée');
+        throw new Error('Opération non trouvée ou accès non autorisé');
       }
 
       return operation;
@@ -117,8 +125,11 @@ export class OperationService {
 
   /**
    * Liste les opérations avec filtres
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async listOperations(filters: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
     patientId?: string;
     status?: string;
     startDate?: Date;
@@ -126,6 +137,11 @@ export class OperationService {
   }) {
     return await SchemaCacheService.executeWithRetry(async () => {
       const where: any = {};
+
+      // ✅ FILTRER PAR clinic_id SAUF si super admin
+      if (!filters.isSuperAdmin && filters.clinicId) {
+        where.clinicId = filters.clinicId;
+      }
 
       if (filters.patientId) {
         where.patientId = filters.patientId;

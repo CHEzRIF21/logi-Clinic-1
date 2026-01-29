@@ -1,13 +1,17 @@
 import { Request, Response } from 'express';
 import PatientService from '../services/patientService';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 
 export class PatientController {
   /**
    * GET /api/patients
    * Recherche intelligente de patients
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async search(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
+      
       const {
         search,
         page,
@@ -17,6 +21,8 @@ export class PatientController {
       } = req.query;
 
       const result = await PatientService.searchPatients({
+        clinicId: clinicReq.clinicId,        // ✅ AJOUTER
+        isSuperAdmin: clinicReq.isSuperAdmin, // ✅ AJOUTER
         search: search as string,
         page: page ? parseInt(page as string) : undefined,
         limit: limit ? parseInt(limit as string) : undefined,
@@ -41,13 +47,17 @@ export class PatientController {
   /**
    * GET /api/patients/:id
    * Récupère un patient avec son historique
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique de l'utilisateur
    */
   static async getById(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
       const { startDate, endDate, status } = req.query;
 
       const patient = await PatientService.getPatientById(id, {
+        clinicId: clinicReq.clinicId,        // ✅ AJOUTER
+        isSuperAdmin: clinicReq.isSuperAdmin, // ✅ AJOUTER
         startDate: startDate ? new Date(startDate as string) : undefined,
         endDate: endDate ? new Date(endDate as string) : undefined,
         status: status as string,
@@ -58,7 +68,8 @@ export class PatientController {
         data: patient,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvé') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,
@@ -71,9 +82,12 @@ export class PatientController {
   /**
    * POST /api/patients
    * Crée un nouveau patient
+   * ✅ CORRIGÉ: Assigne automatiquement le clinic_id de l'utilisateur
    */
   static async create(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
+      
       const {
         firstName,
         lastName,
@@ -101,6 +115,7 @@ export class PatientController {
         address,
         assuranceId,
         ifu,
+        clinicId: clinicReq.clinicId, // ✅ AJOUTER - Assignation automatique
       });
 
       res.status(201).json({
@@ -120,15 +135,23 @@ export class PatientController {
   /**
    * PUT /api/patients/:id
    * Met à jour un patient
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique avant modification
    */
   static async update(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
       const updateData = req.body;
 
       if (updateData.dob) {
         updateData.dob = new Date(updateData.dob);
       }
+
+      // ✅ Vérifier d'abord que le patient existe et appartient à la clinique
+      await PatientService.getPatientById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       const patient = await PatientService.updatePatient(id, updateData);
 
@@ -138,7 +161,8 @@ export class PatientController {
         data: patient,
       });
     } catch (error: any) {
-      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      const statusCode = error.message.includes('non trouvé') || 
+                        error.message.includes('non autorisé') ? 404 : 500;
 
       res.status(statusCode).json({
         success: false,
@@ -151,10 +175,18 @@ export class PatientController {
   /**
    * DELETE /api/patients/:id
    * Supprime un patient
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique avant suppression
    */
   static async delete(req: Request, res: Response) {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const { id } = req.params;
+
+      // ✅ Vérifier d'abord que le patient existe et appartient à la clinique
+      await PatientService.getPatientById(id, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       await PatientService.deletePatient(id);
 
@@ -164,6 +196,7 @@ export class PatientController {
       });
     } catch (error: any) {
       const statusCode = error.message.includes('non trouvé') ||
+                        error.message.includes('non autorisé') ||
                         error.message.includes('opérations') ||
                         error.message.includes('factures')
         ? 400

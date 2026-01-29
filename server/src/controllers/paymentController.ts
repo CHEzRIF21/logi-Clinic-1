@@ -1,15 +1,18 @@
 import { Request, Response } from 'express';
 import PaymentService from '../services/paymentService';
 import { AuthRequest } from '../middleware/auth';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 import { supabaseAdmin } from '../config/supabase';
 
 export class PaymentController {
   /**
    * POST /api/invoices/:id/payments
    * Ajoute un paiement à une facture
+   * ✅ CORRIGÉ: Vérifie que la facture appartient à la clinique
    */
   static async create(req: AuthRequest, res: Response): Promise<Response> {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const invoiceId = req.params.invoiceId || req.params.id;
       const { amount, method, reference, createdBy } = req.body;
 
@@ -61,7 +64,8 @@ export class PaymentController {
         amount,
         method,
         reference,
-        createdBy: createdBy || req.user?.id,
+        createdBy: createdBy || clinicReq.user?.id,
+        clinicId: clinicReq.clinicId, // ✅ AJOUTER - Vérification dans le service
       });
 
       // Mettre à jour le statut de paiement de la consultation si la facture est liée
@@ -122,12 +126,17 @@ export class PaymentController {
   /**
    * GET /api/invoices/:id/payments
    * Liste les paiements d'une facture
+   * ✅ CORRIGÉ: Vérifie que la facture appartient à la clinique
    */
   static async listByInvoice(req: Request, res: Response): Promise<Response> {
     try {
+      const clinicReq = req as ClinicContextRequest;
       const invoiceId = req.params.invoiceId || req.params.id;
 
-      const payments = await PaymentService.getPaymentsByInvoice(invoiceId);
+      const payments = await PaymentService.getPaymentsByInvoice(invoiceId, {
+        clinicId: clinicReq.clinicId,
+        isSuperAdmin: clinicReq.isSuperAdmin,
+      });
 
       return res.json({
         success: true,

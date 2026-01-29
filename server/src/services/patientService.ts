@@ -18,14 +18,16 @@ export interface UpdatePatientInput extends Partial<CreatePatientInput> {}
 export class PatientService {
   /**
    * Crée un nouveau patient
+   * ✅ CORRIGÉ: Assigne automatiquement clinic_id
    */
-  static async createPatient(input: CreatePatientInput) {
+  static async createPatient(input: CreatePatientInput & { clinicId?: string }) {
     return await SchemaCacheService.executeWithRetry(async () => {
       const age = differenceInYears(new Date(), input.dob);
 
       const patient = await prisma.patient.create({
         data: {
           ...input,
+          clinicId: input.clinicId, // ✅ AJOUTER
           age,
           phones: input.phones || [],
         },
@@ -80,8 +82,11 @@ export class PatientService {
 
   /**
    * Récupère un patient par son ID avec historique
+   * ✅ CORRIGÉ: Vérifie que le patient appartient à la clinique
    */
   static async getPatientById(id: string, filters?: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
     startDate?: Date;
     endDate?: Date;
     status?: string;
@@ -99,8 +104,15 @@ export class PatientService {
         where.status = filters.status;
       }
 
-      const patient = await prisma.patient.findUnique({
-        where: { id },
+      const patientWhere: any = { id };
+      
+      // ✅ VÉRIFIER clinic_id SAUF si super admin
+      if (!filters?.isSuperAdmin && filters?.clinicId) {
+        patientWhere.clinicId = filters.clinicId;
+      }
+
+      const patient = await prisma.patient.findFirst({
+        where: patientWhere, // ✅ Utiliser findFirst avec where au lieu de findUnique
         include: {
           assurance: true,
           operations: {
@@ -140,7 +152,7 @@ export class PatientService {
       });
 
       if (!patient) {
-        throw new Error('Patient non trouvé');
+        throw new Error('Patient non trouvé ou accès non autorisé');
       }
 
       return patient;
@@ -149,8 +161,11 @@ export class PatientService {
 
   /**
    * Recherche intelligente de patients
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async searchPatients(params: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
     search?: string;
     page?: number;
     limit?: number;
@@ -163,6 +178,11 @@ export class PatientService {
       const skip = (page - 1) * limit;
 
       const where: any = {};
+
+      // ✅ FILTRER PAR clinic_id SAUF si super admin
+      if (!params.isSuperAdmin && params.clinicId) {
+        where.clinicId = params.clinicId;
+      }
 
       if (params.search) {
         const searchLower = params.search.toLowerCase();

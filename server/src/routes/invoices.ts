@@ -1,14 +1,52 @@
 import { Router } from 'express';
 import InvoiceController from '../controllers/invoiceController';
+import { authenticateToken } from '../middleware/auth';
+import { requireClinicContext } from '../middleware/clinicContext';
 
 const router = Router();
 
-router.get('/', InvoiceController.list);
-router.post('/', InvoiceController.create);
-router.get('/:id', InvoiceController.getById);
-router.get('/:id/pdf', InvoiceController.getPDF);
-router.post('/:id/normalize', InvoiceController.normalize);
-router.post('/:id/cancel', InvoiceController.cancel);
+// ✅ TOUTES les routes nécessitent authentification ET contexte de clinique
+router.get(
+  '/',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.list
+);
+
+router.post(
+  '/',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.create
+);
+
+router.get(
+  '/:id',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.getById
+);
+
+router.get(
+  '/:id/pdf',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.getPDF
+);
+
+router.post(
+  '/:id/normalize',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.normalize
+);
+
+router.post(
+  '/:id/cancel',
+  authenticateToken,
+  requireClinicContext,
+  InvoiceController.cancel
+);
 
 export default router;
 

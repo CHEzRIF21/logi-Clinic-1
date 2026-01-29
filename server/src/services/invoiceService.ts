@@ -7,6 +7,7 @@ import AuditService from './auditService';
 
 export interface CreateInvoiceInput {
   patientId: string;
+  clinicId?: string; // ✅ AJOUTER - Pour vérification
   lines: Array<{
     productId: string;
     qty: number;
@@ -30,13 +31,19 @@ export class InvoiceService {
   static async createInvoice(input: CreateInvoiceInput) {
     return await SchemaCacheService.executeWithRetry(async () => {
       return await prisma.$transaction(async (tx) => {
-        // Vérifier que le patient existe
+        // Vérifier que le patient existe ET récupérer son clinic_id
         const patient = await tx.patient.findUnique({
           where: { id: input.patientId },
+          select: { id: true, clinicId: true }, // ✅ Récupérer clinic_id
         });
 
         if (!patient) {
           throw new Error('Patient non trouvé');
+        }
+
+        // ✅ Vérifier que le clinic_id du patient correspond
+        if (input.clinicId && patient.clinicId !== input.clinicId) {
+          throw new Error('Le patient n\'appartient pas à cette clinique');
         }
 
         // Récupérer les produits et vérifier les stocks
@@ -99,11 +106,12 @@ export class InvoiceService {
         // Générer le numéro de facture
         const invoiceNumber = generateInvoiceNumber();
 
-        // Créer la facture
+        // Créer la facture avec clinic_id
         const invoice = await tx.invoice.create({
           data: {
             number: invoiceNumber,
             patientId: input.patientId,
+            clinicId: patient.clinicId, // ✅ AJOUTER - Depuis le patient
             dateEmission: new Date(),
             totalHT: new Decimal(totals.totalHT),
             totalTax: new Decimal(totals.totalTax),
@@ -268,11 +276,22 @@ export class InvoiceService {
 
   /**
    * Récupère une facture par son ID
+   * ✅ CORRIGÉ: Vérifie que la facture appartient à la clinique
    */
-  static async getInvoiceById(id: string) {
+  static async getInvoiceById(id: string, filters?: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
+  }) {
     return await SchemaCacheService.executeWithRetry(async () => {
-      const invoice = await prisma.invoice.findUnique({
-        where: { id },
+      const where: any = { id };
+      
+      // ✅ VÉRIFIER clinic_id SAUF si super admin
+      if (!filters?.isSuperAdmin && filters?.clinicId) {
+        where.clinicId = filters.clinicId;
+      }
+
+      const invoice = await prisma.invoice.findFirst({
+        where, // ✅ Utiliser findFirst avec where au lieu de findUnique
         include: {
           patient: {
             include: {
@@ -307,7 +326,7 @@ export class InvoiceService {
       });
 
       if (!invoice) {
-        throw new Error('Facture non trouvée');
+        throw new Error('Facture non trouvée ou accès non autorisé');
       }
 
       return invoice;
@@ -316,8 +335,11 @@ export class InvoiceService {
 
   /**
    * Liste les factures avec filtres et pagination
+   * ✅ CORRIGÉ: Filtre par clinic_id pour isolation multi-tenant
    */
   static async listInvoices(filters: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
     startDate?: Date;
     endDate?: Date;
     status?: string;
@@ -331,6 +353,11 @@ export class InvoiceService {
       const skip = (page - 1) * limit;
 
       const where: any = {};
+
+      // ✅ FILTRER PAR clinic_id SAUF si super admin
+      if (!filters.isSuperAdmin && filters.clinicId) {
+        where.clinicId = filters.clinicId;
+      }
 
       if (filters.startDate || filters.endDate) {
         where.dateEmission = {};

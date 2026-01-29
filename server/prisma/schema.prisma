@@ -46,6 +46,8 @@ model User {
 
 model Patient {
   id          String     @id @default(uuid())
+  clinic      Clinic?    @relation(fields: [clinicId], references: [id])
+  clinicId    String?    // ✅ AJOUTÉ - Isolation multi-tenant
   firstName   String
   lastName    String
   sex         String
@@ -62,21 +64,30 @@ model Patient {
   operations Operation[]
   invoices   Invoice[]
   coupons    Coupon[]
+
+  @@index([clinicId])
 }
 
 model Assurance {
   id           String   @id @default(uuid())
+  clinic       Clinic?  @relation(fields: [clinicId], references: [id])
+  clinicId     String?  // ✅ AJOUTÉ - Isolation multi-tenant
   organisme    String
-  numeroPolice String   @unique
+  numeroPolice String
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   patients Patient[]
+
+  @@index([clinicId])
+  @@unique([numeroPolice, clinicId]) // ✅ Modifié - Unique par clinic
 }
 
 model Product {
   id              String   @id @default(uuid())
-  code            String?  @unique
+  clinic          Clinic?  @relation(fields: [clinicId], references: [id])
+  clinicId        String?  // ✅ AJOUTÉ - Isolation multi-tenant
+  code            String?
   label           String
   category        String // Consommable, Acte, Medicament, Chambre, Examen, Analyse
   subCategory     String?
@@ -109,6 +120,8 @@ model Product {
 
   @@index([category])
   @@index([code])
+  @@index([clinicId])
+  @@unique([code, clinicId]) // ✅ Modifié - Unique par clinic
 }
 
 model ProductPriceVersion {
@@ -127,6 +140,8 @@ model ProductPriceVersion {
 
 model Operation {
   id        String   @id @default(uuid())
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  clinicId  String?  // ✅ AJOUTÉ - Isolation multi-tenant
   reference String   @unique // OP-DD-MM-YYYY-XXX
   patient   Patient  @relation(fields: [patientId], references: [id])
   patientId String
@@ -141,6 +156,7 @@ model Operation {
   lines OperationLine[]
 
   @@index([patientId])
+  @@index([clinicId])
   @@index([date])
   @@index([status])
 }
@@ -160,6 +176,8 @@ model OperationLine {
 
 model Invoice {
   id            String   @id @default(uuid())
+  clinic        Clinic?  @relation(fields: [clinicId], references: [id])
+  clinicId      String?  // ✅ AJOUTÉ - Isolation multi-tenant
   number        String   @unique // FAC-CODE-DATE-XXX
   patient       Patient  @relation(fields: [patientId], references: [id])
   patientId     String
@@ -185,6 +203,7 @@ model Invoice {
   auditLogs    AuditLog[]
 
   @@index([patientId])
+  @@index([clinicId])
   @@index([dateEmission])
   @@index([status])
   @@index([createdAt])
@@ -208,6 +227,8 @@ model InvoiceLine {
 
 model Payment {
   id        String   @id @default(uuid())
+  clinic    Clinic?  @relation(fields: [clinicId], references: [id])
+  clinicId  String?  // ✅ AJOUTÉ - Isolation multi-tenant
   invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   invoiceId String
   amount    Decimal  @db.Decimal(12, 2)
@@ -217,6 +238,7 @@ model Payment {
   createdBy String?
 
   @@index([invoiceId])
+  @@index([clinicId])
   @@index([createdAt])
 }
 
@@ -497,6 +519,12 @@ model Clinic {
   pricing              ClinicPricing[]
   registrationRequests RegistrationRequest[]
   licenses             License[]
+  patients             Patient[]    // ✅ AJOUTÉ - Relation avec patients
+  invoices             Invoice[]    // ✅ AJOUTÉ - Relation avec invoices
+  operations           Operation[] // ✅ AJOUTÉ - Relation avec operations
+  products             Product[]   // ✅ AJOUTÉ - Relation avec products
+  assurances           Assurance[] // ✅ AJOUTÉ - Relation avec assurances
+  payments             Payment[]   // ✅ AJOUTÉ - Relation avec payments
 
   @@index([code])
   @@index([active])
