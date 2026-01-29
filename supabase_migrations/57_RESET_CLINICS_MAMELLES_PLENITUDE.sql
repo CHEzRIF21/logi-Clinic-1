@@ -68,6 +68,7 @@ BEGIN
   -- Supprimer les alertes stock (TAG ROUGE PHARMACIE) - PRIORITÉ
   RAISE NOTICE '📋 Suppression des alertes stock (tag rouge pharmacie)...';
   BEGIN
+    -- Supprimer les alertes liées aux deux cliniques ciblées
     IF v_clinic1_id IS NOT NULL THEN
       DELETE FROM alertes_stock 
       WHERE medicament_id IN (
@@ -84,6 +85,24 @@ BEGIN
       );
       GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
       RAISE NOTICE '   ✅ % alertes supprimées pour %', v_deleted_count, v_clinic2_code;
+    END IF;
+    
+    -- Supprimer toutes les alertes orphelines (liées à des médicaments sans clinic_id)
+    DELETE FROM alertes_stock 
+    WHERE medicament_id IN (
+      SELECT id FROM medicaments WHERE clinic_id IS NULL
+    );
+    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+    IF v_deleted_count > 0 THEN
+      RAISE NOTICE '   ✅ % alertes orphelines supprimées (médicaments sans clinic_id)', v_deleted_count;
+    END IF;
+    
+    -- Supprimer toutes les alertes liées à des médicaments qui n'existent plus
+    DELETE FROM alertes_stock 
+    WHERE medicament_id NOT IN (SELECT id FROM medicaments);
+    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+    IF v_deleted_count > 0 THEN
+      RAISE NOTICE '   ✅ % alertes supprimées (médicaments inexistants)', v_deleted_count;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE '   ⚠️  Erreur lors de la suppression des alertes stock: %', SQLERRM;
@@ -257,17 +276,37 @@ BEGIN
 
   -- Supprimer les médicaments
   RAISE NOTICE '📋 Suppression des médicaments...';
-  IF v_clinic1_id IS NOT NULL THEN
-    DELETE FROM medicaments WHERE clinic_id = v_clinic1_id;
+  BEGIN
+    IF v_clinic1_id IS NOT NULL THEN
+      DELETE FROM medicaments WHERE clinic_id = v_clinic1_id;
+      GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+      RAISE NOTICE '   ✅ % médicaments supprimés pour %', v_deleted_count, v_clinic1_code;
+    END IF;
+    
+    IF v_clinic2_id IS NOT NULL THEN
+      DELETE FROM medicaments WHERE clinic_id = v_clinic2_id;
+      GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+      RAISE NOTICE '   ✅ % médicaments supprimés pour %', v_deleted_count, v_clinic2_code;
+    END IF;
+    
+    -- Supprimer les médicaments orphelins (sans clinic_id) et leurs données associées
+    RAISE NOTICE '📋 Suppression des médicaments orphelins (sans clinic_id)...';
+    
+    -- D'abord supprimer les données enfants des médicaments orphelins
+    DELETE FROM alertes_stock WHERE medicament_id IN (SELECT id FROM medicaments WHERE clinic_id IS NULL);
+    DELETE FROM lots WHERE medicament_id IN (SELECT id FROM medicaments WHERE clinic_id IS NULL);
+    DELETE FROM mouvements_stock WHERE medicament_id IN (SELECT id FROM medicaments WHERE clinic_id IS NULL);
+    DELETE FROM pertes_retours WHERE medicament_id IN (SELECT id FROM medicaments WHERE clinic_id IS NULL);
+    
+    -- Ensuite supprimer les médicaments orphelins
+    DELETE FROM medicaments WHERE clinic_id IS NULL;
     GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
-    RAISE NOTICE '   ✅ % médicaments supprimés pour %', v_deleted_count, v_clinic1_code;
-  END IF;
-  
-  IF v_clinic2_id IS NOT NULL THEN
-    DELETE FROM medicaments WHERE clinic_id = v_clinic2_id;
-    GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
-    RAISE NOTICE '   ✅ % médicaments supprimés pour %', v_deleted_count, v_clinic2_code;
-  END IF;
+    IF v_deleted_count > 0 THEN
+      RAISE NOTICE '   ✅ % médicaments orphelins supprimés', v_deleted_count;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE '   ⚠️  Erreur lors de la suppression des médicaments: %', SQLERRM;
+  END;
 
   -- Supprimer les lignes de prescription
   RAISE NOTICE '📋 Suppression des lignes de prescription...';
