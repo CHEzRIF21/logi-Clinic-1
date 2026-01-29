@@ -886,7 +886,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           userData = userDataFromRPC[0];
         } else {
           // Fallback: Essayer directement via la table (peut être bloqué par RLS)
-          const { data: userDataDirect, error: errDirect } = await supabase
+          // Pour les Super Admins, chercher aussi ceux avec clinic_id = NULL
+          let userDataDirect = null;
+          let errDirect = null;
+          
+          // D'abord essayer avec clinic_id
+          const { data: userDataWithClinic, error: errWithClinic } = await supabase
             .from('users')
             .select(`
               id,
@@ -904,6 +909,35 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             .eq('email', email)
             .eq('clinic_id', clinic.id)
             .maybeSingle();
+          
+          // Si pas trouvé, essayer pour Super Admin (clinic_id = NULL)
+          if (!userDataWithClinic && !errWithClinic) {
+            const { data: userDataSuperAdmin, error: errSuperAdmin } = await supabase
+              .from('users')
+              .select(`
+                id,
+                auth_user_id,
+                nom,
+                prenom,
+                email,
+                role,
+                status,
+                clinic_id,
+                specialite,
+                actif,
+                password_hash
+              `)
+              .eq('email', email)
+              .is('clinic_id', null)
+              .eq('role', 'SUPER_ADMIN')
+              .maybeSingle();
+            
+            userDataDirect = userDataSuperAdmin;
+            errDirect = errSuperAdmin;
+          } else {
+            userDataDirect = userDataWithClinic;
+            errDirect = errWithClinic;
+          }
           
           userData = userDataDirect;
           err = errDirect;

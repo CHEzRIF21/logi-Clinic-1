@@ -65,6 +65,41 @@ Le Super Admin a les privilèges suivants :
 
 ---
 
+## ⚠️ PROBLÈME DE CONNEXION ET SOLUTION
+
+### 🔴 Problème détecté
+
+L'utilisateur existe dans Supabase Auth, mais le mot de passe dans Supabase Auth ne correspond pas au mot de passe configuré. Cela cause l'erreur : `❌ Supabase Auth: Identifiants invalides (400)`
+
+### ✅ Solution : Mettre à jour le mot de passe dans Supabase Auth
+
+**Option 1 : Via le Dashboard Supabase (Recommandé)**
+
+1. Allez sur **https://supabase.com/dashboard/project/bnfgemmlokvetmohiqch**
+2. Connectez-vous avec votre compte Supabase
+3. Allez dans **Authentication** > **Users**
+4. Recherchez l'utilisateur avec l'email `arafathimorou@gmail.com`
+5. Cliquez sur l'utilisateur pour ouvrir les détails
+6. Cliquez sur **Reset Password** ou **Update Password**
+7. Entrez le nouveau mot de passe : `SuperAdmin2026!@#`
+8. Confirmez la modification
+
+**Option 2 : Via l'API REST**
+
+```bash
+curl -X PUT 'https://bnfgemmlokvetmohiqch.supabase.co/auth/v1/admin/users/aae77bb9-a10a-4783-8042-90664f3b9557' \
+  -H "apikey: YOUR_SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer YOUR_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "SuperAdmin2026!@#"}'
+```
+
+**⚠️ Remplacez `YOUR_SERVICE_ROLE_KEY` par votre clé service role Supabase.**
+
+Voir le guide complet : `GUIDE_MISE_A_JOUR_MOT_DE_PASSE_SUPER_ADMIN.md`
+
+---
+
 ## ⚠️ NOTES IMPORTANTES
 
 1. **Sécurité du mot de passe**
@@ -73,8 +108,8 @@ Le Super Admin a les privilèges suivants :
    - Utilisez un mot de passe fort et unique
 
 2. **Connexion**
-   - Le Super Admin peut se connecter sans code clinique
-   - Si le système demande un code clinique, laissez-le vide ou utilisez n'importe quel code (le système reconnaîtra le Super Admin)
+   - Le Super Admin peut se connecter avec n'importe quel code clinique (ex: `CAMPUS-001`)
+   - Le système reconnaîtra automatiquement le Super Admin et lui donnera accès à toutes les cliniques
 
 3. **Accès global**
    - Le Super Admin a accès à **TOUTES** les cliniques
@@ -97,6 +132,9 @@ La configuration a été vérifiée et confirmée :
 ✅ `clinic_id` est `NULL` (accès à toutes les cliniques)
 ✅ Statut `ACTIVE` et `actif = true`
 ✅ `auth_user_id` correctement lié : `aae77bb9-a10a-4783-8042-90664f3b9557`
+✅ Utilisateur existe dans Supabase Auth (auth.users)
+
+⚠️ **ACTION REQUISE** : Mettre à jour le mot de passe dans Supabase Auth (voir section "Problème de connexion" ci-dessus)
 
 ---
 
