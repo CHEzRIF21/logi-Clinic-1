@@ -621,12 +621,11 @@ export class FacturationService {
       .select('numero_paiement')
       .like('numero_paiement', `PAY-${annee}-%`)
       .order('numero_paiement', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
     if (clinicId) {
       dernierQuery = dernierQuery.eq('clinic_id', clinicId);
     }
-    const { data: dernierPaiement } = await dernierQuery;
+    const { data: dernierPaiement } = await dernierQuery.single();
     
     let numeroSeq = 1;
     if (dernierPaiement) {

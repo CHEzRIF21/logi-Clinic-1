@@ -399,10 +399,9 @@ export const ConsultationBillingService = {
         .select('numero_facture')
         .like('numero_facture', `FAC-${annee}-%`)
         .order('numero_facture', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
       if (clinicId) lastFactureQuery = lastFactureQuery.eq('clinic_id', clinicId);
-      const { data: lastFacture } = await lastFactureQuery;
+      const { data: lastFacture } = await lastFactureQuery.single();
 
       let numeroSeq = 1;
       if (lastFacture) {
