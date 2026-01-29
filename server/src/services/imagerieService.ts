@@ -98,13 +98,13 @@ export class ImagerieService {
   }
 
   /**
-   * Récupère une demande par ID
+   * Récupère une demande par ID avec contrôle de scope clinique (optionnel)
    */
-  static async getDemandeById(id: string) {
+  static async getDemandeById(id: string, clinicId?: string) {
     const client = this.getClient();
     if (!client) throw new Error('Supabase non configuré');
 
-    const { data, error } = await client
+    let query = client
       .from('imaging_requests')
       .select(`
         *,
@@ -112,8 +112,12 @@ export class ImagerieService {
         medecin:users!imaging_requests_medecin_id_fkey(id, nom, prenom, specialite),
         examens:imagerie_examens(*)
       `)
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
+    const { data, error } = await query.single();
 
     if (error) throw new Error(error.message);
     if (!data) throw new Error('Demande non trouvée');
@@ -154,9 +158,9 @@ export class ImagerieService {
   }
 
   /**
-   * Met à jour le statut d'une demande
+   * Met à jour le statut d'une demande avec contrôle de scope clinique (optionnel)
    */
-  static async updateDemandeStatus(id: string, status: string, notes?: string) {
+  static async updateDemandeStatus(id: string, status: string, notes?: string, clinicId?: string) {
     const client = this.getClient();
     if (!client) throw new Error('Supabase non configuré');
 
@@ -175,19 +179,21 @@ export class ImagerieService {
       updateData.date_interpretation = new Date().toISOString();
     }
 
-    const { data, error } = await client
+    let updateQuery = client
       .from('imaging_requests')
       .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+      .eq('id', id);
+    if (clinicId) {
+      updateQuery = updateQuery.eq('clinic_id', clinicId);
+    }
+    const { data, error } = await updateQuery.select().single();
 
     if (error) throw new Error(error.message);
     return data;
   }
 
   /**
-   * Récupère les examens
+   * Récupère les examens avec filtre clinic_id appliqué via la demande parente
    */
   static async getExamens(filters: {
     demande_id?: string;
@@ -196,6 +202,37 @@ export class ImagerieService {
   }) {
     const client = this.getClient();
     if (!client) throw new Error('Supabase non configuré');
+
+    if (filters.clinic_id) {
+      const { data: demandes, error: demandesError } = await client
+        .from('imaging_requests')
+        .select('id')
+        .eq('clinic_id', filters.clinic_id);
+      if (demandesError) throw new Error(demandesError.message);
+      const demandeIds = (demandes || []).map((d: { id: string }) => d.id);
+      if (demandeIds.length === 0) {
+        return [];
+      }
+      let query = client
+        .from('imagerie_examens')
+        .select(`
+          *,
+          demande:imaging_requests(
+            id, numero, patient_id,
+            patient:patients(id, nom, prenoms)
+          )
+        `)
+        .in('demande_id', demandeIds);
+      if (filters.demande_id) {
+        query = query.eq('demande_id', filters.demande_id);
+      }
+      if (filters.status) {
+        query = query.eq('status', filters.status);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
 
     let query = client
       .from('imagerie_examens')
@@ -221,9 +258,9 @@ export class ImagerieService {
   }
 
   /**
-   * Récupère un examen par ID
+   * Récupère un examen par ID avec contrôle de scope clinique via la demande (optionnel)
    */
-  static async getExamenById(id: string) {
+  static async getExamenById(id: string, clinicId?: string) {
     const client = this.getClient();
     if (!client) throw new Error('Supabase non configuré');
 
@@ -232,7 +269,7 @@ export class ImagerieService {
       .select(`
         *,
         demande:imaging_requests(
-          id, numero, patient_id,
+          id, numero, patient_id, clinic_id,
           patient:patients(id, nom, prenoms)
         ),
         images:imagerie_images(*),
@@ -242,6 +279,11 @@ export class ImagerieService {
       .single();
 
     if (error) throw new Error(error.message);
+    if (!data) return data;
+
+    if (clinicId && data.demande && (data.demande as { clinic_id?: string }).clinic_id !== clinicId) {
+      throw new Error('Examen non trouvé');
+    }
     return data;
   }
 

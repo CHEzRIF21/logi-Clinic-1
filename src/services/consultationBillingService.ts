@@ -26,6 +26,7 @@ export const ConsultationBillingService = {
   async buildBillingSummary(consultationId: string): Promise<BillingSummary> {
     const lines: BillingSummaryLine[] = [];
     const warnings: string[] = [];
+    const clinicId = await getMyClinicId();
 
     // Récupérer la consultation
     const { data: consultation, error: consultError } = await supabase
@@ -108,12 +109,14 @@ export const ConsultationBillingService = {
       console.warn('Erreur récupération labo:', e);
     }
 
-    // 4. Récupérer les demandes d'imagerie
+    // 4. Récupérer les demandes d'imagerie (scope clinique)
     try {
-      const { data: imagingRequests } = await supabase
+      let imagingQuery = supabase
         .from('imaging_requests')
         .select('id, type_examen, montant')
         .eq('consultation_id', consultationId);
+      if (clinicId) imagingQuery = imagingQuery.eq('clinic_id', clinicId);
+      const { data: imagingRequests } = await imagingQuery;
 
       if (imagingRequests) {
         for (const img of imagingRequests) {
@@ -149,11 +152,12 @@ export const ConsultationBillingService = {
     const clinicId = await getMyClinicId();
 
     // Vérifier si une facture existe déjà
-    const { data: existingFacture } = await supabase
+    let existingFactureQuery = supabase
       .from('factures')
       .select('id')
-      .eq('consultation_id', consultationId)
-      .maybeSingle();
+      .eq('consultation_id', consultationId);
+    if (clinicId) existingFactureQuery = existingFactureQuery.eq('clinic_id', clinicId);
+    const { data: existingFacture } = await existingFactureQuery.maybeSingle();
 
     if (existingFacture) {
       return { factureId: existingFacture.id };
@@ -241,18 +245,20 @@ export const ConsultationBillingService = {
 
       // Vérifier que la facture créée a bien le statut 'en_attente'
       if (data) {
-        const { data: facture } = await supabase
+        let factureQuery = supabase
           .from('factures')
           .select('id, statut')
-          .eq('id', data)
-          .single();
+          .eq('id', data);
+        if (clinicId) factureQuery = factureQuery.eq('clinic_id', clinicId);
+        const { data: facture } = await factureQuery.single();
 
         if (facture && facture.statut !== 'en_attente') {
-          // Forcer le statut à 'en_attente' si ce n'est pas le cas
-          await supabase
+          let updateQuery = supabase
             .from('factures')
             .update({ statut: 'en_attente' })
             .eq('id', data);
+          if (clinicId) updateQuery = updateQuery.eq('clinic_id', clinicId);
+          await updateQuery;
         }
       }
 
@@ -386,15 +392,17 @@ export const ConsultationBillingService = {
         return null; // Pas de facture si montant nul
       }
 
-      // Générer le numéro de facture
+      // Générer le numéro de facture (scope clinique)
       const annee = new Date().getFullYear();
-      const { data: lastFacture } = await supabase
+      let lastFactureQuery = supabase
         .from('factures')
         .select('numero_facture')
         .like('numero_facture', `FAC-${annee}-%`)
         .order('numero_facture', { ascending: false })
         .limit(1)
         .single();
+      if (clinicId) lastFactureQuery = lastFactureQuery.eq('clinic_id', clinicId);
+      const { data: lastFacture } = await lastFactureQuery;
 
       let numeroSeq = 1;
       if (lastFacture) {
@@ -406,19 +414,20 @@ export const ConsultationBillingService = {
 
       const numeroFacture = `FAC-${annee}-${String(numeroSeq).padStart(6, '0')}`;
 
-      // Créer la facture complémentaire
+      // Créer la facture complémentaire (avec clinic_id pour isolation)
       const { data: facture, error: factureError } = await supabase
         .from('factures')
         .insert({
           numero_facture: numeroFacture,
           patient_id: patientId,
           consultation_id: consultationId,
+          clinic_id: clinicId,
           montant_total: montantTotal,
           montant_restant: montantTotal,
           montant_paye: 0,
           statut: 'en_attente',
           type_facture_detail: 'complementaire',
-          bloque_consultation: false, // Les factures complémentaires ne bloquent pas la consultation
+          bloque_consultation: false,
           service_origine: 'consultation',
           created_at: new Date().toISOString(),
         })
@@ -468,12 +477,15 @@ export const ConsultationBillingService = {
     statut: string;
   }>> {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      let query = supabase
         .from('factures')
         .select('id, numero_facture, montant_total, montant_restant, statut')
         .eq('consultation_id', consultationId)
         .eq('type_facture_detail', 'complementaire')
         .in('statut', ['en_attente', 'partiellement_payee']);
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      const { data, error } = await query;
 
       if (error) {
         console.error('Erreur récupération factures complémentaires:', error);

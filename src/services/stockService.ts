@@ -1,4 +1,5 @@
 import { supabase, MedicamentSupabase, LotSupabase, MouvementStockSupabase, TransfertSupabase, TransfertLigneSupabase, DispensationSupabase, DispensationLigneSupabase, AlerteStockSupabase, PerteRetourSupabase } from './stockSupabase';
+import { getMyClinicId } from './clinicService';
 
 // Service principal pour la gestion du stock
 export class StockService {
@@ -209,6 +210,9 @@ export class StockService {
         throw new Error('Stock insuffisant dans le magasin gros');
       }
 
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible de créer le transfert.');
+
       // Créer le transfert avec statut 'en_attente' pour attendre la validation du responsable gros
       const numero_transfert = `TRF-${Date.now()}`;
       const { data: transfert, error: transfertError } = await supabase
@@ -221,7 +225,8 @@ export class StockService {
           statut: 'en_attente', // En attente de validation par le responsable gros
           utilisateur_source_id: data.utilisateur_demandeur_id,
           motif: data.motif,
-          observations: data.observations
+          observations: data.observations,
+          clinic_id: clinicId,
         })
         .select()
         .single();
@@ -294,6 +299,9 @@ export class StockService {
         }
       }
 
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible de créer le transfert.');
+
       // Créer le transfert avec statut 'en_attente' pour attendre la validation du responsable gros
       const numero_transfert = `TRF-${Date.now()}`;
       const { data: transfert, error: transfertError } = await supabase
@@ -306,7 +314,8 @@ export class StockService {
           statut: 'en_attente', // En attente de validation par le responsable gros
           utilisateur_source_id: data.utilisateur_demandeur_id,
           motif: data.motif,
-          observations: data.observations
+          observations: data.observations,
+          clinic_id: clinicId,
         })
         .select()
         .single();
@@ -376,6 +385,9 @@ export class StockService {
         }
       }
 
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible de créer le transfert.');
+
       // Créer le transfert avec statut 'valide' directement (pas besoin de validation)
       const numero_transfert = `TRF-MAN-${Date.now()}`;
       const { data: transfert, error: transfertError } = await supabase
@@ -389,7 +401,8 @@ export class StockService {
           utilisateur_source_id: data.utilisateur_id,
           utilisateur_destination_id: data.utilisateur_id, // Même utilisateur pour transfert manuel
           motif: data.motif || 'Transfert manuel direct Gros → Détail',
-          observations: data.observations
+          observations: data.observations,
+          clinic_id: clinicId,
         })
         .select()
         .single();
@@ -550,8 +563,10 @@ export class StockService {
     observations?: string;
   }) {
     try {
-      // Récupérer le transfert et ses lignes
-      const { data: transfert, error: transfertError } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let transfertQuery = supabase
         .from('transferts')
         .select(`
           *,
@@ -562,8 +577,9 @@ export class StockService {
             )
           )
         `)
-        .eq('id', transfert_id)
-        .single();
+        .eq('id', transfert_id);
+      if (clinicId) transfertQuery = transfertQuery.eq('clinic_id', clinicId);
+      const { data: transfert, error: transfertError } = await transfertQuery.single();
 
       if (transfertError) throw transfertError;
       // Accepter les transferts en_attente OU en_cours pour la validation
@@ -755,12 +771,15 @@ export class StockService {
   // 3b. REFUS DE TRANSFERT → Le responsable gros refuse la demande
   static async refuserTransfert(transfert_id: string, utilisateur_id: string, motif_refus: string) {
     try {
-      // Récupérer le transfert
-      const { data: transfert, error: transfertError } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let transfertQuery = supabase
         .from('transferts')
         .select('*')
-        .eq('id', transfert_id)
-        .single();
+        .eq('id', transfert_id);
+      if (clinicId) transfertQuery = transfertQuery.eq('clinic_id', clinicId);
+      const { data: transfert, error: transfertError } = await transfertQuery.single();
 
       if (transfertError) throw transfertError;
       if (transfert.statut !== 'en_attente') {
@@ -1149,21 +1168,23 @@ export class StockService {
     message: string;
   }) {
     try {
-      // Vérifier si une alerte similaire existe déjà
-      const { data: alerteExistante, error: checkError } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible de créer l\'alerte.');
+
+      let alerteQuery = supabase
         .from('alertes_stock')
         .select('*')
         .eq('medicament_id', data.medicament_id)
         .eq('type', data.type)
-        .eq('statut', 'active')
-        .single();
+        .eq('statut', 'active');
+      if (clinicId) alerteQuery = alerteQuery.eq('clinic_id', clinicId);
+      const { data: alerteExistante, error: checkError } = await alerteQuery.maybeSingle();
 
-      if (checkError && checkError.code !== 'PGRST116') {
+      if (checkError) {
         throw checkError;
       }
 
       if (alerteExistante) {
-        // Mettre à jour l'alerte existante
         const { error: updateError } = await supabase
           .from('alertes_stock')
           .update({
@@ -1175,7 +1196,6 @@ export class StockService {
 
         if (updateError) throw updateError;
       } else {
-        // Créer une nouvelle alerte
         const { error: createError } = await supabase
           .from('alertes_stock')
           .insert({
@@ -1184,7 +1204,8 @@ export class StockService {
             niveau: data.niveau,
             message: data.message,
             date_creation: new Date().toISOString(),
-            statut: 'active'
+            statut: 'active',
+            clinic_id: clinicId,
           });
 
         if (createError) throw createError;
@@ -1200,38 +1221,40 @@ export class StockService {
   // Méthodes utilitaires
   static async getStockStats() {
     try {
-      const { data: medicaments, error: medicamentsError } = await supabase
-        .from('medicaments')
-        .select('*');
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
 
+      let medicamentsQuery = supabase.from('medicaments').select('*');
+      if (clinicId) medicamentsQuery = medicamentsQuery.eq('clinic_id', clinicId);
+      const { data: medicaments, error: medicamentsError } = await medicamentsQuery;
       if (medicamentsError) throw medicamentsError;
 
-      const { data: lots, error: lotsError } = await supabase
-        .from('lots')
-        .select('*');
-
+      const medicamentIds = (medicaments || []).map((m: { id: string }) => m.id);
+      let lotsQuery = supabase.from('lots').select('*');
+      if (medicamentIds.length > 0) {
+        lotsQuery = lotsQuery.in('medicament_id', medicamentIds);
+      } else {
+        lotsQuery = lotsQuery.eq('medicament_id', '00000000-0000-0000-0000-000000000000');
+      }
+      const { data: lots, error: lotsError } = await lotsQuery;
       if (lotsError) throw lotsError;
 
-      const { data: alertes, error: alertesError } = await supabase
-        .from('alertes_stock')
-        .select('*')
-        .eq('statut', 'active');
-
+      let alertesQuery = supabase.from('alertes_stock').select('*').eq('statut', 'active');
+      if (clinicId) alertesQuery = alertesQuery.eq('clinic_id', clinicId);
+      const { data: alertes, error: alertesError } = await alertesQuery;
       if (alertesError) throw alertesError;
 
-      const { data: transferts, error: transfertsError } = await supabase
-        .from('transferts')
-        .select('*')
-        .eq('statut', 'en_cours');
-
+      let transfertsQuery = supabase.from('transferts').select('*').eq('statut', 'en_cours');
+      if (clinicId) transfertsQuery = transfertsQuery.eq('clinic_id', clinicId);
+      const { data: transferts, error: transfertsError } = await transfertsQuery;
       if (transfertsError) throw transfertsError;
 
-      const totalMedicaments = medicaments.length;
-      const totalLots = lots.length;
-      const totalStock = lots.reduce((sum, lot) => sum + lot.quantite_disponible, 0);
-      const valeurStock = lots.reduce((sum, lot) => sum + (lot.quantite_disponible * lot.prix_achat), 0);
-      const totalAlertes = alertes.length;
-      const transfertsEnCours = transferts.length;
+      const totalMedicaments = (medicaments || []).length;
+      const totalLots = (lots || []).length;
+      const totalStock = (lots || []).reduce((sum: number, lot: { quantite_disponible: number }) => sum + lot.quantite_disponible, 0);
+      const valeurStock = (lots || []).reduce((sum: number, lot: { quantite_disponible: number; prix_achat?: number }) => sum + (lot.quantite_disponible * (lot.prix_achat || 0)), 0);
+      const totalAlertes = (alertes || []).length;
+      const transfertsEnCours = (transferts || []).length;
 
       return {
         total_medicaments: totalMedicaments,
@@ -1294,10 +1317,13 @@ export class StockService {
     }
   }
 
-  // Récupérer les transferts actifs (en_attente et en_cours)
+  // Récupérer les transferts actifs (en_attente et en_cours) scopés par clinique
   static async getTransfertsEnCours() {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('transferts')
         .select(`
           *,
@@ -1311,8 +1337,10 @@ export class StockService {
             )
           )
         `)
-        .in('statut', ['en_attente', 'en_cours']) // Inclure les demandes en attente ET en cours
+        .in('statut', ['en_attente', 'en_cours'])
         .order('date_transfert', { ascending: false });
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      const { data, error } = await query;
 
       if (error) throw error;
       return data;
@@ -1325,11 +1353,15 @@ export class StockService {
   // 3c. RÉCEPTION TRANSFERT → Accusé de réception côté Magasin Détail (sans re-déplacer le stock)
   static async receptionnerTransfert(transfert_id: string, utilisateur_reception_id: string, observations?: string) {
     try {
-      const { data: transfert, error: transfertError } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let transfertQuery = supabase
         .from('transferts')
         .select('*')
-        .eq('id', transfert_id)
-        .single();
+        .eq('id', transfert_id);
+      if (clinicId) transfertQuery = transfertQuery.eq('clinic_id', clinicId);
+      const { data: transfert, error: transfertError } = await transfertQuery.single();
 
       if (transfertError) throw transfertError;
       if (transfert.statut !== 'valide') {
@@ -1370,10 +1402,13 @@ export class StockService {
     }
   }
 
-  // Récupérer les transferts par statut spécifique
+  // Récupérer les transferts par statut spécifique (scopés par clinique)
   static async getTransfertsByStatut(statut: 'en_attente' | 'en_cours' | 'valide' | 'refuse' | 'annule' | 'recu') {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('transferts')
         .select(`
           *,
@@ -1389,6 +1424,8 @@ export class StockService {
         `)
         .eq('statut', statut)
         .order('date_transfert', { ascending: false });
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      const { data, error } = await query;
 
       if (error) throw error;
       return data;
@@ -1398,10 +1435,13 @@ export class StockService {
     }
   }
 
-  // Récupérer l'historique des transferts (validés, reçus, refusés, annulés)
+  // Récupérer l'historique des transferts (validés, reçus, refusés, annulés) scopés par clinique
   static async getTransfertsHistorique() {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('transferts')
         .select(`
           *,
@@ -1417,7 +1457,9 @@ export class StockService {
         `)
         .in('statut', ['valide', 'recu', 'refuse', 'annule'])
         .order('date_transfert', { ascending: false })
-        .limit(100); // Limiter l'historique aux 100 derniers
+        .limit(100);
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      const { data, error } = await query;
 
       if (error) throw error;
       return data;
@@ -1429,7 +1471,10 @@ export class StockService {
 
   static async getAlertesActives() {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('alertes_stock')
         .select(`
           id,
@@ -1453,6 +1498,8 @@ export class StockService {
         .eq('statut', 'active')
         .order('niveau', { ascending: false })
         .order('date_creation', { ascending: false });
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      const { data, error } = await query;
 
       if (error) throw error;
       return data;

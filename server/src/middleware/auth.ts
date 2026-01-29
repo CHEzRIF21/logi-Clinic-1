@@ -132,24 +132,9 @@ export const authenticateToken = async (
 export const requireAuth = authenticateToken;
 
 /**
- * Middleware pour vérifier que clinic_id est présent
- * À utiliser après authenticateToken pour les routes nécessitant un contexte de clinique
+ * Réexport du middleware de contexte clinique unique (refuse si clinic_id absent sauf SUPER_ADMIN, expose clinicId et isSuperAdmin)
  */
-export const requireClinicContext = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): void => {
-  if (!req.user?.clinic_id) {
-    res.status(400).json({
-      success: false,
-      message: 'Contexte de clinique manquant. Veuillez vous reconnecter.',
-      code: 'MISSING_CLINIC_CONTEXT',
-    });
-    return;
-  }
-  next();
-};
+export { requireClinicContext } from './clinicContext';
 
 /**
  * Middleware pour vérifier une permission spécifique

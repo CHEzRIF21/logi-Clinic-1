@@ -53,14 +53,16 @@ export class ComplementaryInvoiceService {
       service_origine: 'actes_complementaires',
     });
 
-    // Marquer la facture comme complémentaire
-    await supabase
+    // Marquer la facture comme complémentaire (scope clinique)
+    let updateQuery = supabase
       .from('factures')
-      .update({ 
+      .update({
         type_facture_detail: 'complementaire',
-        statut: 'en_attente' // Toujours en_attente, paiement à la Caisse
+        statut: 'en_attente'
       })
       .eq('id', facture.id);
+    if (clinicId) updateQuery = updateQuery.eq('clinic_id', clinicId);
+    await updateQuery;
 
     return facture.id;
   }
@@ -95,12 +97,14 @@ export class ComplementaryInvoiceService {
       throw error;
     }
 
-    // Mettre à jour le statut de la facture si elle était payée
+    const clinicId = await getMyClinicId();
     if (facture.statut === 'payee') {
-      await supabase
+      let updateQuery = supabase
         .from('factures')
         .update({ statut: 'en_attente' })
         .eq('id', factureId);
+      if (clinicId) updateQuery = updateQuery.eq('clinic_id', clinicId);
+      await updateQuery;
     }
   }
 
@@ -111,12 +115,15 @@ export class ComplementaryInvoiceService {
     hasUnpaid: boolean;
     factures: Array<{ id: string; montant_restant: number }>;
   }> {
-    const { data: factures, error } = await supabase
+    const clinicId = await getMyClinicId();
+    let query = supabase
       .from('factures')
       .select('id, montant_restant, statut')
       .eq('consultation_id', consultationId)
       .eq('type_facture_detail', 'complementaire')
       .in('statut', ['en_attente', 'partiellement_payee']);
+    if (clinicId) query = query.eq('clinic_id', clinicId);
+    const { data: factures, error } = await query;
 
     if (error) {
       throw error;

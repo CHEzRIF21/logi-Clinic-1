@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import crypto from 'crypto';
 import { emailService } from '../services/emailService';
 import { AuthRequest, authenticateToken } from '../middleware/auth';
+import { requireClinicContext, ClinicContextRequest } from '../middleware/clinicContext';
 // #region agent log
 import * as fs from 'fs';
 import * as path from 'path';
@@ -279,7 +280,7 @@ router.post('/register-request', async (req: Request, res: Response) => {
 });
 
 // GET /api/auth/registration-requests - Récupérer les demandes d'inscription (admin)
-router.get('/registration-requests', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.get('/registration-requests', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
   try {
     if (!supabase) {
       return res.status(500).json({
@@ -289,15 +290,15 @@ router.get('/registration-requests', authenticateToken, async (req: AuthRequest,
     }
 
     const { statut } = req.query;
-    
-    // Récupérer le clinic_id depuis le token JWT ou les headers
-    const clinicId = req.user?.clinic_id || req.headers['x-clinic-id'] as string;
-    const userRole = req.user?.role;
-    
+    const clinicReq = req as ClinicContextRequest;
+    const clinicId = clinicReq.clinicId;
+    const isSuperAdmin = clinicReq.isSuperAdmin;
+
     console.log('🔐 Utilisateur récupérant les demandes:', {
       userId: req.user?.id,
-      role: userRole,
-      clinicId: clinicId,
+      role: req.user?.role,
+      clinicId,
+      isSuperAdmin,
     });
 
     let query = supabase
@@ -305,8 +306,8 @@ router.get('/registration-requests', authenticateToken, async (req: AuthRequest,
       .select('*')
       .order('created_at', { ascending: false });
 
-    // Filtrer par clinic_id si l'utilisateur n'est pas SUPER_ADMIN
-    if (clinicId && userRole !== 'SUPER_ADMIN') {
+    // Filtrer par clinic_id sauf pour SUPER_ADMIN (contexte clinique imposé par middleware)
+    if (!isSuperAdmin && clinicId) {
       query = query.eq('clinic_id', clinicId);
       console.log('🔒 Filtrage par clinic_id:', clinicId);
     }
@@ -381,11 +382,12 @@ router.get('/registration-requests', authenticateToken, async (req: AuthRequest,
 });
 
 // POST /api/auth/registration-requests/:id/approve - Approuver une demande
-router.post('/registration-requests/:id/approve', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/registration-requests/:id/approve', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { role, permissions, notes } = req.body;
-    
+    const clinicReq = req as ClinicContextRequest;
+
     console.log('✅ Approbation demande ID:', id, 'par utilisateur:', req.user?.id);
 
     if (!supabase) {
@@ -406,6 +408,14 @@ router.post('/registration-requests/:id/approve', authenticateToken, async (req:
       return res.status(404).json({
         success: false,
         message: 'Demande non trouvée',
+      });
+    }
+
+    // Scope clinique : seul SUPER_ADMIN ou admin de la même clinique peut approuver
+    if (!clinicReq.isSuperAdmin && request.clinic_id !== clinicReq.clinicId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous ne pouvez approuver que les demandes de votre clinique.',
       });
     }
 
@@ -614,17 +624,47 @@ router.post('/registration-requests/:id/approve', authenticateToken, async (req:
 });
 
 // POST /api/auth/registration-requests/:id/reject - Rejeter une demande
-router.post('/registration-requests/:id/reject', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/registration-requests/:id/reject', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { raisonRejet, notes } = req.body;
-    
+    const clinicReq = req as ClinicContextRequest;
+
     console.log('❌ Rejet demande ID:', id, 'par utilisateur:', req.user?.id);
 
     if (!supabase) {
       return res.status(500).json({
         success: false,
         message: 'Service de base de données non disponible',
+      });
+    }
+
+    // Récupérer la demande pour vérifier le scope clinique
+    const { data: request, error: fetchError } = await supabase
+      .from('registration_requests')
+      .select('id, clinic_id, statut')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !request) {
+      return res.status(404).json({
+        success: false,
+        message: 'Demande non trouvée',
+      });
+    }
+
+    if (request.statut !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cette demande a déjà été traitée',
+      });
+    }
+
+    // Scope clinique : seul SUPER_ADMIN ou admin de la même clinique peut rejeter
+    if (!clinicReq.isSuperAdmin && request.clinic_id !== clinicReq.clinicId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous ne pouvez rejeter que les demandes de votre clinique.',
       });
     }
 

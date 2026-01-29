@@ -302,9 +302,17 @@ export class FacturationService {
       statut = 'en_attente';
     }
     
-    // Préparer les données de la facture
+    // Contexte clinique obligatoire pour l'écriture
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+    if (!clinicId) {
+      throw new Error('Contexte de clinique manquant. Impossible de créer la facture.');
+    }
+
+    // Préparer les données de la facture (avec clinic_id pour isolation multi-tenant)
     const factureData = {
       patient_id: formData.patient_id,
+      clinic_id: clinicId,
       date_facture: formData.date_facture || new Date().toISOString(),
       date_echeance: formData.date_echeance,
       montant_ht: montantHT - montantRemise,
@@ -400,28 +408,31 @@ export class FacturationService {
   }
   
   static async getFactureById(id: string): Promise<Facture> {
-    const { data: facture, error: factureError } = await supabase
-      .from('factures')
-      .select('*')
-      .eq('id', id)
-      .single();
-    
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let factureQuery = supabase.from('factures').select('*').eq('id', id);
+    if (clinicId) {
+      factureQuery = factureQuery.eq('clinic_id', clinicId);
+    }
+    const { data: facture, error: factureError } = await factureQuery.single();
     if (factureError) throw factureError;
-    
+    if (!facture) throw new Error('Facture non trouvée');
+
     // Récupérer les lignes
     const { data: lignes } = await supabase
       .from('lignes_facture')
       .select('*')
       .eq('facture_id', id)
       .order('ordre');
-    
-    // Récupérer les paiements
+
+    // Récupérer les paiements (scope clinique déjà garanti par la facture)
     const { data: paiements } = await supabase
       .from('paiements')
       .select('*')
       .eq('facture_id', id)
       .order('date_paiement', { ascending: false });
-    
+
     return {
       ...facture,
       lignes: lignes || [],
@@ -430,12 +441,18 @@ export class FacturationService {
   }
   
   static async getFacturesByPatient(patientId: string): Promise<Facture[]> {
-    const { data, error } = await supabase
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let query = supabase
       .from('factures')
       .select('*')
       .eq('patient_id', patientId)
       .order('date_facture', { ascending: false });
-    
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   }
@@ -501,7 +518,10 @@ export class FacturationService {
   }
   
   static async annulerFacture(id: string, motif?: string): Promise<void> {
-    const { error } = await supabase
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let updateQuery = supabase
       .from('factures')
       .update({
         statut: 'annulee',
@@ -509,7 +529,10 @@ export class FacturationService {
         updated_at: new Date().toISOString()
       })
       .eq('id', id);
-    
+    if (clinicId) {
+      updateQuery = updateQuery.eq('clinic_id', clinicId);
+    }
+    const { error } = await updateQuery;
     if (error) throw error;
   }
   
@@ -518,6 +541,12 @@ export class FacturationService {
   // ============================================
   
   static async enregistrerPaiement(paiement: Paiement, caissierId?: string): Promise<Paiement> {
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+    if (!clinicId) {
+      throw new Error('Contexte de clinique manquant. Impossible d\'enregistrer le paiement.');
+    }
+
     // Normaliser le mode de paiement pour s'assurer qu'il correspond aux valeurs autorisées
     const validModes: PaymentMethod[] = [
       'especes',
@@ -585,15 +614,19 @@ export class FacturationService {
     fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'facturationService.ts:568',message:'Mode paiement validé - avant insertion DB',data:{normalizedMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
     
-    // Générer le numéro de paiement
+    // Générer le numéro de paiement (scope clinique)
     const annee = new Date().getFullYear();
-    const { data: dernierPaiement } = await supabase
+    let dernierQuery = supabase
       .from('paiements')
       .select('numero_paiement')
       .like('numero_paiement', `PAY-${annee}-%`)
       .order('numero_paiement', { ascending: false })
       .limit(1)
       .single();
+    if (clinicId) {
+      dernierQuery = dernierQuery.eq('clinic_id', clinicId);
+    }
+    const { data: dernierPaiement } = await dernierQuery;
     
     let numeroSeq = 1;
     if (dernierPaiement) {
@@ -605,9 +638,10 @@ export class FacturationService {
     
     const numeroPaiement = `PAY-${annee}-${String(numeroSeq).padStart(6, '0')}`;
     
-    // Créer l'objet d'insertion en s'assurant que mode_paiement normalisé écrase celui de paiement
+    // Créer l'objet d'insertion (avec clinic_id pour isolation multi-tenant)
     const paiementToInsert = {
       ...paiement,
+      clinic_id: clinicId,
       mode_paiement: normalizedMode, // DOIT être après le spread pour écraser
       numero_paiement: numeroPaiement,
       caissier_id: caissierId || paiement.caissier_id,
@@ -665,12 +699,18 @@ export class FacturationService {
   }
   
   static async getPaiementsByFacture(factureId: string): Promise<Paiement[]> {
-    const { data, error } = await supabase
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let query = supabase
       .from('paiements')
       .select('*')
       .eq('facture_id', factureId)
       .order('date_paiement', { ascending: false });
-    
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   }
@@ -813,33 +853,41 @@ export class FacturationService {
   // ============================================
   
   static async getJournalCaisse(date: string, caissierId?: string): Promise<JournalCaisse | null> {
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
     let query = supabase
       .from('journal_caisse')
       .select('*')
       .eq('date_journal', date);
-    
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
     if (caissierId) {
       query = query.eq('caissier_id', caissierId);
     }
-    
     const { data, error } = await query.maybeSingle();
-    
     if (error) throw error;
     return data;
   }
   
   static async ouvrirJournalCaisse(date: string, caissierId: string, soldeOuverture: number): Promise<JournalCaisse> {
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+    if (!clinicId) {
+      throw new Error('Contexte de clinique manquant. Impossible d\'ouvrir le journal de caisse.');
+    }
     const { data, error } = await supabase
       .from('journal_caisse')
       .insert([{
         date_journal: date,
         caissier_id: caissierId,
+        clinic_id: clinicId,
         solde_ouverture: soldeOuverture,
         statut: 'ouvert'
       }])
       .select()
       .single();
-    
     if (error) throw error;
     return data;
   }
@@ -864,28 +912,33 @@ export class FacturationService {
   }
   
   static async getRapportJournalier(date: string): Promise<any> {
-    const { data: journal, error: journalError } = await supabase
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let journalQuery = supabase
       .from('journal_caisse')
       .select('*')
-      .eq('date_journal', date)
-      .maybeSingle();
-    
+      .eq('date_journal', date);
+    if (clinicId) journalQuery = journalQuery.eq('clinic_id', clinicId);
+    const { data: journal, error: journalError } = await journalQuery.maybeSingle();
     if (journalError) throw journalError;
-    
-    const { data: factures, error: facturesError } = await supabase
+
+    let facturesQuery = supabase
       .from('factures')
       .select('*')
       .gte('date_facture', `${date}T00:00:00`)
       .lt('date_facture', `${date}T23:59:59`);
-    
+    if (clinicId) facturesQuery = facturesQuery.eq('clinic_id', clinicId);
+    const { data: factures, error: facturesError } = await facturesQuery;
     if (facturesError) throw facturesError;
-    
-    const { data: paiements, error: paiementsError } = await supabase
+
+    let paiementsQuery = supabase
       .from('paiements')
       .select('*')
       .gte('date_paiement', `${date}T00:00:00`)
       .lt('date_paiement', `${date}T23:59:59`);
-    
+    if (clinicId) paiementsQuery = paiementsQuery.eq('clinic_id', clinicId);
+    const { data: paiements, error: paiementsError } = await paiementsQuery;
     if (paiementsError) throw paiementsError;
     
     return {
@@ -993,13 +1046,18 @@ export class FacturationService {
     numeroFacture?: string;
     clinicId?: string;
   }): Promise<Facture[]> {
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = filters?.clinicId || await getMyClinicId();
+
     let query = supabase
       .from('factures')
       .select('*')
       .eq('statut', 'payee')
       .lte('montant_restant', 0)
       .order('date_facture', { ascending: false });
-
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+    }
     if (filters?.dateDebut) {
       query = query.gte('date_facture', filters.dateDebut);
     }
@@ -1093,20 +1151,25 @@ export class FacturationService {
     dateDebut: string;
     dateFin: string;
   }): Promise<RapportFinancier> {
-    const { data: factures, error: facturesError } = await supabase
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
+    let facturesQuery = supabase
       .from('factures')
       .select('*')
       .gte('date_facture', periode.dateDebut)
       .lte('date_facture', periode.dateFin);
-
+    if (clinicId) facturesQuery = facturesQuery.eq('clinic_id', clinicId);
+    const { data: factures, error: facturesError } = await facturesQuery;
     if (facturesError) throw facturesError;
 
-    const { data: paiements, error: paiementsError } = await supabase
+    let paiementsQuery = supabase
       .from('paiements')
       .select('*')
       .gte('date_paiement', periode.dateDebut)
       .lte('date_paiement', periode.dateFin);
-
+    if (clinicId) paiementsQuery = paiementsQuery.eq('clinic_id', clinicId);
+    const { data: paiements, error: paiementsError } = await paiementsQuery;
     if (paiementsError) throw paiementsError;
 
     // Recettes par service
@@ -1250,11 +1313,12 @@ export class FacturationService {
 
   static async mettreAJourFactureDGI(factureId: string, configDGI: ConfigDGI): Promise<void> {
     const facture = await this.getFactureById(factureId);
-    
+    const { getMyClinicId } = await import('./clinicService');
+    const clinicId = await getMyClinicId();
+
     if (configDGI.actif) {
       const qrCode = await this.genererQRCodeFacture(facture, configDGI);
-      
-      const { error } = await supabase
+      let updateQuery = supabase
         .from('factures')
         .update({
           numero_fiscal: configDGI.numero_ifu,
@@ -1263,7 +1327,8 @@ export class FacturationService {
           updated_at: new Date().toISOString()
         })
         .eq('id', factureId);
-
+      if (clinicId) updateQuery = updateQuery.eq('clinic_id', clinicId);
+      const { error } = await updateQuery;
       if (error) throw error;
     }
   }

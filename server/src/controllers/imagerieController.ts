@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import ImagerieService from '../services/imagerieService';
 import { supabaseAdmin } from '../config/supabase';
+import { ClinicContextRequest } from '../middleware/clinicContext';
 
 export class ImagerieController {
   /**
@@ -53,12 +54,14 @@ export class ImagerieController {
 
   /**
    * GET /api/imagerie/requests/:id
-   * Récupère une demande par ID
+   * Récupère une demande par ID (scopée par clinique sauf SUPER_ADMIN)
    */
   static async getDemandeById(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const demande = await ImagerieService.getDemandeById(id);
+      const clinicReq = req as ClinicContextRequest;
+      const clinicId = clinicReq.isSuperAdmin ? undefined : clinicReq.clinicId;
+      const demande = await ImagerieService.getDemandeById(id, clinicId);
 
       res.json({
         success: true,
@@ -133,12 +136,14 @@ export class ImagerieController {
 
   /**
    * PUT /api/imagerie/requests/:id/status
-   * Met à jour le statut d'une demande
+   * Met à jour le statut d'une demande (scopée par clinique sauf SUPER_ADMIN)
    */
   static async updateDemandeStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const { status, notes } = req.body;
+      const clinicReq = req as ClinicContextRequest;
+      const clinicId = clinicReq.isSuperAdmin ? undefined : clinicReq.clinicId;
 
       if (!status) {
         return res.status(400).json({
@@ -147,7 +152,7 @@ export class ImagerieController {
         });
       }
 
-      const demande = await ImagerieService.updateDemandeStatus(id, status, notes);
+      const demande = await ImagerieService.updateDemandeStatus(id, status, notes, clinicId);
 
       res.json({
         success: true,
@@ -191,19 +196,22 @@ export class ImagerieController {
 
   /**
    * GET /api/imagerie/examens/:id
-   * Récupère un examen par ID
+   * Récupère un examen par ID (scopé par clinique via la demande, sauf SUPER_ADMIN)
    */
   static async getExamenById(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const examen = await ImagerieService.getExamenById(id);
+      const clinicReq = req as ClinicContextRequest;
+      const clinicId = clinicReq.isSuperAdmin ? undefined : clinicReq.clinicId;
+      const examen = await ImagerieService.getExamenById(id, clinicId);
 
       res.json({
         success: true,
         data: examen,
       });
     } catch (error: any) {
-      res.status(500).json({
+      const statusCode = error.message.includes('non trouvé') ? 404 : 500;
+      res.status(statusCode).json({
         success: false,
         message: error.message,
       });
