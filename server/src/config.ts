@@ -19,7 +19,8 @@ export const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL || '',
-  jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+  // NOTE: jwtSecret n'est plus utilisé - on utilise Supabase Auth maintenant
+  // jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-in-production', // OBSOLÈTE
   corsOrigin: parseCorsOrigins(),
   // Configuration Supabase
   supabase: {
