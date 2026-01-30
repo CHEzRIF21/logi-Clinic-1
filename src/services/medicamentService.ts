@@ -335,11 +335,6 @@ export class MedicamentService {
         throw medicamentsError;
       }
 
-      const clinicId = await getMyClinicId();
-      if (!clinicId) {
-        throw new Error('Contexte de clinique manquant');
-      }
-
       const { data: lots, error: lotsError } = await supabase
         .from('lots')
         .select('quantite_disponible, prix_achat, statut, date_expiration')
