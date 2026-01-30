@@ -33,7 +33,7 @@ export default function ResetPasswordPage() {
   // 🔐 Vérifier que la session est bien en mode recovery
   useEffect(() => {
     let mounted = true;
-    let authListener: { subscription: { unsubscribe: () => void } } | null = null;
+    let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
     const checkSession = async () => {
       try {
@@ -145,7 +145,7 @@ export default function ResetPasswordPage() {
     return () => {
       mounted = false;
       if (authListener) {
-        authListener.subscription.unsubscribe();
+        authListener.data.subscription.unsubscribe();
       }
     };
   }, []);

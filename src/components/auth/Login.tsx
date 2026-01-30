@@ -51,8 +51,6 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { User } from '../../types/auth';
 import { gsap } from 'gsap';
-import AccountRecoveryForm from './AccountRecoveryForm';
-import { CreateRecoveryRequestDto } from '../../types/accountRecovery';
 import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
 import ChangePasswordDialog from './ChangePasswordDialog';
@@ -132,8 +130,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     message: '',
   });
   const [contactSent, setContactSent] = useState(false);
-  const [contactTab, setContactTab] = useState<'contact' | 'recovery'>('contact');
-  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [showForgotPasswordDialog, setShowForgotPasswordDialog] = useState(false);
   const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login');
   
@@ -1232,25 +1228,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setContactSent(true);
     setContactForm({ name: '', email: '', message: '' });
     setTimeout(() => setContactSent(false), 5000);
-  };
-
-  const handleRecoverySubmit = async (data: CreateRecoveryRequestDto) => {
-    // En production, cela sera un appel API
-    try {
-      // Simulation d'appel API
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // NOTE: Appel API réel à implémenter lorsque le backend sera disponible
-      // const response = await fetch('/api/account-recovery/request', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(data),
-      // });
-      
-      console.log('Demande de récupération soumise:', data);
-    } catch (error) {
-      throw new Error('Erreur lors de l\'envoi de la demande de récupération');
-    }
   };
 
   // Fonction pour valider le code clinique en temps réel
@@ -2586,64 +2563,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       {/* Section Contact/Feedback */}
       <Box ref={contactRef} sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.paper' }}>
         <Container maxWidth="lg">
-          <Box sx={{ mb: 4 }}>
-            <Tabs
-              value={contactTab}
-              onChange={(e, newValue) => {
-                setContactTab(newValue);
-                setShowRecoveryForm(newValue === 'recovery');
-              }}
-              sx={{
-                borderBottom: 1,
-                borderColor: 'divider',
-                mb: 3,
-              }}
-            >
-              <Tab 
-                label="Contact général" 
-                value="contact"
-                icon={<Email />}
-                iconPosition="start"
-              />
-              <Tab 
-                label="Récupération de compte" 
-                value="recovery"
-                icon={<Lock />}
-                iconPosition="start"
-              />
-            </Tabs>
-          </Box>
           <Grid container spacing={6}>
-            <Grid item xs={12} md={contactTab === 'recovery' ? 12 : 6}>
-              {contactTab === 'contact' ? (
-                <>
-                  <Typography 
-                    variant="h3" 
-                    sx={{ 
-                      fontWeight: 700, 
-                      mb: 3, 
-                      fontSize: { xs: '2rem', md: '3rem' },
-                      color: theme.palette.mode === 'dark' ? '#ffffff' : theme.palette.text.primary,
-                      opacity: 1,
-                    }}
-                  >
-                    Contactez-nous
-                  </Typography>
-                </>
-              ) : (
-                <Typography 
-                  variant="h3" 
-                  sx={{ 
-                    fontWeight: 700, 
-                    mb: 3, 
-                    fontSize: { xs: '2rem', md: '3rem' },
-                    color: theme.palette.mode === 'dark' ? '#ffffff' : theme.palette.text.primary,
-                    opacity: 1,
-                  }}
-                >
-                  Récupération de compte
-                </Typography>
-              )}
+            <Grid item xs={12} md={6}>
+              <Typography 
+                variant="h3" 
+                sx={{ 
+                  fontWeight: 700, 
+                  mb: 3, 
+                  fontSize: { xs: '2rem', md: '3rem' },
+                  color: theme.palette.mode === 'dark' ? '#ffffff' : theme.palette.text.primary,
+                  opacity: 1,
+                }}
+              >
+                Contactez-nous
+              </Typography>
               <Typography 
                 variant="body1"
                 sx={{ 
@@ -2765,9 +2698,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </Box>
               </Box>
             </Grid>
-            {contactTab === 'contact' && (
-              <Grid item xs={12} md={6}>
-                <Paper
+            <Grid item xs={12} md={6}>
+              <Paper
                   elevation={4}
                   sx={{
                     p: 4,
@@ -2835,24 +2767,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   )}
                 </Paper>
               </Grid>
-            )}
-            {contactTab === 'recovery' && (
-              <Grid item xs={12}>
-                <Paper
-                  elevation={4}
-                  sx={{
-                    p: 4,
-                    borderRadius: 3,
-                    bgcolor: 'background.default',
-                  }}
-                >
-                  <AccountRecoveryForm 
-                    onSubmit={handleRecoverySubmit}
-                    onCancel={() => setContactTab('contact')}
-                  />
-                </Paper>
-              </Grid>
-            )}
           </Grid>
         </Container>
       </Box>
