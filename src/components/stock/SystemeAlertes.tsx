@@ -32,6 +32,7 @@ import {
   FormControlLabel,
   Slider,
   Divider,
+  CircularProgress,
 } from '@mui/material';
 import {
   Warning,
@@ -50,6 +51,9 @@ import {
   ReportProblem,
   Visibility,
 } from '@mui/icons-material';
+import { supabase } from '../../services/supabase';
+import { getMyClinicId } from '../../services/clinicService';
+import { StockService } from '../../services/stockService';
 
 // Types pour les alertes
 interface Alerte {
@@ -84,6 +88,7 @@ interface ConfigurationAlerte {
 const SystemeAlertes: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [alertes, setAlertes] = useState<Alerte[]>([]);
+  const [loading, setLoading] = useState(true);
   const [openConfig, setOpenConfig] = useState(false);
   const [selectedAlerte, setSelectedAlerte] = useState<Alerte | null>(null);
   const [openDetails, setOpenDetails] = useState(false);
@@ -249,20 +254,71 @@ const SystemeAlertes: React.FC = () => {
     setActiveTab(newValue);
   };
 
-  const handleResoudreAlerte = (alerteId: string) => {
-    setAlertes(prev => prev.map(alerte => 
-      alerte.id === alerteId 
-        ? { ...alerte, statut: 'resolue' as const, dateResolution: new Date(), utilisateurResolution: 'Utilisateur actuel' }
-        : alerte
-    ));
+  const handleResoudreAlerte = async (alerteId: string) => {
+    try {
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        console.error('Contexte de clinique manquant');
+        return;
+      }
+
+      // Mettre à jour l'alerte dans Supabase
+      const { error } = await supabase
+        .from('alertes_stock')
+        .update({
+          statut: 'resolue',
+          date_resolution: new Date().toISOString(),
+        })
+        .eq('id', alerteId)
+        .eq('clinic_id', clinicId); // SÉCURITÉ: Vérifier que l'alerte appartient à la clinique
+
+      if (error) {
+        console.error('Erreur lors de la résolution de l\'alerte:', error);
+        return;
+      }
+
+      // Mettre à jour l'état local
+      setAlertes(prev => prev.map(alerte => 
+        alerte.id === alerteId 
+          ? { ...alerte, statut: 'resolue' as const, dateResolution: new Date(), utilisateurResolution: 'Utilisateur actuel' }
+          : alerte
+      ));
+    } catch (error) {
+      console.error('Erreur lors de la résolution de l\'alerte:', error);
+    }
   };
 
-  const handleIgnorerAlerte = (alerteId: string) => {
-    setAlertes(prev => prev.map(alerte => 
-      alerte.id === alerteId 
-        ? { ...alerte, statut: 'ignoree' as const }
-        : alerte
-    ));
+  const handleIgnorerAlerte = async (alerteId: string) => {
+    try {
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        console.error('Contexte de clinique manquant');
+        return;
+      }
+
+      // Mettre à jour l'alerte dans Supabase
+      const { error } = await supabase
+        .from('alertes_stock')
+        .update({
+          statut: 'ignoree',
+        })
+        .eq('id', alerteId)
+        .eq('clinic_id', clinicId); // SÉCURITÉ: Vérifier que l'alerte appartient à la clinique
+
+      if (error) {
+        console.error('Erreur lors de l\'ignorance de l\'alerte:', error);
+        return;
+      }
+
+      // Mettre à jour l'état local
+      setAlertes(prev => prev.map(alerte => 
+        alerte.id === alerteId 
+          ? { ...alerte, statut: 'ignoree' as const }
+          : alerte
+      ));
+    } catch (error) {
+      console.error('Erreur lors de l\'ignorance de l\'alerte:', error);
+    }
   };
 
   const handleViewDetails = (alerte: Alerte) => {
@@ -579,6 +635,8 @@ const SystemeAlertes: React.FC = () => {
               </TableContainer>
         </CardContent>
       </Card>
+            </>
+          )}
         </Box>
       )}
 

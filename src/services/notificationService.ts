@@ -532,35 +532,23 @@ export class NotificationService {
 
       // 3. Alertes actives pour Pharmacie et Stock
       try {
-        let query = supabase
-          .from('alertes_stock')
-          .select('*', { count: 'exact', head: true })
-          .eq('statut', 'active');
-        
-        // Filtrer par clinic_id si la colonne existe
-        if (clinicId) {
-          // Essayer avec clinic_id, mais ne pas échouer si la colonne n'existe pas
-          query = query.eq('clinic_id', clinicId);
-        }
-
-        const { count: alertesActives, error: alertesError } = await query;
-
-        // Si l'erreur est due à une colonne manquante, réessayer sans le filtre
-        if (alertesError && alertesError.code === '42703' && clinicId) {
-          const { count: alertesActivesRetry } = await supabase
+        // SÉCURITÉ: clinic_id est OBLIGATOIRE - ne jamais bypasser le filtre
+        if (!clinicId) {
+          console.warn('Contexte de clinique manquant pour compter les alertes');
+        } else {
+          const { count: alertesActives, error: alertesError } = await supabase
             .from('alertes_stock')
             .select('*', { count: 'exact', head: true })
-            .eq('statut', 'active');
+            .eq('statut', 'active')
+            .eq('clinic_id', clinicId); // TOUJOURS filtrer par clinic_id
 
-          if (alertesActivesRetry && alertesActivesRetry > 0) {
+          if (alertesError) {
+            console.warn('Erreur comptage alertes:', alertesError);
+          } else if (alertesActives && alertesActives > 0) {
             // Les alertes concernent à la fois pharmacie et stock
-            counts['/pharmacie'] = (counts['/pharmacie'] || 0) + alertesActivesRetry;
-            counts['/stock-medicaments'] = (counts['/stock-medicaments'] || 0) + alertesActivesRetry;
+            counts['/pharmacie'] = (counts['/pharmacie'] || 0) + alertesActives;
+            counts['/stock-medicaments'] = (counts['/stock-medicaments'] || 0) + alertesActives;
           }
-        } else if (alertesActives && alertesActives > 0) {
-          // Les alertes concernent à la fois pharmacie et stock
-          counts['/pharmacie'] = (counts['/pharmacie'] || 0) + alertesActives;
-          counts['/stock-medicaments'] = (counts['/stock-medicaments'] || 0) + alertesActives;
         }
       } catch (e) {
         console.warn('Erreur comptage alertes:', e);
@@ -568,34 +556,24 @@ export class NotificationService {
 
       // 4. Rendez-vous en attente pour Rendez-vous (/rendez-vous)
       try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        let query = supabase
-          .from('rendez_vous')
-          .select('*', { count: 'exact', head: true })
-          .eq('statut', 'programmé')
-          .gte('date_debut', today.toISOString());
-
-        // Filtrer par clinic_id si disponible
-        if (clinicId) {
-          query = query.eq('clinic_id', clinicId);
-        }
-
-        const { count: rendezVousAttente, error: rdvError } = await query;
-
-        // Si l'erreur est due à une colonne manquante, réessayer sans le filtre
-        if (rdvError && rdvError.code === '42703' && clinicId) {
-          const { count: rendezVousAttenteRetry } = await supabase
+        // SÉCURITÉ: clinic_id est OBLIGATOIRE - ne jamais bypasser le filtre
+        if (!clinicId) {
+          console.warn('Contexte de clinique manquant pour compter les rendez-vous');
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const { count: rendezVousAttente, error: rdvError } = await supabase
             .from('rendez_vous')
             .select('*', { count: 'exact', head: true })
             .eq('statut', 'programmé')
-            .gte('date_debut', today.toISOString());
+            .gte('date_debut', today.toISOString())
+            .eq('clinic_id', clinicId); // TOUJOURS filtrer par clinic_id
 
-          if (rendezVousAttenteRetry && rendezVousAttenteRetry > 0) {
-            counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttenteRetry;
+          if (rdvError) {
+            console.warn('Erreur comptage rendez-vous:', rdvError);
+          } else if (rendezVousAttente && rendezVousAttente > 0) {
+            counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttente;
           }
-        } else if (rendezVousAttente && rendezVousAttente > 0) {
-          counts['/rendez-vous'] = (counts['/rendez-vous'] || 0) + rendezVousAttente;
         }
       } catch (e) {
         console.warn('Erreur comptage rendez-vous:', e);

@@ -320,25 +320,40 @@ export class MedicamentService {
   // Récupérer les statistiques des médicaments
   static async getMedicamentStats() {
     try {
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant');
+      }
+
+      // SÉCURITÉ: Filtrer par clinic_id (inclure aussi clinic_id IS NULL pour médicaments globaux)
       const { data: medicaments, error: medicamentsError } = await supabase
         .from('medicaments')
-        .select('categorie, prescription_requise');
+        .select('categorie, prescription_requise')
+        .or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
 
       if (medicamentsError) {
         throw medicamentsError;
       }
 
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant');
+      }
+
       const { data: lots, error: lotsError } = await supabase
         .from('lots')
-        .select('quantite_disponible, prix_achat, statut, date_expiration');
+        .select('quantite_disponible, prix_achat, statut, date_expiration')
+        .eq('clinic_id', clinicId);
 
       if (lotsError) {
         throw lotsError;
       }
 
+      // SÉCURITÉ: TOUJOURS filtrer par clinic_id
       const { data: alertes, error: alertesError } = await supabase
         .from('alertes_stock')
-        .select('statut, type');
+        .select('statut, type')
+        .eq('clinic_id', clinicId);
 
       if (alertesError) {
         throw alertesError;
