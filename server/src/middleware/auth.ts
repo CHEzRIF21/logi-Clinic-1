@@ -96,10 +96,10 @@ export const authenticateToken = async (
       });
     }
 
-    // Extraire clinic_id depuis le profil ou les headers
-    const clinicId = userProfile.clinic_id || 
-                     authUser.user_metadata?.clinic_id || 
-                     req.headers['x-clinic-id'] as string;
+    // Extraire clinic_id: profil > JWT metadata; en prod on n'utilise jamais le header (anti-spoof)
+    const clinicId = userProfile.clinic_id ||
+                     authUser.user_metadata?.clinic_id ||
+                     (process.env.NODE_ENV === 'development' ? (req.headers['x-clinic-id'] as string) : undefined);
 
     // Construire l'objet user avec toutes les informations nécessaires
     req.user = {

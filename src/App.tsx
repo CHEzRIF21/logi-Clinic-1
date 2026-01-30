@@ -49,6 +49,7 @@ import { User } from './types/auth';
 
 // Utilitaires de permissions
 import { canManageUsers } from './utils/permissions';
+import { clearClinicCache } from './services/clinicService';
 
 function App() {
   // #region agent log
@@ -111,6 +112,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    clearClinicCache();
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');

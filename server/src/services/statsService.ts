@@ -2,18 +2,10 @@ import prisma from '../prisma';
 import SchemaCacheService from './schemaCacheService';
 
 export class StatsService {
-  private static async getInvoiceNumberPrefixForClinic(clinicId?: string, role?: string): Promise<string | null> {
-    // SUPER_ADMIN: pas de filtre
-    if (!clinicId || role === 'SUPER_ADMIN') return null;
-
-    const clinic = await prisma.clinic.findUnique({
-      where: { id: clinicId },
-      select: { code: true },
-    });
-
-    if (!clinic?.code) return null;
-    // Numéro facture: FAC-CODE-YYYYMM-XXXX
-    return `FAC-${clinic.code}-`;
+  /** Filtre par clinique (sauf SUPER_ADMIN). Utiliser where: { ...invoiceClinicFilter } */
+  private static invoiceClinicFilter(clinicId?: string, role?: string): { clinicId?: string } {
+    if (!clinicId || role === 'SUPER_ADMIN') return {};
+    return { clinicId };
   }
 
   /**
@@ -27,7 +19,7 @@ export class StatsService {
     role?: string;
   }) {
     return await SchemaCacheService.executeWithRetry(async () => {
-      const invoicePrefix = await this.getInvoiceNumberPrefixForClinic(params.clinicId, params.role);
+      const clinicFilter = this.invoiceClinicFilter(params.clinicId, params.role);
 
       const invoices = await prisma.invoice.findMany({
         where: {
@@ -38,13 +30,7 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         select: {
           createdAt: true,
@@ -111,7 +97,7 @@ export class StatsService {
    */
   static async getDashboardStatistics(params?: { clinicId?: string; role?: string }) {
     return await SchemaCacheService.executeWithRetry(async () => {
-      const invoicePrefix = await this.getInvoiceNumberPrefixForClinic(params?.clinicId, params?.role);
+      const clinicFilter = this.invoiceClinicFilter(params?.clinicId, params?.role);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -127,13 +113,7 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         _sum: {
           totalTTC: true,
@@ -153,13 +133,7 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         _sum: {
           totalTTC: true,
@@ -179,13 +153,7 @@ export class StatsService {
           status: {
             not: 'ANNULEE',
           },
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         _sum: {
           totalTTC: true,
@@ -200,13 +168,7 @@ export class StatsService {
       const pendingInvoices = await prisma.invoice.count({
         where: {
           status: 'EN_ATTENTE',
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
       });
 
@@ -214,13 +176,7 @@ export class StatsService {
       const partialInvoices = await prisma.invoice.count({
         where: {
           status: 'PARTIELLE',
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
       });
 
@@ -230,13 +186,7 @@ export class StatsService {
           status: {
             in: ['EN_ATTENTE', 'PARTIELLE'],
           },
-          ...(invoicePrefix
-            ? {
-                number: {
-                  startsWith: invoicePrefix,
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         select: {
           totalTTC: true,
@@ -248,21 +198,13 @@ export class StatsService {
         return sum + (Number(inv.totalTTC) - Number(inv.amountPaid));
       }, 0);
 
-      // Paiements du jour
+      // Paiements du jour (filtre par clinicId sur Payment)
       const todayPayments = await prisma.payment.aggregate({
         where: {
           createdAt: {
             gte: today,
           },
-          ...(invoicePrefix
-            ? {
-                invoice: {
-                  number: {
-                    startsWith: invoicePrefix,
-                  },
-                },
-              }
-            : {}),
+          ...clinicFilter,
         },
         _sum: {
           amount: true,

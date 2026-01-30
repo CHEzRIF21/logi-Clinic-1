@@ -60,6 +60,21 @@ Utilisez cette checklist pour valider manuellement l’isolation des données en
 
 ---
 
+## 6. Switch de compte (même navigateur)
+
+Scénario : déconnexion puis connexion à une autre clinique **sans fermer le navigateur**. Vérifier que le cache frontend du `clinicId` est bien invalidé et que toutes les données affichées correspondent à la nouvelle clinique.
+
+| Étape | Action | Résultat attendu |
+|-------|--------|------------------|
+| 6.1 | Se connecter à une clinique A, puis se déconnecter. Se connecter à la **clinique ITA** (ou une autre clinique B) dans le même navigateur. | `getMyClinicId()` retourne le `clinicId` de la clinique ITA (cache invalidé au login). |
+| 6.2 | **Clinique ITA** : ouvrir le tableau de bord. Vérifier **Demandes d'inscription**. | Uniquement les demandes pour la clinique ITA. |
+| 6.3 | **Clinique ITA** : vérifier **Transferts en attente**, **Alertes actives**, **Imagerie**. | Uniquement les données de la clinique ITA. |
+| 6.4 | **Clinique ITA** : vérifier le **Tableau de bord financier** (stats jour / mois / année, factures en attente, créances). | Chiffres et listes uniquement pour la clinique ITA (API `/api/statistics/dashboard` filtrée par `clinicId`). |
+
+**Points techniques** : le frontend appelle `clearClinicCache()` au login et au logout (`App.tsx`) pour éviter d’afficher les données de l’ancienne clinique. En production, le backend ne doit pas utiliser le header `x-clinic-id` pour déterminer la clinique (uniquement `users.clinic_id` / `user_metadata.clinic_id`).
+
+---
+
 ## Résumé
 
 - [ ] 1. Listes : B ne voit aucune donnée de A.
@@ -67,5 +82,6 @@ Utilisez cette checklist pour valider manuellement l’isolation des données en
 - [ ] 3. SUPER_ADMIN voit toutes les cliniques.
 - [ ] 4. Dashboard / caisse vides pour B quand B n’a pas de données.
 - [ ] 5. Créations bien associées à la clinique du token.
+- [ ] 6. Switch de compte : après logout puis login sur une autre clinique (même navigateur), toutes les cartes du dashboard affichent uniquement les données de la clinique connectée.
 
 Si un point échoue, vérifier : middleware `requireClinicContext`, filtres `clinic_id` dans les services backend et frontend, et policies RLS (get_my_clinic_id / check_is_super_admin).
