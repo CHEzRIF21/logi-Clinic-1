@@ -7,6 +7,7 @@ import { useSnackbar } from 'notistack';
 import Login from './components/auth/Login';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProtectedModuleRoute from './components/auth/ProtectedModuleRoute';
+import ResetPassword from './pages/ResetPassword';
 
 // Composants de navigation (chargés immédiatement)
 import Layout from './components/layout/Layout';
@@ -144,6 +145,10 @@ function App() {
             <Login onLogin={handleLogin} />
           )
         }
+      />
+      <Route
+        path="/reset-password"
+        element={<ResetPassword />}
       />
       <Route
         path="/"

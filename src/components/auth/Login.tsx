@@ -56,6 +56,7 @@ import { CreateRecoveryRequestDto } from '../../types/accountRecovery';
 import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
 import ChangePasswordDialog from './ChangePasswordDialog';
+import ForgotPasswordDialog from './ForgotPasswordDialog';
 import { REGISTRATION_ROLES } from '../../config/roles';
 import ThemeToggleButton from '../ui/ThemeToggleButton';
 import { SECURITY_QUESTIONS, SecurityQuestionOption } from '../../data/securityQuestions';
@@ -133,6 +134,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [contactSent, setContactSent] = useState(false);
   const [contactTab, setContactTab] = useState<'contact' | 'recovery'>('contact');
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
+  const [showForgotPasswordDialog, setShowForgotPasswordDialog] = useState(false);
   const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login');
   
   // État pour le dialogue de changement de mot de passe (première connexion)
@@ -2136,14 +2138,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <Button
                   variant="text"
                   size="small"
-                  onClick={() => {
-                    setShowRecoveryForm(true);
-                    setContactTab('recovery');
-                    // Scroll vers la section contact
-                    setTimeout(() => {
-                      contactRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }, 100);
-                  }}
+                  onClick={() => setShowForgotPasswordDialog(true)}
                   sx={{ 
                     textTransform: 'none',
                     color: theme.palette.mode === 'dark' 
@@ -2993,6 +2988,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </Box>
         </Container>
       </Box>
+
+      {/* Dialog pour le mot de passe oublié */}
+      <ForgotPasswordDialog
+        open={showForgotPasswordDialog}
+        onClose={() => setShowForgotPasswordDialog(false)}
+      />
     </Box>
   );
 };
