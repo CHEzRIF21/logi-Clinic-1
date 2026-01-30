@@ -635,14 +635,12 @@ export class UserPermissionsService {
   static async resetUserPassword(userId: string): Promise<void> {
     const API_BASE_URL = import.meta.env.VITE_API_URL || '';
     const token = localStorage.getItem('token');
-    const clinicId = localStorage.getItem('clinic_id');
 
     const response = await fetch(`${API_BASE_URL}/auth/users/${userId}/reset-password`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'x-clinic-id': clinicId || '',
       },
     });
 

@@ -88,18 +88,16 @@ export const authenticateToken = async (
       });
     }
 
-    if (!userProfile.actif || userProfile.status === 'SUSPENDED' || userProfile.status === 'REJECTED') {
+    if (!userProfile.actif || userProfile.status === 'SUSPENDED' || userProfile.status === 'REJECTED' || userProfile.status === 'PENDING') {
       return res.status(403).json({
         success: false,
-        message: 'Compte inactif ou suspendu',
+        message: 'Compte inactif, en attente d\'activation ou suspendu',
         code: 'ACCOUNT_INACTIVE',
       });
     }
 
-    // Extraire clinic_id: profil > JWT metadata; en prod on n'utilise jamais le header (anti-spoof)
-    const clinicId = userProfile.clinic_id ||
-                     authUser.user_metadata?.clinic_id ||
-                     (process.env.NODE_ENV === 'development' ? (req.headers['x-clinic-id'] as string) : undefined);
+    // clinic_id UNIQUEMENT depuis le profil (jamais depuis les headers)
+    const clinicId = userProfile.clinic_id || authUser.user_metadata?.clinic_id;
 
     // Construire l'objet user avec toutes les informations nécessaires
     req.user = {

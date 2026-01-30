@@ -515,7 +515,7 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
       });
     }
 
-    // Créer l'utilisateur dans la table users avec auth_user_id
+    // Workflow 2 étapes: créer user inactif (PENDING, actif=false); activation via POST /auth/users/:id/activate
     const { error: userError } = await supabase
       .from('users')
       .insert({
@@ -527,10 +527,10 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
         specialite: request.specialite,
         telephone: request.telephone,
         adresse: request.adresse,
-        actif: true,
-        status: 'PENDING', // L'utilisateur devra changer son mot de passe à la première connexion
-        clinic_id: request.clinic_id, // Association à la clinique
-        auth_user_id: authUser.user.id, // Lier au compte Auth
+        actif: false,
+        status: 'PENDING',
+        clinic_id: request.clinic_id,
+        auth_user_id: authUser.user.id,
       });
 
     if (userError) {
@@ -706,6 +706,47 @@ router.post('/registration-requests/:id/reject', authenticateToken, requireClini
       success: false,
       message: 'Erreur interne du serveur',
     });
+  }
+});
+
+// POST /api/auth/users/:id/activate - Activer un utilisateur (workflow 2 étapes: après approbation)
+router.post('/users/:id/activate', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const clinicReq = req as ClinicContextRequest;
+
+    if (!supabase) {
+      return res.status(500).json({ success: false, message: 'Service de base de données non disponible' });
+    }
+
+    const { data: targetUser, error: fetchError } = await supabase
+      .from('users')
+      .select('id, clinic_id, status, actif')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !targetUser) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    if (targetUser.clinic_id !== clinicReq.clinicId) {
+      return res.status(403).json({ success: false, message: 'Vous ne pouvez activer que les utilisateurs de votre clinique.' });
+    }
+    if (targetUser.status !== 'PENDING' || targetUser.actif) {
+      return res.status(400).json({ success: false, message: 'Cet utilisateur n\'est pas en attente d\'activation.' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ actif: true, status: 'ACTIVE', updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Erreur lors de l\'activation', error: updateError.message });
+    }
+    res.json({ success: true, message: 'Utilisateur activé. Il peut désormais se connecter.' });
+  } catch (error: any) {
+    console.error('Erreur activation:', error);
+    res.status(500).json({ success: false, message: 'Erreur interne du serveur', error: error.message });
   }
 });
 

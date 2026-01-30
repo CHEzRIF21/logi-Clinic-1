@@ -149,12 +149,6 @@ async function apiRequest<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Ajouter le clinic_id dans les headers si disponible
-  const clinicId = localStorage.getItem('clinic_id');
-  if (clinicId) {
-    headers['x-clinic-id'] = clinicId;
-  }
-
   const url = `${API_BASE_URL}${endpoint}`;
   
   try {
@@ -296,11 +290,6 @@ export async function apiUpload<T>(endpoint: string, formData: FormData): Promis
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const clinicId = localStorage.getItem('clinic_id');
-  if (clinicId) {
-    headers['x-clinic-id'] = clinicId;
   }
 
   const url = `${API_BASE_URL}${endpoint}`;

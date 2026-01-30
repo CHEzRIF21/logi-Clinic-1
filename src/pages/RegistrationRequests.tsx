@@ -184,9 +184,6 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       setError('');
       
       const token = localStorage.getItem('token');
-      const clinicId = localStorage.getItem('clinic_id');
-      
-      // Utiliser l'id ou _id selon ce qui est disponible
       const requestId = selectedRequest.id || selectedRequest._id;
       
       console.log('🔄 Approbation de la demande:', {
@@ -200,7 +197,6 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
@@ -247,9 +243,6 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       setError('');
       
       const token = localStorage.getItem('token');
-      const clinicId = localStorage.getItem('clinic_id');
-      
-      // Utiliser l'id ou _id selon ce qui est disponible
       const requestId = selectedRequest.id || selectedRequest._id;
       
       console.log('🔄 Rejet de la demande:', { requestId, raison: rejectForm.raisonRejet });
@@ -259,7 +252,6 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           raisonRejet: rejectForm.raisonRejet,

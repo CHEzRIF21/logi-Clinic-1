@@ -77,11 +77,11 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
         };
       }
       
-      if (!userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED') {
+      if (!userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
         return {
           success: false,
           error: new Response(
-            JSON.stringify({ success: false, message: 'Compte inactif ou suspendu' }),
+            JSON.stringify({ success: false, message: 'Compte non activé, inactif ou suspendu' }),
             { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           ),
         };
@@ -119,11 +119,11 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
     };
   }
 
-  if (!userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED') {
+  if (!userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
     return {
       success: false,
       error: new Response(
-        JSON.stringify({ success: false, message: 'Compte inactif ou suspendu' }),
+        JSON.stringify({ success: false, message: 'Compte inactif, en attente d\'activation ou suspendu' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       ),
     };
@@ -136,44 +136,27 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
 }
 
 /**
- * Vérifie que l'utilisateur a un clinic_id valide
- * Retourne une erreur si le clinic_id est manquant (sauf pour SUPER_ADMIN)
+ * Vérifie que l'utilisateur a un clinic_id valide.
+ * Isolation stricte: TOUS les utilisateurs (y compris SUPER_ADMIN) doivent avoir un clinic_id.
  */
 export function requireClinicContext(user: AuthenticatedUser): Response | null {
-  // SUPER_ADMIN peut accéder sans clinic_id (stats globales par exemple)
-  // MAIS doit quand même filtrer par son clinic_id s'il en a un
-  if (user.role === 'SUPER_ADMIN') {
-    return null; // OK, pas de contexte requis
-  }
-  
   if (!user.clinic_id) {
     return new Response(
-      JSON.stringify({ 
-        success: false, 
+      JSON.stringify({
+        success: false,
         message: 'Contexte de clinique manquant. Veuillez vous reconnecter.',
         code: 'MISSING_CLINIC_CONTEXT',
       }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-  
-  return null; // OK
+  return null;
 }
 
 /**
- * Retourne le clinic_id effectif pour le filtrage des données
- * Pour SUPER_ADMIN: retourne le clinic_id du header x-clinic-id OU null (stats globales)
- * Pour autres: retourne TOUJOURS le clinic_id de la base de données
+ * Retourne le clinic_id effectif pour le filtrage des données.
+ * SÉCURITÉ: Toujours depuis la base (user.clinic_id), JAMAIS depuis les headers.
  */
-export function getEffectiveClinicId(user: AuthenticatedUser, req: Request): string | null {
-  if (user.role === 'SUPER_ADMIN') {
-    // Super admin peut choisir une clinique spécifique via header
-    // ou voir les stats globales (null)
-    const headerClinicId = req.headers.get('x-clinic-id');
-    return headerClinicId || user.clinic_id || null;
-  }
-  
-  // Pour tous les autres rôles: TOUJOURS le clinic_id de la base de données
-  // JAMAIS le header (qui pourrait être manipulé)
+export function getEffectiveClinicId(user: AuthenticatedUser, _req: Request): string | null {
   return user.clinic_id;
 }

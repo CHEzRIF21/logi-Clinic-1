@@ -296,24 +296,31 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ currentUser, clinicId
     }
   };
 
-  // Validate pending user
+  // Validate pending user (activation explicite — workflow 2 étapes)
   const handleValidatePendingUser = async () => {
     if (!selectedStaff) return;
 
     try {
       setLoading(true);
-      
-      const { error } = await supabase
-        .from('users')
-        .update({ 
-          status: 'ACTIVE',
-          actif: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', selectedStaff.id);
-
-      if (error) throw error;
-
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+      if (API_BASE_URL) {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/auth/users/${selectedStaff.id}/activate`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || 'Erreur lors de l\'activation');
+      } else {
+        const { error } = await supabase
+          .from('users')
+          .update({ status: 'ACTIVE', actif: true, updated_at: new Date().toISOString() })
+          .eq('id', selectedStaff.id);
+        if (error) throw error;
+      }
       setSuccess(`Utilisateur ${selectedStaff.prenom} ${selectedStaff.nom} validé et activé`);
       setConfirmDialogOpen(false);
       setSelectedStaff(null);

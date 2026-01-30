@@ -192,7 +192,6 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               const token = localStorage.getItem('token');
               const headers: Record<string, string> = { 'Content-Type': 'application/json' };
               if (token) headers.Authorization = `Bearer ${token}`;
-              if (clinicId) headers['x-clinic-id'] = clinicId;
 
               const response = await fetch(`${API_BASE_URL}/statistics/dashboard`, { headers });
               if (response.ok) {

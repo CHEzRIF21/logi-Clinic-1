@@ -178,8 +178,6 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       setError('');
       
       const token = localStorage.getItem('token');
-      const clinicId = localStorage.getItem('clinic_id');
-      
       const requestId = selectedRequest.id || selectedRequest._id;
       
       const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/approve`, {
@@ -187,7 +185,6 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
@@ -238,8 +235,6 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       setError('');
       
       const token = localStorage.getItem('token');
-      const clinicId = localStorage.getItem('clinic_id');
-      
       const requestId = selectedRequest.id || selectedRequest._id;
       
       const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/reject`, {
@@ -247,7 +242,6 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'x-clinic-id': clinicId || '',
         },
         body: JSON.stringify({
           raisonRejet: rejectForm.raisonRejet,

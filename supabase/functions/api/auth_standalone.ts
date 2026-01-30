@@ -49,11 +49,11 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
         .eq('id', userId)
         .maybeSingle();
       
-      if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED') {
+      if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
         return {
           success: false,
           error: new Response(
-            JSON.stringify({ success: false, message: 'Utilisateur non trouvé ou inactif' }),
+            JSON.stringify({ success: false, message: 'Utilisateur non trouvé, inactif ou en attente d\'activation' }),
             { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           ),
         };
@@ -76,11 +76,11 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
 
-  if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED') {
+  if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
     return {
       success: false,
       error: new Response(
-        JSON.stringify({ success: false, message: 'Profil utilisateur non trouvé ou inactif' }),
+        JSON.stringify({ success: false, message: 'Profil utilisateur non trouvé, inactif ou en attente d\'activation' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       ),
     };
@@ -143,17 +143,13 @@ export default async function handler(req: Request, path: string): Promise<Respo
       if (!authResult.success) return authResult.error!;
       
       const user = authResult.user!;
-      
-      // Vérifier clinic_id
-      if (user.role !== 'SUPER_ADMIN' && !user.clinic_id) {
+      if (!user.clinic_id) {
         return new Response(JSON.stringify({ success: false, message: 'Contexte de clinique manquant' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-
-      const clinicId = user.role === 'SUPER_ADMIN' ? (req.headers.get('x-clinic-id') || user.clinic_id) : user.clinic_id;
+      const clinicId = user.clinic_id;
       const statut = url.searchParams.get('statut');
       
-      let query = supabase.from('registration_requests').select('*').order('created_at', { ascending: false });
-      if (clinicId) query = query.eq('clinic_id', clinicId);
+      let query = supabase.from('registration_requests').select('*').eq('clinic_id', clinicId).order('created_at', { ascending: false });
       if (statut) query = query.eq('statut', statut);
 
       const { data, error } = await query;
@@ -171,13 +167,16 @@ export default async function handler(req: Request, path: string): Promise<Respo
       if (!authResult.success) return authResult.error!;
       
       const user = authResult.user!;
-      const clinicId = user.role === 'SUPER_ADMIN' ? (req.headers.get('x-clinic-id') || user.clinic_id) : user.clinic_id;
+      if (!user.clinic_id) {
+        return new Response(JSON.stringify({ success: false, message: 'Contexte de clinique manquant' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const clinicId = user.clinic_id;
 
       const { data: request, error: fetchError } = await supabase.from('registration_requests').select('*').eq('id', id).single();
       if (fetchError || !request) {
         return new Response(JSON.stringify({ success: false, message: 'Demande non trouvée' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      if (user.role !== 'SUPER_ADMIN' && request.clinic_id !== clinicId) {
+      if (request.clinic_id !== clinicId) {
         return new Response(JSON.stringify({ success: false, message: 'Accès non autorisé' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       if (request.statut !== 'pending') {
@@ -188,7 +187,7 @@ export default async function handler(req: Request, path: string): Promise<Respo
       const { error: userError } = await supabase.from('users').insert({
         nom: request.nom, prenom: request.prenom, email: request.email, password_hash: request.password_hash,
         role: body.role || request.role_souhaite, specialite: request.specialite, telephone: request.telephone,
-        adresse: request.adresse, actif: true, clinic_id: request.clinic_id,
+        adresse: request.adresse, actif: false, status: 'PENDING', clinic_id: request.clinic_id,
       });
       if (userError) {
         return new Response(JSON.stringify({ success: false, message: 'Erreur', error: userError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -206,13 +205,16 @@ export default async function handler(req: Request, path: string): Promise<Respo
       if (!authResult.success) return authResult.error!;
       
       const user = authResult.user!;
-      const clinicId = user.role === 'SUPER_ADMIN' ? (req.headers.get('x-clinic-id') || user.clinic_id) : user.clinic_id;
+      if (!user.clinic_id) {
+        return new Response(JSON.stringify({ success: false, message: 'Contexte de clinique manquant' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const clinicId = user.clinic_id;
 
       const { data: request } = await supabase.from('registration_requests').select('clinic_id').eq('id', id).single();
       if (!request) {
         return new Response(JSON.stringify({ success: false, message: 'Demande non trouvée' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      if (user.role !== 'SUPER_ADMIN' && request.clinic_id !== clinicId) {
+      if (request.clinic_id !== clinicId) {
         return new Response(JSON.stringify({ success: false, message: 'Accès non autorisé' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 

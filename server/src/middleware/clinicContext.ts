@@ -11,11 +11,10 @@ export interface ClinicContextRequest extends AuthRequest {
 
 /**
  * Middleware qui valide et ajoute le contexte de clinique à la requête
- * 
- * RÈGLE DE SÉCURITÉ:
- * - Les utilisateurs non-super-admin DOIVENT avoir un clinic_id
- * - Le clinic_id est extrait depuis req.user (ajouté par authenticateToken)
- * - Aucun fallback via headers pour éviter les manipulations
+ *
+ * RÈGLE DE SÉCURITÉ (isolation stricte):
+ * - TOUS les utilisateurs (y compris SUPER_ADMIN) DOIVENT avoir un clinic_id pour accéder aux données tenant.
+ * - Le clinic_id est extrait UNIQUEMENT depuis req.user (profil DB), jamais depuis les headers.
  */
 export function requireClinicContext(
   req: Request,
@@ -33,11 +32,10 @@ export function requireClinicContext(
     });
   }
 
-  // Super admin peut accéder à toutes les cliniques
   const isSuperAdmin = user.role === 'SUPER_ADMIN';
-  
-  // Pour les non-super-admin, clinic_id est OBLIGATOIRE
-  if (!isSuperAdmin && !user.clinic_id) {
+
+  // clinic_id OBLIGATOIRE pour tous (y compris SUPER_ADMIN) — isolation stricte
+  if (!user.clinic_id) {
     return res.status(403).json({
       success: false,
       message: 'Contexte de clinique manquant. Votre compte doit être associé à une clinique.',
@@ -45,9 +43,8 @@ export function requireClinicContext(
     });
   }
 
-  // Ajouter le contexte au request
   const clinicReq = req as ClinicContextRequest;
-  clinicReq.clinicId = user.clinic_id || '';
+  clinicReq.clinicId = user.clinic_id;
   clinicReq.isSuperAdmin = isSuperAdmin;
 
   next();
