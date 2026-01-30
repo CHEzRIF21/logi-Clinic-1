@@ -1,13 +1,39 @@
 // Handler patients pour Supabase Edge Functions
+// SÉCURITÉ: Utilise l'authentification sécurisée (clinic_id depuis la DB, pas les headers)
 import { supabase } from '../_shared/supabase.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { authenticateRequest, requireClinicContext, getEffectiveClinicId } from '../_shared/auth.ts';
 
 export default async function handler(req: Request, path: string): Promise<Response> {
   const method = req.method;
   const pathParts = path.split('/').filter(p => p);
-  const clinicId = req.headers.get('x-clinic-id');
 
   try {
+    // Authentifier l'utilisateur
+    const authResult = await authenticateRequest(req);
+    if (!authResult.success || !authResult.user) {
+      return authResult.error!;
+    }
+    
+    const user = authResult.user;
+    
+    // Vérifier le contexte de clinique
+    const clinicError = requireClinicContext(user);
+    if (clinicError) {
+      return clinicError;
+    }
+    
+    // Récupérer le clinic_id effectif (depuis la DB, pas les headers)
+    const clinicId = getEffectiveClinicId(user, req);
+    
+    // Si pas de clinic_id et pas SUPER_ADMIN, refuser
+    if (!clinicId && user.role !== 'SUPER_ADMIN') {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Contexte de clinique requis' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // GET /api/patients
     if (method === 'GET' && pathParts.length === 1) {
       const url = new URL(req.url);
@@ -21,6 +47,7 @@ export default async function handler(req: Request, path: string): Promise<Respo
         .order('created_at', { ascending: false })
         .range((page - 1) * limit, page * limit - 1);
 
+      // TOUJOURS filtrer par clinic_id (sauf SUPER_ADMIN sans clinic_id pour stats globales)
       if (clinicId) {
         query = query.eq('clinic_id', clinicId);
       }
@@ -46,10 +73,18 @@ export default async function handler(req: Request, path: string): Promise<Respo
 
     // POST /api/patients
     if (method === 'POST' && pathParts.length === 1) {
-      const body = await req.json();
-      if (clinicId) {
-        body.clinic_id = clinicId;
+      // Pour la création, le clinic_id est OBLIGATOIRE
+      if (!clinicId) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Contexte de clinique requis pour créer un patient' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
+      
+      const body = await req.json();
+      // TOUJOURS forcer le clinic_id (jamais depuis le body)
+      body.clinic_id = clinicId;
+      
       const { data, error } = await supabase
         .from('patients')
         .insert(body)
@@ -76,6 +111,7 @@ export default async function handler(req: Request, path: string): Promise<Respo
         .select('*')
         .eq('id', pathParts[1]);
 
+      // TOUJOURS filtrer par clinic_id
       if (clinicId) {
         query = query.eq('clinic_id', clinicId);
       }

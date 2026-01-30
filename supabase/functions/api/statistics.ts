@@ -1,26 +1,14 @@
 // Handler statistics pour Supabase Edge Functions
-// Implémente: GET /api/statistics/dashboard
+// SÉCURITÉ: Utilise l'authentification sécurisée (clinic_id depuis la DB, pas les headers)
 import { supabase } from '../_shared/supabase.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { authenticateRequest, requireClinicContext, getEffectiveClinicId } from '../_shared/auth.ts';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
-}
-
-function parseBearerToken(req: Request): string | null {
-  const h = req.headers.get('authorization') || req.headers.get('Authorization');
-  if (!h) return null;
-  const m = h.match(/^Bearer\s+(.+)$/i);
-  return m?.[1]?.trim() || null;
-}
-
-function parseLegacyToken(token: string): string | null {
-  // Format généré côté frontend: token-<public.users.id>-<timestamp>
-  const m = token.match(/^token-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i);
-  return m?.[1] || null;
 }
 
 function startOfDay(d: Date): Date {
@@ -40,72 +28,23 @@ export default async function handler(req: Request, path: string): Promise<Respo
   try {
     // GET /api/statistics/dashboard
     if (method === 'GET' && pathParts[1] === 'dashboard') {
-      const token = parseBearerToken(req);
-      if (!token) {
-        return json({ success: false, message: 'Authentification requise' }, 401);
+      // Authentifier l'utilisateur avec le helper sécurisé
+      const authResult = await authenticateRequest(req);
+      if (!authResult.success || !authResult.user) {
+        return authResult.error!;
       }
-
-      // 1) Essayer d'authentifier via Supabase Auth (JWT access_token)
-      let profile: any = null;
-      let profileErr: any = null;
-
-      const {
-        data: { user: authUser },
-        error: authErr,
-      } = await supabase.auth.getUser(token);
-
-      if (!authErr && authUser?.id) {
-        const profRes = await supabase
-          .from('users')
-          .select('id, role, status, actif, clinic_id')
-          .eq('auth_user_id', authUser.id)
-          .maybeSingle();
-        profile = profRes.data;
-        profileErr = profRes.error;
-      } else {
-        // 2) Fallback: token interne (legacy) utilisé par le frontend quand pas de session Supabase
-        const legacyUserId = parseLegacyToken(token);
-        if (!legacyUserId) {
-          return json({ success: false, message: 'Token invalide' }, 401);
-        }
-
-        const profRes = await supabase
-          .from('users')
-          .select('id, role, status, actif, clinic_id')
-          .eq('id', legacyUserId)
-          .maybeSingle();
-        profile = profRes.data;
-        profileErr = profRes.error;
+      
+      const user = authResult.user;
+      
+      // Vérifier le contexte de clinique (sauf SUPER_ADMIN)
+      const clinicError = requireClinicContext(user);
+      if (clinicError) {
+        return clinicError;
       }
-
-      if (profileErr || !profile) {
-        return json({ success: false, message: 'Profil utilisateur introuvable' }, 403);
-      }
-      if (!profile.actif || profile.status === 'SUSPENDED' || profile.status === 'REJECTED') {
-        return json({ success: false, message: 'Compte inactif' }, 403);
-      }
-
-      const role = String(profile.role || '').toUpperCase();
-      const clinicHeader = req.headers.get('x-clinic-id');
-
-      // Déterminer le contexte clinique
-      let clinicId: string | null = null;
-      if (role === 'SUPER_ADMIN') {
-        // Super admin: stats globales si pas de header, sinon stats de la clinique demandée
-        clinicId = clinicHeader || null;
-      } else {
-        // Autres rôles: doivent avoir une clinique
-        clinicId = profile.clinic_id || null;
-        if (!clinicId) {
-          return json(
-            { success: false, message: 'Contexte de clinique manquant.', code: 'MISSING_CLINIC_CONTEXT' },
-            400,
-          );
-        }
-        if (clinicHeader && clinicHeader !== clinicId) {
-          return json({ success: false, message: 'Contexte clinique invalide.' }, 403);
-        }
-      }
+      
+      // Récupérer le clinic_id effectif (depuis la DB, pas les headers)
+      // Pour SUPER_ADMIN: peut voir stats globales ou d'une clinique spécifique
+      const clinicId = getEffectiveClinicId(user, req);
 
       const now = new Date();
       const todayStart = startOfDay(now);
