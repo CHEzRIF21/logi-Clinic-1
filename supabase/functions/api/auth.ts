@@ -108,12 +108,62 @@ export default async function handler(req: Request, path: string): Promise<Respo
 
     // GET /api/auth/registration-requests
     if (method === 'GET' && pathParts[1] === 'registration-requests') {
+      // Vérifier l'authentification
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Authentification requise' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Extraire le token
+      const token = authHeader.replace('Bearer ', '');
+      
+      // Créer un client Supabase avec le token pour récupérer l'utilisateur
+      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+      const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+      const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
+      
+      const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      });
+
+      // Récupérer l'utilisateur authentifié
+      const { data: { user: authUser }, error: authError } = await supabaseClient.auth.getUser(token);
+      
+      if (authError || !authUser) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Token invalide' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Récupérer le clinic_id depuis la table users
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('clinic_id')
+        .eq('auth_user_id', authUser.id)
+        .maybeSingle();
+
+      if (userError || !userData || !userData.clinic_id) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Contexte de clinique manquant. Veuillez vous reconnecter.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const clinicId = userData.clinic_id;
       const url = new URL(req.url);
       const statut = url.searchParams.get('statut');
 
+      // TOUJOURS filtrer par clinic_id
       let query = supabase
         .from('registration_requests')
         .select('*')
+        .eq('clinic_id', clinicId) // Toujours appliquer le filtre
         .order('created_at', { ascending: false });
 
       if (statut && statut !== '') {

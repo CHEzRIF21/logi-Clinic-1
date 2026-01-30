@@ -134,17 +134,18 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ currentUser, clinicId
   // Fetch staff members
   const fetchStaffMembers = useCallback(async () => {
     try {
+      // TOUJOURS filtrer par clinic_id (même pour Super Admin selon nouvelle exigence)
+      if (!clinicId) {
+        console.error('Clinic ID manquant pour récupérer les utilisateurs');
+        setStaffMembers([]);
+        return;
+      }
+
       let query = supabase
         .from('users')
         .select('*')
+        .eq('clinic_id', clinicId) // Toujours appliquer le filtre
         .order('created_at', { ascending: false });
-
-      // Si pas super admin, filtrer par clinic_id
-      if (currentUser.role !== 'admin' || !currentUser.clinicCode?.includes('SUPER')) {
-        if (clinicId) {
-          query = query.eq('clinic_id', clinicId);
-        }
-      }
 
       const { data, error } = await query;
 
@@ -153,24 +154,26 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ currentUser, clinicId
     } catch (err: any) {
       console.error('Erreur récupération staff:', err);
       setError('Erreur lors de la récupération des utilisateurs');
+      setStaffMembers([]);
     }
-  }, [clinicId, currentUser]);
+  }, [clinicId]); // Retirer currentUser des dépendances
 
   // Fetch registration requests
   const fetchRegistrationRequests = useCallback(async () => {
     try {
+      // TOUJOURS filtrer par clinic_id (même pour Super Admin selon nouvelle exigence)
+      if (!clinicId) {
+        console.error('Clinic ID manquant pour récupérer les demandes d\'inscription');
+        setRegistrationRequests([]);
+        return;
+      }
+
       let query = supabase
         .from('registration_requests')
         .select('*')
+        .eq('clinic_id', clinicId) // Toujours appliquer le filtre
         .eq('statut', 'pending')
         .order('created_at', { ascending: false });
-
-      // Si pas super admin, filtrer par clinic_id
-      if (currentUser.role !== 'admin' || !currentUser.clinicCode?.includes('SUPER')) {
-        if (clinicId) {
-          query = query.eq('clinic_id', clinicId);
-        }
-      }
 
       const { data, error } = await query;
 
@@ -178,8 +181,9 @@ const StaffManagement: React.FC<StaffManagementProps> = ({ currentUser, clinicId
       setRegistrationRequests(data || []);
     } catch (err: any) {
       console.error('Erreur récupération demandes:', err);
+      setRegistrationRequests([]);
     }
-  }, [clinicId, currentUser]);
+  }, [clinicId]); // Retirer currentUser des dépendances
 
   // Refresh data
   const refreshData = useCallback(async () => {

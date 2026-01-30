@@ -301,16 +301,21 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
       isSuperAdmin,
     });
 
+    // TOUJOURS filtrer par clinic_id (même pour Super Admin selon nouvelle exigence)
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Contexte de clinique manquant. Veuillez vous reconnecter.',
+      });
+    }
+
     let query = supabase
       .from('registration_requests')
       .select('*')
+      .eq('clinic_id', clinicId) // Toujours appliquer le filtre
       .order('created_at', { ascending: false });
 
-    // Filtrer par clinic_id sauf pour SUPER_ADMIN (contexte clinique imposé par middleware)
-    if (!isSuperAdmin && clinicId) {
-      query = query.eq('clinic_id', clinicId);
-      console.log('🔒 Filtrage par clinic_id:', clinicId);
-    }
+    console.log('🔒 Filtrage par clinic_id:', clinicId);
 
     if (statut && statut !== '') {
       query = query.eq('statut', statut);
