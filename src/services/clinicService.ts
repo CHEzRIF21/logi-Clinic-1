@@ -295,6 +295,7 @@ export function clearClinicCache(): void {
 
 /**
  * Wrapper pour les requêtes avec filtrage automatique par clinic_id
+ * IMPORTANT: Tous les utilisateurs (y compris Super Admin) sont filtrés par leur clinic_id
  */
 export async function queryWithClinicFilter<T>(
   tableName: string,
@@ -302,14 +303,16 @@ export async function queryWithClinicFilter<T>(
   additionalFilters?: (query: any) => any
 ): Promise<{ data: T[] | null; error: any }> {
   const clinicId = await getMyClinicId();
-  const superAdmin = await isSuperAdmin();
 
-  let query = supabase.from(tableName).select(selectColumns);
-
-  // Si pas super admin, filtrer par clinic_id
-  if (!superAdmin && clinicId) {
-    query = query.eq('clinic_id', clinicId);
+  if (!clinicId) {
+    return {
+      data: null,
+      error: { message: 'Contexte de clinique manquant. Veuillez vous reconnecter.' },
+    };
   }
+
+  // Toujours filtrer par clinic_id
+  let query = supabase.from(tableName).select(selectColumns).eq('clinic_id', clinicId);
 
   // Appliquer les filtres additionnels si fournis
   if (additionalFilters) {
@@ -401,21 +404,22 @@ export async function getClinicStats(): Promise<{
 
 /**
  * Récupère la liste des utilisateurs de la clinique (pour admin)
+ * IMPORTANT: Tous les utilisateurs (y compris Super Admin) voient uniquement les utilisateurs de leur clinique
  */
 export async function getClinicUsers(): Promise<any[]> {
   const clinicId = await getMyClinicId();
-  const superAdmin = await isSuperAdmin();
 
-  let query = supabase
-    .from('users')
-    .select('id, nom, prenom, email, role, status, actif, specialite, created_at, last_login')
-    .order('created_at', { ascending: false });
-
-  if (!superAdmin && clinicId) {
-    query = query.eq('clinic_id', clinicId);
+  if (!clinicId) {
+    console.error('Contexte de clinique manquant pour récupérer les utilisateurs');
+    return [];
   }
 
-  const { data, error } = await query;
+  // Toujours filtrer par clinic_id
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, nom, prenom, email, role, status, actif, specialite, created_at, last_login')
+    .eq('clinic_id', clinicId)
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Erreur récupération utilisateurs:', error);

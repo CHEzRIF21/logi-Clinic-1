@@ -1,21 +1,22 @@
 import { supabase, Patient, PatientFormData, PatientFile, PatientCareTimeline } from './supabase';
-import { getMyClinicId, isSuperAdmin } from './clinicService';
+import { getMyClinicId } from './clinicService';
 
 export class PatientService {
-  // Récupérer tous les patients (filtrés par clinic_id si pas super admin)
+  // Récupérer tous les patients (filtrés par clinic_id)
   static async getAllPatients(): Promise<Patient[]> {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let query = supabase.from('patients').select('*');
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        query = query.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { data, error } = await query.order('nom', { ascending: true });
+      // Toujours filtrer par clinic_id
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la récupération des patients:', error);
@@ -71,23 +72,22 @@ export class PatientService {
     }
   }
 
-  // Rechercher des patients (filtrés par clinic_id si pas super admin)
+  // Rechercher des patients (filtrés par clinic_id)
   static async searchPatients(query: string): Promise<Patient[]> {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let dbQuery = supabase
-        .from('patients')
-        .select('*')
-        .or(`nom.ilike.%${query}%,prenom.ilike.%${query}%,identifiant.ilike.%${query}%`);
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        dbQuery = dbQuery.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { data, error } = await dbQuery.order('nom', { ascending: true });
+      // Toujours filtrer par clinic_id
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .or(`nom.ilike.%${query}%,prenom.ilike.%${query}%,identifiant.ilike.%${query}%`)
+        .order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la recherche des patients:', error);
@@ -450,20 +450,20 @@ export class PatientService {
     }
   }
 
-  // Compter le nombre total de patients (filtrés par clinic_id si pas super admin)
+  // Compter le nombre total de patients (filtrés par clinic_id)
   static async getPatientsCount(): Promise<number> {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let query = supabase.from('patients').select('*', { count: 'exact', head: true });
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        query = query.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { count, error } = await query;
+      // Toujours filtrer par clinic_id
+      const { count, error } = await supabase
+        .from('patients')
+        .select('*', { count: 'exact', head: true })
+        .eq('clinic_id', clinicId);
 
       if (error) {
         console.error('Erreur lors du comptage des patients:', error);
@@ -481,16 +481,16 @@ export class PatientService {
   static async getPatientStats() {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let query = supabase.from('patients').select('sexe, couverture_sante, service_initial, statut');
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        query = query.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { data, error } = await query;
+      // Toujours filtrer par clinic_id
+      const { data, error } = await supabase
+        .from('patients')
+        .select('sexe, couverture_sante, service_initial, statut')
+        .eq('clinic_id', clinicId);
 
       if (error) {
         console.error('Erreur lors de la récupération des statistiques:', error);
@@ -532,19 +532,18 @@ export class PatientService {
   static async getPatientsByService(service: string): Promise<Patient[]> {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .eq('service_initial', service);
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        query = query.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { data, error } = await query.order('nom', { ascending: true });
+      // Toujours filtrer par clinic_id
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .eq('service_initial', service)
+        .order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la récupération des patients par service:', error);
@@ -562,19 +561,18 @@ export class PatientService {
   static async getPatientsByStatus(status: string): Promise<Patient[]> {
     try {
       const clinicId = await getMyClinicId();
-      const superAdmin = await isSuperAdmin();
       
-      let query = supabase
-        .from('patients')
-        .select('*')
-        .eq('statut', status);
-      
-      // Filtrer par clinic_id si pas super admin et clinic_id disponible
-      if (!superAdmin && clinicId) {
-        query = query.eq('clinic_id', clinicId);
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
       }
       
-      const { data, error } = await query.order('nom', { ascending: true });
+      // Toujours filtrer par clinic_id
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('clinic_id', clinicId)
+        .eq('statut', status)
+        .order('nom', { ascending: true });
 
       if (error) {
         console.error('Erreur lors de la récupération des patients par statut:', error);

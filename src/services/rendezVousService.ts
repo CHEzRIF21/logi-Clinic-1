@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getMyClinicId } from './clinicService';
 
 export type RendezVousPriority = 'normal' | 'urgent';
 export type RendezVousStatus = 'programmé' | 'confirmé' | 'annulé' | 'terminé' | 'manqué';
@@ -128,6 +129,12 @@ export class RendezVousService {
   }
 
   static async createRendezVous(record: RendezVousRecord): Promise<RendezVousRecord> {
+    // IMPORTANT: Forcer clinic_id pour isolation multi-tenant
+    const clinicId = await getMyClinicId();
+    if (!clinicId) {
+      throw new Error('Impossible de déterminer la clinique de l\'utilisateur. Veuillez vous reconnecter.');
+    }
+
     const payload = {
       patient_id: record.patient_id,
       consultation_id: record.consultation_id || null,
@@ -141,6 +148,7 @@ export class RendezVousService {
       statut: record.statut || 'programmé',
       priorite: record.priorite || 'normal',
       notes: record.notes || null,
+      clinic_id: clinicId, // Forcer clinic_id pour isolation multi-tenant
       created_at: new Date().toISOString(),
     };
 

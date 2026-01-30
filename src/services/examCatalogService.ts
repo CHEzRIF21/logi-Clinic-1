@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './apiClient';
 import { supabase } from './supabase';
+import { getMyClinicId } from './clinicService';
 
 export type ExamModule =
   | 'LABORATOIRE'
@@ -55,12 +56,23 @@ const buildQuery = (filters?: ExamCatalogFilters) => {
 export const ExamCatalogService = {
   async list(filters?: ExamCatalogFilters): Promise<ExamCatalogEntry[]> {
     try {
-      // Essayer d'abord d'utiliser directement Supabase
+      // IMPORTANT: Tous les utilisateurs (y compris Super Admin) voient uniquement les données de leur clinique
+      // Le catalogue peut avoir des entrées partagées (clinic_id IS NULL) et des entrées spécifiques
+      const clinicId = await getMyClinicId();
+
+      if (!clinicId) {
+        console.error('Clinic ID manquant pour le catalogue d\'examens');
+        return [];
+      }
+
       let query = supabase
         .from('exam_catalog')
         .select('*')
         .order('categorie', { ascending: true })
         .order('nom', { ascending: true });
+
+      // Toujours filtrer par clinic_id : entrées spécifiques à la clinique + entrées partagées (clinic_id IS NULL)
+      query = query.or(`clinic_id.eq.${clinicId},clinic_id.is.null`);
 
       if (filters?.module) {
         query = query.eq('module_cible', filters.module);

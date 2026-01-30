@@ -154,6 +154,15 @@ const RendezVous: React.FC = () => {
         }
 
         // Récupérer les rendez-vous depuis Supabase
+        // IMPORTANT: Tous les utilisateurs (y compris Super Admin) voient uniquement les données de leur clinique
+        if (!clinicId) {
+          setError('Contexte de clinique manquant. Veuillez vous reconnecter.');
+          setItems([]);
+          setStats({ total: 0, byStatus: {} });
+          setUseDemo(false);
+          return;
+        }
+        
         let query = supabase
           .from('rendez_vous')
           .select(`
@@ -172,10 +181,10 @@ const RendezVous: React.FC = () => {
           `)
           .gte('date_debut', todayRange.start)
           .lte('date_debut', todayRange.end)
+          .eq('clinic_id', clinicId) // Toujours filtrer par clinic_id
           .order('date_debut', { ascending: true })
           .limit(100);
 
-        // Filtrer par clinic_id si la colonne existe
         const { data: rendezVousData, error: rendezVousError } = await query;
 
         if (rendezVousError) {

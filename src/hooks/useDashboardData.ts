@@ -3,7 +3,7 @@ import { User } from '../types/auth';
 import { PatientService } from '../services/patientService';
 import { supabase } from '../services/supabase';
 import { apiGet } from '../services/apiClient';
-import { getMyClinicId, isSuperAdmin } from '../services/clinicService';
+import { getMyClinicId } from '../services/clinicService';
 
 interface DashboardStats {
   patients?: {
@@ -75,10 +75,9 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         setLoading(true);
         setError(null);
 
-        // Contexte multi-clinique: filtrer par clinic_id (sauf SUPER_ADMIN)
+        // IMPORTANT: Tous les utilisateurs (y compris Super Admin) voient uniquement les données de leur clinique
         const clinicId = await getMyClinicId();
-        const superAdmin = await isSuperAdmin();
-        if (!superAdmin && !clinicId) {
+        if (!clinicId) {
           setError('Contexte de clinique manquant. Veuillez vous reconnecter.');
           return;
         }
@@ -119,8 +118,8 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               .from('rendez_vous')
               .select('*')
               .gte('date_debut', today.toISOString())
-              .lte('date_debut', todayEnd.toISOString());
-            if (!superAdmin && clinicId) rvTodayQuery = rvTodayQuery.eq('clinic_id', clinicId);
+              .lte('date_debut', todayEnd.toISOString())
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: rendezVousToday } = await rvTodayQuery;
 
             let rvUpcomingQuery = supabase
@@ -128,8 +127,8 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               .select('*')
               .gte('date_debut', todayEnd.toISOString())
               .eq('statut', 'programmé')
+              .eq('clinic_id', clinicId) // Toujours filtrer par clinic_id
               .limit(10);
-            if (!superAdmin && clinicId) rvUpcomingQuery = rvUpcomingQuery.eq('clinic_id', clinicId);
             const { data: rendezVousUpcoming } = await rvUpcomingQuery;
 
             newStats.rendezVous = {
@@ -145,24 +144,26 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
         // Données pour stock/pharmacie
         if (user.role === 'admin' || user.role === 'pharmacien') {
           try {
-            let medicamentsQuery = supabase.from('medicaments').select('id');
-            if (!superAdmin && clinicId) medicamentsQuery = medicamentsQuery.eq('clinic_id', clinicId);
+            let medicamentsQuery = supabase
+              .from('medicaments')
+              .select('id')
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: medicaments, error: errMed } = await medicamentsQuery;
             if (errMed && errMed.code !== 'PGRST116') throw errMed;
 
             let alertesQuery = supabase
               .from('alertes_stock')
               .select('id')
-              .eq('statut', 'active');
-            if (!superAdmin && clinicId) alertesQuery = alertesQuery.eq('clinic_id', clinicId);
+              .eq('statut', 'active')
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: alertes, error: errAlertes } = await alertesQuery;
             if (errAlertes && errAlertes.code !== 'PGRST116') throw errAlertes;
 
             let lotsQuery = supabase
               .from('lots')
               .select('date_expiration')
-              .lt('date_expiration', new Date().toISOString());
-            if (!superAdmin && clinicId) lotsQuery = lotsQuery.eq('clinic_id', clinicId);
+              .lt('date_expiration', new Date().toISOString())
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: lots, error: errLots } = await lotsQuery;
             if (errLots && errLots.code !== 'PGRST116') throw errLots;
 
@@ -217,16 +218,16 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               .from('prescriptions')
               .select('id')
               .gte('date_prescription', today.toISOString())
-              .lte('date_prescription', todayEnd.toISOString());
-            if (!superAdmin && clinicId) prescriptionsTodayQuery = prescriptionsTodayQuery.eq('clinic_id', clinicId);
+              .lte('date_prescription', todayEnd.toISOString())
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: prescriptionsToday, error: errToday } = await prescriptionsTodayQuery;
             if (errToday && errToday.code !== 'PGRST116') throw errToday;
 
             let prescriptionsPendingQuery = supabase
               .from('prescriptions')
               .select('id')
-              .eq('statut', 'PRESCRIT');
-            if (!superAdmin && clinicId) prescriptionsPendingQuery = prescriptionsPendingQuery.eq('clinic_id', clinicId);
+              .eq('statut', 'PRESCRIT')
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: prescriptionsPending, error: errPending } = await prescriptionsPendingQuery;
             if (errPending && errPending.code !== 'PGRST116') throw errPending;
 
@@ -250,8 +251,8 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
             let labPendingQuery = supabase
               .from('lab_requests')
               .select('id')
-              .eq('status', 'EN_ATTENTE');
-            if (!superAdmin && clinicId) labPendingQuery = labPendingQuery.eq('clinic_id', clinicId);
+              .eq('status', 'EN_ATTENTE')
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: labRequestsPending, error: errPending } = await labPendingQuery;
             if (errPending && errPending.code !== 'PGRST116') throw errPending;
 
@@ -259,8 +260,8 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
               .from('lab_requests')
               .select('id')
               .gte('created_at', today.toISOString())
-              .lte('created_at', todayEnd.toISOString());
-            if (!superAdmin && clinicId) labTodayQuery = labTodayQuery.eq('clinic_id', clinicId);
+              .lte('created_at', todayEnd.toISOString())
+              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
             const { data: labRequestsToday, error: errToday } = await labTodayQuery;
             if (errToday && errToday.code !== 'PGRST116') throw errToday;
 
@@ -316,9 +317,9 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
           let recentPatientsQuery = supabase
             .from('patients')
             .select('id, nom, prenom, created_at')
+            .eq('clinic_id', clinicId) // Toujours filtrer par clinic_id
             .order('created_at', { ascending: false })
             .limit(5);
-          if (!superAdmin && clinicId) recentPatientsQuery = recentPatientsQuery.eq('clinic_id', clinicId);
           const { data: recentPatients } = await recentPatientsQuery;
           
           if (recentPatients) {
@@ -335,9 +336,9 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
           let recentConsultationsQuery = supabase
             .from('consultations')
             .select('id, started_at, created_by')
+            .eq('clinic_id', clinicId) // Toujours filtrer par clinic_id
             .order('started_at', { ascending: false })
             .limit(5);
-          if (!superAdmin && clinicId) recentConsultationsQuery = recentConsultationsQuery.eq('clinic_id', clinicId);
           const { data: recentConsultations } = await recentConsultationsQuery;
           
           if (recentConsultations) {
