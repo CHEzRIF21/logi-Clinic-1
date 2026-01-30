@@ -635,8 +635,6 @@ const SystemeAlertes: React.FC = () => {
               </TableContainer>
         </CardContent>
       </Card>
-            </>
-          )}
         </Box>
       )}
 
