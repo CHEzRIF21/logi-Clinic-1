@@ -235,7 +235,7 @@ const Maternite: React.FC = () => {
             ageGestationnel: cpn.terme_semaines,
             tension: cpn.tension_arterielle,
             poids: cpn.poids,
-            observations: cpn.observations || '',
+            observations: cpn.diagnostic || cpn.decision || cpn.signes_danger || '',
             statut: cpn.statut || 'terminee'
           })));
           
@@ -250,7 +250,7 @@ const Maternite: React.FC = () => {
               ageGestationnel: cpn.terme_semaines,
               tension: cpn.tension_arterielle,
               poids: cpn.poids,
-              observations: cpn.observations || '',
+              observations: cpn.diagnostic || cpn.decision || cpn.signes_danger || '',
               statut: cpn.statut || 'terminee'
             }));
           }
