@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { LaboratoireService, LabPrescription, LabAnalyse, LabRapport } from './laboratoireService';
+import { getMyClinicId } from './clinicService';
 
 /**
  * Service d'intégration du module Laboratoire avec les autres modules
@@ -997,15 +998,21 @@ export class LaboratoireIntegrationService {
 
       // Créer une alerte si épidémie détectée
       if (isEpidemic) {
-        await supabase.from('alertes_epidemiques').insert([{
-          parametre,
-          periode_jours: periodeJours,
-          nombre_cas_actuels: nombreActuels,
-          nombre_cas_precedents: nombrePrecedents,
-          taux_augmentation: tauxAugmentation,
-          seuil_alerte: seuilAugmentation,
-          statut: 'nouvelle'
-        }]);
+        const clinicId = await getMyClinicId();
+        if (!clinicId) {
+          console.warn('Contexte de clinique manquant pour créer l\'alerte épidémique');
+        } else {
+          await supabase.from('alertes_epidemiques').insert([{
+            parametre,
+            periode_jours: periodeJours,
+            nombre_cas_actuels: nombreActuels,
+            nombre_cas_precedents: nombrePrecedents,
+            taux_augmentation: tauxAugmentation,
+            seuil_alerte: seuilAugmentation,
+            statut: 'nouvelle',
+            clinic_id: clinicId
+          }]);
+        }
       }
 
       return {

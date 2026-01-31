@@ -136,110 +136,125 @@ const SystemeAlertes: React.FC = () => {
     }
   ]);
 
-  // Données de démonstration
-  const alertesDemo: Alerte[] = [
-    {
-      id: '1',
-      type: 'stock_bas',
-            niveau: 'critique',
-      titre: 'Stock Faible - Ibuprofène 400mg',
-      message: 'Le stock d\'Ibuprofène 400mg est en dessous du seuil minimum (15 unités restantes)',
-      medicamentId: '3',
-      medicamentNom: 'Ibuprofène 400mg',
-      medicamentCode: 'MED-003',
-      dateCreation: new Date('2024-07-15'),
-            statut: 'active',
-      priorite: 5,
-      utilisateurCreation: 'Système',
-      actionsRecommandees: [
-        'Commander de nouveaux lots',
-        'Vérifier les transferts en cours',
-        'Contacter le fournisseur'
-      ],
-      donneesContexte: {
-        stockActuel: 15,
-        seuilMinimum: 20,
-        consommationMoyenne: 5
+  // Fonction pour charger les alertes depuis la base de données
+  const loadAlertes = async () => {
+    try {
+      setLoading(true);
+      const clinicId = await getMyClinicId();
+      
+      if (!clinicId) {
+        console.error('Contexte de clinique manquant');
+        setLoading(false);
+        return;
       }
-    },
-    {
-      id: '2',
-      type: 'peremption',
-      niveau: 'avertissement',
-      titre: 'Expiration Proche - Paracétamol 500mg',
-      message: 'Le lot PAR-2024-001 expire dans 85 jours (10/10/2025)',
-      medicamentId: '1',
-      medicamentNom: 'Paracétamol 500mg',
-      medicamentCode: 'MED-001',
-      dateCreation: new Date('2024-07-10'),
-            statut: 'active',
-      priorite: 4,
-      utilisateurCreation: 'Système',
-      actionsRecommandees: [
-        'Prioriser la dispensation de ce lot',
-        'Vérifier les autres lots disponibles',
-        'Planifier un retour vers Magasin Gros si nécessaire'
-      ],
-      donneesContexte: {
-        numeroLot: 'PAR-2024-001',
-        dateExpiration: '2025-10-10',
-        quantiteRestante: 800,
-        joursRestants: 85
+
+      // Charger les alertes depuis alertes_stock avec filtrage par clinic_id
+      const { data: alertesData, error: alertesError } = await supabase
+        .from('alertes_stock')
+        .select(`
+          id,
+          medicament_id,
+          type,
+          niveau,
+          message,
+          date_creation,
+          date_resolution,
+          statut,
+          utilisateur_resolution_id,
+          created_at,
+          medicaments:medicament_id (
+            id,
+            nom,
+            code
+          )
+        `)
+        .eq('clinic_id', clinicId)
+        .order('date_creation', { ascending: false });
+
+      if (alertesError) {
+        console.error('Erreur lors du chargement des alertes:', alertesError);
+        setLoading(false);
+        return;
       }
-    },
-    {
-      id: '3',
-      type: 'perte_anormale',
-      niveau: 'avertissement',
-      titre: 'Perte Anormale Détectée',
-      message: 'Perte de 2 unités d\'Ibuprofène 400mg déclarée (10% du stock)',
-      medicamentId: '3',
-      medicamentNom: 'Ibuprofène 400mg',
-      medicamentCode: 'MED-003',
-      dateCreation: new Date('2024-07-19'),
-      statut: 'active',
-      priorite: 3,
-      utilisateurCreation: 'Système',
-      actionsRecommandees: [
-        'Vérifier la justification de la perte',
-        'Contrôler les procédures de stockage',
-        'Former le personnel si nécessaire'
-      ],
-      donneesContexte: {
-        quantitePerdue: 2,
-        pourcentagePerte: 10,
-        motif: 'Casse',
-        justification: 'Flacon cassé lors du transport'
-      }
-    },
-    {
-      id: '4',
-      type: 'transfert_requis',
-      niveau: 'information',
-      titre: 'Transfert Recommandé',
-      message: 'Le Magasin Détail nécessite un approvisionnement en Amoxicilline 1g',
-      medicamentId: '2',
-      medicamentNom: 'Amoxicilline 1g',
-      medicamentCode: 'MED-002',
-      dateCreation: new Date('2024-07-20'),
-          statut: 'active',
-      priorite: 2,
-      utilisateurCreation: 'Système',
-      actionsRecommandees: [
-        'Créer un transfert vers Magasin Détail',
-        'Vérifier la disponibilité du stock',
-        'Planifier la livraison'
-      ],
-      donneesContexte: {
-        stockDetail: 25,
-        consommationMoyenne: 3,
-        joursAutonomie: 8
-      }
+
+      // Mapper les données vers le format attendu par le composant
+      const mappedAlertes: Alerte[] = (alertesData || []).map((alerte: any) => {
+        // Mapper les types de la base vers les types du frontend
+        const typeMapping: Record<string, Alerte['type']> = {
+          'rupture': 'rupture_stock',
+          'seuil_bas': 'stock_bas',
+          'peremption': 'peremption',
+          'stock_surplus': 'stock_bas',
+        };
+        
+        const mappedType = typeMapping[alerte.type] || 'stock_bas';
+        
+        // Calculer la priorité basée sur le niveau
+        const prioriteMapping: Record<string, number> = {
+          'critique': 5,
+          'avertissement': 4,
+          'information': 2,
+        };
+        
+        // Générer les actions recommandées basées sur le type
+        const actionsMapping: Record<string, string[]> = {
+          'rupture_stock': [
+            'Commander de nouveaux lots',
+            'Vérifier les transferts en cours',
+            'Contacter le fournisseur'
+          ],
+          'stock_bas': [
+            'Commander de nouveaux lots',
+            'Vérifier les transferts en cours',
+            'Contacter le fournisseur'
+          ],
+          'peremption': [
+            'Prioriser la dispensation de ce lot',
+            'Vérifier les autres lots disponibles',
+            'Planifier un retour si nécessaire'
+          ],
+          'perte_anormale': [
+            'Vérifier la justification de la perte',
+            'Contrôler les procédures de stockage',
+            'Former le personnel si nécessaire'
+          ],
+          'transfert_requis': [
+            'Créer un transfert vers le magasin concerné',
+            'Vérifier la disponibilité du stock',
+            'Planifier la livraison'
+          ],
+        };
+
+        return {
+          id: alerte.id,
+          type: mappedType,
+          niveau: alerte.niveau as 'critique' | 'avertissement' | 'information',
+          titre: `${alerte.niveau === 'critique' ? '🚨 ' : ''}${alerte.type.replace('_', ' ').toUpperCase()} - ${alerte.medicaments?.nom || 'Médicament inconnu'}`,
+          message: alerte.message,
+          medicamentId: alerte.medicament_id,
+          medicamentNom: alerte.medicaments?.nom || 'Médicament inconnu',
+          medicamentCode: alerte.medicaments?.code || 'N/A',
+          dateCreation: new Date(alerte.date_creation || alerte.created_at),
+          dateResolution: alerte.date_resolution ? new Date(alerte.date_resolution) : undefined,
+          statut: alerte.statut as 'active' | 'resolue' | 'ignoree',
+          priorite: prioriteMapping[alerte.niveau] || 3,
+          utilisateurCreation: 'Système',
+          utilisateurResolution: alerte.utilisateur_resolution_id || undefined,
+          actionsRecommandees: actionsMapping[mappedType] || ['Vérifier et traiter cette alerte'],
+          donneesContexte: {},
+        };
+      });
+
+      setAlertes(mappedAlertes);
+    } catch (error) {
+      console.error('Erreur lors du chargement des alertes:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   useEffect(() => {
-    setAlertes(alertesDemo);
+    loadAlertes();
   }, []);
 
   // Filtrage des alertes
@@ -369,13 +384,23 @@ const SystemeAlertes: React.FC = () => {
   return (
     <Box>
       {/* En-tête */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Système d'Alertes
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Gestion des alertes automatiques et notifications
-        </Typography>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            Système d'Alertes
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Gestion des alertes automatiques et notifications
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={loading ? <CircularProgress size={20} /> : <Refresh />}
+          onClick={loadAlertes}
+          disabled={loading}
+        >
+          Actualiser
+        </Button>
       </Box>
 
       {/* Navigation par onglets */}

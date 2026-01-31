@@ -56,6 +56,7 @@ export const authenticateToken = async (
   try {
     // Vérifier le token via Supabase Auth (recommandé - pas de vérification manuelle JWT)
     if (!supabase) {
+      console.error('❌ Configuration Supabase manquante dans authenticateToken');
       return res.status(500).json({
         success: false,
         message: 'Configuration Supabase manquante',
@@ -63,15 +64,25 @@ export const authenticateToken = async (
       });
     }
 
+    console.log('🔐 Vérification du token Supabase Auth...');
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !authUser) {
+      console.error('❌ Erreur Supabase Auth:', {
+        error: authError?.message,
+        code: authError?.status,
+        hasAuthUser: !!authUser,
+        tokenPreview: token ? token.substring(0, 20) + '...' : 'null'
+      });
       return res.status(401).json({
         success: false,
         message: authError?.message || 'Token invalide ou expiré',
         code: 'INVALID_TOKEN',
+        details: process.env.NODE_ENV === 'development' ? authError?.message : undefined,
       });
     }
+
+    console.log('✅ Token Supabase Auth valide pour:', authUser.email);
 
     // Récupérer le profil utilisateur depuis la table users
     const { data: userProfile, error: profileError } = await supabase
@@ -80,24 +91,57 @@ export const authenticateToken = async (
       .eq('auth_user_id', authUser.id)
       .maybeSingle();
 
-    if (profileError || !userProfile) {
+    if (profileError) {
+      console.error('❌ Erreur lors de la récupération du profil:', profileError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la récupération du profil utilisateur',
+        code: 'PROFILE_FETCH_ERROR',
+      });
+    }
+
+    if (!userProfile) {
+      console.error('❌ Profil utilisateur introuvable pour auth_user_id:', authUser.id);
       return res.status(403).json({
         success: false,
-        message: 'Profil utilisateur introuvable',
+        message: 'Profil utilisateur introuvable. Veuillez contacter l\'administrateur.',
         code: 'USER_PROFILE_NOT_FOUND',
       });
     }
 
+    console.log('📋 Profil utilisateur trouvé:', {
+      id: userProfile.id,
+      email: userProfile.email,
+      role: userProfile.role,
+      clinic_id: userProfile.clinic_id,
+      status: userProfile.status,
+      actif: userProfile.actif
+    });
+
     if (!userProfile.actif || userProfile.status === 'SUSPENDED' || userProfile.status === 'REJECTED' || userProfile.status === 'PENDING') {
+      console.warn('⚠️ Compte utilisateur inactif ou en attente:', {
+        email: userProfile.email,
+        actif: userProfile.actif,
+        status: userProfile.status
+      });
       return res.status(403).json({
         success: false,
-        message: 'Compte inactif, en attente d\'activation ou suspendu',
+        message: `Compte ${userProfile.status === 'PENDING' ? 'en attente d\'activation' : userProfile.status === 'SUSPENDED' ? 'suspendu' : 'inactif'}. Veuillez contacter l'administrateur.`,
         code: 'ACCOUNT_INACTIVE',
+        status: userProfile.status,
       });
     }
 
     // clinic_id UNIQUEMENT depuis le profil (jamais depuis les headers)
     const clinicId = userProfile.clinic_id || authUser.user_metadata?.clinic_id;
+
+    if (!clinicId) {
+      console.warn('⚠️ Utilisateur sans clinic_id:', {
+        email: userProfile.email,
+        role: userProfile.role,
+        id: userProfile.id
+      });
+    }
 
     // Construire l'objet user avec toutes les informations nécessaires
     req.user = {
@@ -111,6 +155,13 @@ export const authenticateToken = async (
         role: userProfile.role,
       },
     };
+
+    console.log('✅ Authentification réussie pour:', {
+      userId: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      clinicId: req.user.clinic_id
+    });
 
     next();
   } catch (error: any) {

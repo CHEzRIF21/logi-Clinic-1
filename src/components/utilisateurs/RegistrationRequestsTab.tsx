@@ -114,7 +114,26 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      setError('');
+      
       const token = localStorage.getItem('token');
+      
+      // Vérifier que le token existe
+      if (!token) {
+        setError('Session expirée. Veuillez vous reconnecter.');
+        console.error('❌ Token manquant dans localStorage');
+        return;
+      }
+
+      // Vérifier que le token est un JWT valide
+      const isValidJWT = token && token.includes('.') && token.split('.').length === 3;
+      if (!isValidJWT) {
+        setError('Token d\'authentification invalide. Veuillez vous reconnecter.');
+        console.error('❌ Token non-JWT détecté:', token.substring(0, 20) + '...');
+        localStorage.removeItem('token');
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/auth/registration-requests?statut=${filterStatus !== 'all' ? filterStatus : ''}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -122,19 +141,46 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
         },
       });
 
+      // Gérer les erreurs HTTP avec des messages spécifiques
       if (!response.ok) {
-        throw new Error('Erreur lors du chargement des demandes');
+        const errorData = await response.json().catch(() => ({}));
+        
+        if (response.status === 401) {
+          setError('Session expirée ou token invalide. Veuillez vous reconnecter.');
+          console.error('❌ Erreur 401 - Authentification échouée:', errorData);
+          // Nettoyer le token invalide
+          localStorage.removeItem('token');
+          // Optionnel: rediriger vers la page de login
+          // window.location.href = '/login';
+          return;
+        }
+        
+        if (response.status === 403) {
+          setError(errorData.message || 'Vous n\'avez pas les permissions nécessaires pour accéder aux demandes d\'inscription.');
+          console.error('❌ Erreur 403 - Permission refusée:', errorData);
+          return;
+        }
+        
+        if (response.status === 400) {
+          setError(errorData.message || 'Requête invalide. Vérifiez votre connexion à la clinique.');
+          console.error('❌ Erreur 400 - Requête invalide:', errorData);
+          return;
+        }
+        
+        throw new Error(errorData.message || `Erreur ${response.status} lors du chargement des demandes`);
       }
 
       const data = await response.json();
       if (data.success) {
         setRequests(data.requests || []);
         setError('');
+        console.log('✅ Demandes d\'inscription chargées:', data.requests?.length || 0);
       } else {
         throw new Error(data.message || 'Erreur lors du chargement des demandes');
       }
     } catch (err: any) {
-      setError(err.message || 'Erreur lors du chargement des demandes');
+      console.error('❌ Erreur lors du chargement des demandes:', err);
+      setError(err.message || 'Erreur lors du chargement des demandes. Vérifiez votre connexion.');
     } finally {
       setLoading(false);
     }
@@ -143,6 +189,12 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.warn('⚠️ Token manquant pour les statistiques');
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/auth/registration-requests`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -161,6 +213,9 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
             rejected: allRequests.filter((r: RegistrationRequest) => r.statut === 'rejected').length,
           });
         }
+      } else if (response.status === 401) {
+        console.warn('⚠️ Session expirée lors du chargement des statistiques');
+        localStorage.removeItem('token');
       }
     } catch (err) {
       console.error('Erreur lors du chargement des statistiques:', err);
@@ -352,8 +407,41 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
-          {error}
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }} 
+          onClose={() => setError('')}
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={() => {
+                // Nettoyer le token et rediriger vers login si erreur 401
+                if (error.includes('Session expirée') || error.includes('token invalide')) {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                  window.location.href = '/login';
+                } else {
+                  // Réessayer de charger les demandes
+                  fetchRequests();
+                }
+              }}
+            >
+              {error.includes('Session expirée') || error.includes('token invalide') ? 'Se reconnecter' : 'Réessayer'}
+            </Button>
+          }
+        >
+          <Typography variant="body1" fontWeight="bold" gutterBottom>
+            Erreur lors du chargement des demandes
+          </Typography>
+          <Typography variant="body2">
+            {error}
+          </Typography>
+          {error.includes('Session expirée') && (
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              💡 Votre session a expiré. Veuillez vous reconnecter pour continuer.
+            </Typography>
+          )}
         </Alert>
       )}
 

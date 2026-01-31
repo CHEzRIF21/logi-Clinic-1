@@ -282,7 +282,10 @@ router.post('/register-request', async (req: Request, res: Response) => {
 // GET /api/auth/registration-requests - Récupérer les demandes d'inscription (admin)
 router.get('/registration-requests', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
   try {
+    console.log('📥 Requête GET /registration-requests reçue');
+    
     if (!supabase) {
+      console.error('❌ Service Supabase non disponible');
       return res.status(500).json({
         success: false,
         message: 'Service de base de données non disponible',
@@ -296,16 +299,20 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
 
     console.log('🔐 Utilisateur récupérant les demandes:', {
       userId: req.user?.id,
+      email: req.user?.email,
       role: req.user?.role,
       clinicId,
       isSuperAdmin,
+      statutFilter: statut || 'tous'
     });
 
     // TOUJOURS filtrer par clinic_id (même pour Super Admin selon nouvelle exigence)
     if (!clinicId) {
+      console.error('❌ Contexte de clinique manquant pour l\'utilisateur:', req.user?.id);
       return res.status(400).json({
         success: false,
         message: 'Contexte de clinique manquant. Veuillez vous reconnecter.',
+        code: 'CLINIC_CONTEXT_REQUIRED',
       });
     }
 
@@ -324,15 +331,26 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
     const { data, error } = await query;
 
     if (error) {
-      console.error('Erreur Supabase:', error);
+      console.error('❌ Erreur Supabase lors de la récupération des demandes:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
       return res.status(500).json({
         success: false,
         message: 'Erreur lors de la récupération des demandes',
+        code: 'DATABASE_ERROR',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
 
     // Ne pas renvoyer les mots de passe hashés et mapper snake_case vers camelCase
-    console.log('📋 Données brutes des demandes d\'inscription:', JSON.stringify(data, null, 2));
+    console.log('📋 Demandes d\'inscription trouvées:', {
+      count: data?.length || 0,
+      clinicId,
+      statutFilter: statut || 'tous'
+    });
     
     const sanitizedData = (data || []).map((item: any) => {
       const {

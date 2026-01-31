@@ -1,0 +1,11 @@
+---
+alwaysApply: true
+---
+
+Principe de Base : Toute entité, donnée ou enregistrement créé au sein de Logiclinic doit être associée à un identifiant unique de clinique, appelé clinic_id.
+
+Isolation des Données : Les données doivent être filtrées et accessibles uniquement via leur clinic_id, garantissant que chaque clinique a un espace de données distinct et isolé.
+
+Application : Lors de la création, de la lecture, de la mise à jour ou de la suppression de données, le clinic_id doit être pris en compte pour garantir que les opérations se limitent aux données de la clinique concernée.
+
+Conformité : Toute violation de cette règle doit entraîner une erreur ou une alerte, afin de préserver l’isolation des données.
