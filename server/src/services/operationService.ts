@@ -91,11 +91,22 @@ export class OperationService {
 
   /**
    * Récupère une opération par son ID
+   * ✅ CORRIGÉ: Vérifie que l'opération appartient à la clinique
    */
-  static async getOperationById(id: string) {
+  static async getOperationById(id: string, filters?: {
+    clinicId?: string;        // ✅ AJOUTER
+    isSuperAdmin?: boolean;   // ✅ AJOUTER
+  }) {
     return await SchemaCacheService.executeWithRetry(async () => {
-      const operation = await prisma.operation.findUnique({
-        where: { id },
+      const where: any = { id };
+      
+      // ✅ VÉRIFIER clinic_id SAUF si super admin
+      if (!filters?.isSuperAdmin && filters?.clinicId) {
+        where.clinicId = filters.clinicId;
+      }
+
+      const operation = await prisma.operation.findFirst({
+        where, // ✅ Utiliser findFirst avec where au lieu de findUnique
         include: {
           patient: true,
           lines: {

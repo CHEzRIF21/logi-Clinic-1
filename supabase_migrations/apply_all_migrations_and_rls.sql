@@ -3,12 +3,15 @@
 -- ============================================
 -- Date: 2024-12-20
 -- Description: Applique toutes les migrations nécessaires et configure les politiques RLS
+-- Prérequis : La table "patients" doit exister (créée par les migrations hiérarchiques ou Prisma).
+
+BEGIN;
 
 -- ============================================
 -- 1. MIGRATION : Colonnes Accompagnant et Personne à prévenir
 -- ============================================
 
--- Ajout des colonnes pour l'accompagnant
+-- Ajout des colonnes pour l'accompagnant (idempotent)
 ALTER TABLE patients
 ADD COLUMN IF NOT EXISTS accompagnant_nom VARCHAR(100),
 ADD COLUMN IF NOT EXISTS accompagnant_prenoms VARCHAR(100),
@@ -222,4 +225,6 @@ USING (bucket_id = 'patient-files');
 
 -- Vérification
 SELECT 'Migration complète appliquée avec succès!' as status;
+
+COMMIT;
 

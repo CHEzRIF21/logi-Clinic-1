@@ -3,10 +3,12 @@
 #   - Mode "local Supabase CLI" (si supabase CLI dispo): .\apply_migrations.ps1
 #   - Mode "fallback psql" (sans supabase CLI):         .\apply_migrations.ps1 -DbUrl $env:DATABASE_URL -NonInteractive
 #
+# Voir MIGRATIONS_README.md pour l'ordre complet des migrations backend (Prisma) et Supabase.
+#
 # Notes:
 # - Ce repo contient 2 dossiers:
 #   - supabase/migrations : migrations "standard" compatibles Supabase CLI
-#   - supabase_migrations : scripts historiques à copier/coller dans le SQL Editor
+#   - supabase_migrations : scripts historiques (ordre détaillé dans MIGRATIONS_README.md)
 
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Application des migrations Supabase" -ForegroundColor Cyan
@@ -68,13 +70,11 @@ if (Test-Path $supabaseMigrationDir) {
     $supabaseMigrationFiles = Get-ChildItem -Path $supabaseMigrationDir -Filter "*.sql" | Sort-Object Name
 }
 
-# 2) Liste historique (conservée)
+# 2) Liste des migrations manuelles optionnelles (si les fichiers existent)
+# Voir MIGRATIONS_README.md pour l'ordre complet des migrations numérotées (65_, 66_, etc.)
 $migrationDir = "supabase_migrations"
 $migrations = @(
-    "create_stock_tables.sql",
-    "add_medicament_pricing_columns.sql",
-    "enhance_dispensation_tables.sql",
-    "consolidate_stock_dispensation_schema.sql"
+    "apply_all_migrations_and_rls.sql"
 )
 $successCount = 0
 $errorCount = 0

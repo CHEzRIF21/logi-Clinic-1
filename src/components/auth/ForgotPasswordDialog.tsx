@@ -39,8 +39,8 @@ const ForgotPasswordDialog: React.FC<ForgotPasswordDialogProps> = ({
   const [success, setSuccess] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
-  // Timeout pour la requête (60 secondes - Supabase peut prendre du temps pour envoyer l'email)
-  const REQUEST_TIMEOUT = 60000;
+  // Timeout pour la requête (30 secondes)
+  const REQUEST_TIMEOUT = 30000;
 
   // Fonction pour valider l'email
   const validateEmail = (email: string): boolean => {
@@ -87,18 +87,11 @@ const ForgotPasswordDialog: React.FC<ForgotPasswordDialogProps> = ({
       try {
         result = await Promise.race([resetPromise, timeoutPromise]);
       } catch (raceError: any) {
-        // Si c'est notre timeout, relancer l'erreur
-        if (raceError.message === 'TIMEOUT') {
-          throw raceError;
+        // Si le timeout gagne la course, on a une erreur TIMEOUT
+        if (raceError?.message === 'TIMEOUT' || raceError?.message?.includes('TIMEOUT')) {
+          throw new Error('TIMEOUT');
         }
-        // Sinon, c'est peut-être une erreur réseau ou 504
-        // On essaie de récupérer le résultat de la promesse originale
-        try {
-          result = await resetPromise;
-        } catch (finalError: any) {
-          // Si la promesse originale échoue aussi, on lance l'erreur finale
-          throw finalError;
-        }
+        throw raceError;
       }
 
       // Si on arrive ici, la requête a réussi (pas de timeout)
@@ -139,48 +132,50 @@ const ForgotPasswordDialog: React.FC<ForgotPasswordDialogProps> = ({
     } catch (err: any) {
       console.error('Erreur lors de l\'envoi de l\'email de réinitialisation:', err);
 
-      // Vérifier le code d'erreur HTTP
-      const statusCode = err?.status || err?.statusCode || err?.code;
-      const errorMessage = err?.message || err?.error_description || '';
+      // Détecter les différents types d'erreurs de timeout
+      const errorMessage = err?.message || err?.error_description || String(err || '').toLowerCase();
+      const errorStatus = err?.status || err?.statusCode || err?.code;
 
-      // Erreur 504 Gateway Timeout - Le serveur Supabase met trop de temps
-      if (statusCode === 504 || errorMessage.includes('504') || errorMessage.includes('Gateway Timeout')) {
-        // Dans ce cas, Supabase peut avoir quand même envoyé l'email de manière asynchrone
-        // On affiche un message informatif plutôt qu'une erreur
-        setSuccess(true);
-        setEmailSent(true);
-        // Note: On garde le message de succès mais on pourrait ajouter une note
-        return;
-      }
-
-      // Timeout côté client (60 secondes)
-      if (err.message === 'TIMEOUT' || errorMessage.includes('TIMEOUT') || errorMessage.includes('timeout')) {
-        // Même en cas de timeout, Supabase peut avoir traité la demande
-        // On affiche un message de succès avec une note
-        setSuccess(true);
-        setEmailSent(true);
-        return;
-      }
-
-      // Erreur réseau
-      if (errorMessage.includes('network') || errorMessage.includes('fetch') || errorMessage.includes('Failed to fetch')) {
+      // Erreur 504 Gateway Timeout (upstream request timeout)
+      if (
+        errorStatus === 504 ||
+        errorMessage.includes('504') ||
+        errorMessage.includes('gateway timeout') ||
+        errorMessage.includes('upstream request timeout') ||
+        errorMessage === 'timeout' ||
+        errorMessage.includes('timeout')
+      ) {
         setError(
-          'Erreur de connexion. Vérifiez votre connexion internet et réessayez.'
+          'Le serveur Supabase met trop de temps à répondre. Cela peut être dû à une surcharge temporaire. Veuillez réessayer dans quelques instants ou contacter le support si le problème persiste.'
+        );
+        return;
+      }
+
+      // Erreur réseau générale
+      if (
+        errorMessage.includes('network') ||
+        errorMessage.includes('fetch') ||
+        errorMessage.includes('failed to fetch') ||
+        errorMessage.includes('networkerror')
+      ) {
+        setError(
+          'Erreur de connexion réseau. Vérifiez votre connexion internet et réessayez.'
         );
         return;
       }
 
       // Erreur de rate limiting
-      if (statusCode === 429 || errorMessage.includes('rate limit')) {
+      if (errorStatus === 429 || errorMessage.includes('rate limit')) {
         setError(
           'Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer.'
         );
         return;
       }
 
-      // Pour toutes les autres erreurs, on affiche un message de succès pour la sécurité
-      // Cela évite de révéler si un email existe ou non dans le système
-      // Note: Supabase peut avoir traité la demande même en cas d'erreur
+      // Pour toutes les autres erreurs, on affiche un message générique de succès
+      // pour des raisons de sécurité (ne pas révéler si l'email existe ou non)
+      // MAIS on log l'erreur pour le debugging
+      console.warn('Erreur non gérée lors de l\'envoi de l\'email:', err);
       setSuccess(true);
       setEmailSent(true);
     } finally {
@@ -263,8 +258,8 @@ const ForgotPasswordDialog: React.FC<ForgotPasswordDialogProps> = ({
             </Typography>
             <Alert severity="info" sx={{ mt: 2, textAlign: 'left' }}>
               <Typography variant="body2">
-                <strong>Note importante :</strong> L'envoi de l'email peut prendre quelques minutes.
-                Si vous ne recevez pas l'email dans les 5 minutes, vérifiez votre dossier spam et réessayez.
+                <strong>Conseil :</strong> Si vous ne recevez pas l'email, vérifiez que l'adresse
+                est correcte et attendez quelques minutes.
               </Typography>
             </Alert>
           </Box>

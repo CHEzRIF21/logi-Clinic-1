@@ -1,5 +1,7 @@
 # 🚀 Guide pour appliquer les migrations Supabase
 
+**Voir aussi :** [MIGRATIONS_README.md](./MIGRATIONS_README.md) pour l’ordre complet des migrations backend (Prisma) et Supabase.
+
 ## ⚠️ IMPORTANT : Résoudre l'erreur RLS
 
 L'erreur "new row violates row-level security policy" signifie que les politiques RLS bloquent l'insertion. Suivez ces étapes pour corriger.
