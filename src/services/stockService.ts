@@ -1272,7 +1272,10 @@ export class StockService {
 
   static async getLotsByMagasin(magasin: 'gros' | 'detail') {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('lots')
         .select(`
           id,
@@ -1306,8 +1309,13 @@ export class StockService {
           )
         `)
         .eq('magasin', magasin)
-        .eq('statut', 'actif')
-        .order('date_expiration', { ascending: true });
+        .eq('statut', 'actif');
+      
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      
+      query = query.order('date_expiration', { ascending: true });
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return data;

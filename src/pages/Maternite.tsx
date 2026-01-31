@@ -118,11 +118,18 @@ const Maternite: React.FC = () => {
   const [openNouveauNeDialog, setOpenNouveauNeDialog] = useState(false);
   const [openPostPartumDialog, setOpenPostPartumDialog] = useState(false);
 
-  // Charger les dossiers
+  // États pour les données réelles du dashboard
+  const [patientes, setPatientes] = useState<Patiente[]>([]);
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [accouchements, setAccouchements] = useState<any[]>([]);
+  const [alertes, setAlertes] = useState<any[]>([]);
+
+  // Charger les dossiers et les données du dashboard
   useEffect(() => {
     // Délai pour s'assurer que Supabase est initialisé
     const timer = setTimeout(() => {
       loadDossiers();
+      loadDashboardData();
     }, 500);
     
     return () => clearTimeout(timer);
@@ -178,8 +185,199 @@ const Maternite: React.FC = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Données de démonstration enrichies (pour le dashboard et autres fonctionnalités existantes)
-  const patientes: Patiente[] = [
+  // Charger les données réelles pour le dashboard
+  const loadDashboardData = async () => {
+    try {
+      const { getMyClinicId } = await import('../services/clinicService');
+      const { supabase } = await import('../services/supabase');
+      const clinicId = await getMyClinicId();
+      
+      if (!clinicId) {
+        console.warn('Contexte de clinique manquant pour charger les données du dashboard');
+        return;
+      }
+
+      // Charger les dossiers obstétricaux avec les patients
+      const dossiersData = await MaterniteService.getAllDossiers();
+      
+      // Transformer les dossiers en format Patiente pour le dashboard
+      const patientesData: Patiente[] = dossiersData.map((dossier: any) => {
+        const patient = dossier.patients || {};
+        return {
+          id: dossier.patient_id || dossier.id,
+          nom: patient.nom || '',
+          prenom: patient.prenoms || '',
+          dateNaissance: patient.date_naissance || '',
+          dateDerniereRegles: dossier.date_dernieres_regles || '',
+          dateAccouchementPrevu: dossier.date_accouchement_prevu || '',
+          statut: dossier.status === 'en_suivi' ? 'suivi' : 
+                  dossier.status === 'accouchement' ? 'accouchement' :
+                  dossier.status === 'post_partum' ? 'post_partum' : 'suivi',
+          grossesse: dossier.numero_grossesse || 1,
+          notes: dossier.observations || '',
+          risque: dossier.niveau_risque === 'eleve' ? 'eleve' : 'normal',
+          cpnCompletes: 0, // Sera mis à jour après chargement des CPN
+          consultations: [],
+          accouchements: []
+        };
+      });
+
+      // Charger les CPN pour tous les dossiers
+      const allCPN: any[] = [];
+      for (const dossier of dossiersData) {
+        try {
+          const cpns = await CPNService.getAllCPN(dossier.id);
+          allCPN.push(...cpns.map(cpn => ({
+            ...cpn,
+            patienteId: dossier.patient_id || dossier.id,
+            numeroCPN: cpn.numero_cpn,
+            date: cpn.date_consultation,
+            ageGestationnel: cpn.terme_semaines,
+            tension: cpn.tension_arterielle,
+            poids: cpn.poids,
+            observations: cpn.observations || '',
+            statut: cpn.statut || 'terminee'
+          })));
+          
+          // Mettre à jour le nombre de CPN complètes pour cette patiente
+          const patienteIndex = patientesData.findIndex(p => p.id === (dossier.patient_id || dossier.id));
+          if (patienteIndex >= 0) {
+            patientesData[patienteIndex].cpnCompletes = cpns.filter(c => c.statut === 'terminee').length;
+            patientesData[patienteIndex].consultations = cpns.map(cpn => ({
+              id: cpn.id || '',
+              numeroCPN: cpn.numero_cpn,
+              date: cpn.date_consultation,
+              ageGestationnel: cpn.terme_semaines,
+              tension: cpn.tension_arterielle,
+              poids: cpn.poids,
+              observations: cpn.observations || '',
+              statut: cpn.statut || 'terminee'
+            }));
+          }
+        } catch (err) {
+          console.warn(`Erreur lors du chargement des CPN pour le dossier ${dossier.id}:`, err);
+        }
+      }
+
+      // Charger les accouchements
+      const accouchementsData = await AccouchementService.getAllAccouchements();
+      const accouchementsFormatted = accouchementsData.map(acc => ({
+        id: acc.id || '',
+        date: acc.date_accouchement,
+        mode: acc.type_accouchement || 'voie_basse',
+        dureeTravail: acc.duree_travail,
+        nouveauNe: acc.nouveau_nes && acc.nouveau_nes.length > 0 ? {
+          sexe: acc.nouveau_nes[0].sexe === 'Masculin' ? 'M' : 'F',
+          poids: acc.nouveau_nes[0].poids,
+          taille: acc.nouveau_nes[0].taille,
+          scoreApgar1: acc.nouveau_nes[0].apgar_1min,
+          scoreApgar5: acc.nouveau_nes[0].apgar_5min,
+          scoreApgar10: acc.nouveau_nes[0].apgar_10min,
+          statut: acc.issue_grossesse === 'Vivant' ? 'vivant' : 'mort'
+        } : undefined,
+        statut: acc.statut === 'termine' ? 'termine' : 'en_cours'
+      }));
+
+      // Mettre à jour les accouchements dans les patientes
+      for (const acc of accouchementsData) {
+        const dossier = dossiersData.find(d => d.id === acc.dossier_obstetrical_id);
+        if (dossier) {
+          const patienteIndex = patientesData.findIndex(p => p.id === (dossier.patient_id || dossier.id));
+          if (patienteIndex >= 0) {
+            patientesData[patienteIndex].accouchements = accouchementsFormatted.filter(a => 
+              accouchementsData.find(accData => accData.id === a.id)?.dossier_obstetrical_id === dossier.id
+            );
+          }
+        }
+      }
+
+      // Charger les alertes maternité depuis Supabase (si la table existe)
+      let alertesFormatted: any[] = [];
+      try {
+        const { data: alertesData, error: alertesError } = await supabase
+          .from('alertes_maternite')
+          .select('*')
+          .eq('clinic_id', clinicId)
+          .eq('statut', 'active')
+          .order('date_creation', { ascending: false });
+
+        if (!alertesError && alertesData) {
+          alertesFormatted = alertesData.map(alerte => ({
+            id: alerte.id,
+            type: alerte.type,
+            niveau: alerte.niveau,
+            message: alerte.message,
+            patienteId: alerte.patient_id || alerte.dossier_obstetrical_id,
+            dateCreation: alerte.date_creation,
+            statut: alerte.statut,
+            priorite: alerte.priorite || 'normale',
+            description: alerte.description || ''
+          }));
+        }
+      } catch (alertesErr: any) {
+        // Si la table n'existe pas, générer des alertes à partir des données disponibles
+        console.warn('Table alertes_maternite non disponible, génération d\'alertes depuis les données:', alertesErr);
+        
+        // Générer des alertes pour les CPN manquées
+        const maintenant = new Date();
+        for (const patiente of patientesData) {
+          const derniereCPN = patiente.consultations && patiente.consultations.length > 0
+            ? patiente.consultations[patiente.consultations.length - 1]
+            : null;
+          
+          if (derniereCPN) {
+            const dateDerniereCPN = new Date(derniereCPN.date);
+            const joursDepuisDerniereCPN = (maintenant.getTime() - dateDerniereCPN.getTime()) / (1000 * 60 * 60 * 24);
+            
+            // Alerte si plus de 30 jours depuis la dernière CPN
+            if (joursDepuisDerniereCPN > 30 && patiente.statut === 'suivi') {
+              alertesFormatted.push({
+                id: `cpn-manquee-${patiente.id}`,
+                type: 'cpn_manquee',
+                niveau: 'warning',
+                message: `CPN manquée pour ${patiente.prenom} ${patiente.nom}`,
+                patienteId: patiente.id,
+                dateCreation: maintenant.toISOString(),
+                statut: 'active',
+                priorite: 'normale',
+                description: `Dernière CPN: ${dateDerniereCPN.toLocaleDateString()}`
+              });
+            }
+          }
+          
+          // Alerte pour grossesses à risque
+          if (patiente.risque === 'eleve') {
+            alertesFormatted.push({
+              id: `risque-${patiente.id}`,
+              type: 'grossesse_risque',
+              niveau: 'error',
+              message: `Grossesse à risque pour ${patiente.prenom} ${patiente.nom}`,
+              patienteId: patiente.id,
+              dateCreation: maintenant.toISOString(),
+              statut: 'active',
+              priorite: 'elevee',
+              description: 'Surveillance accrue requise'
+            });
+          }
+        }
+      }
+
+      setPatientes(patientesData);
+      setConsultations(allCPN);
+      setAccouchements(accouchementsFormatted);
+      setAlertes(alertesFormatted);
+    } catch (err: any) {
+      console.error('Erreur lors du chargement des données du dashboard:', err);
+      // En cas d'erreur, utiliser des données vides plutôt que de démonstration
+      setPatientes([]);
+      setConsultations([]);
+      setAccouchements([]);
+      setAlertes([]);
+    }
+  };
+
+  // Données de démonstration enrichies (pour le dashboard et autres fonctionnalités existantes) - REMPLACÉ PAR LES DONNÉES RÉELLES
+  const patientesDemo: Patiente[] = [
     {
       id: 'PAT001',
       nom: 'Dupont',
@@ -317,49 +515,8 @@ const Maternite: React.FC = () => {
   ];
 
   // Données de démonstration pour les consultations et accouchements
-  const consultations = [
-    ...patientes.flatMap(p => p.consultations || []),
-    {
-      id: '8',
-      patienteId: 'PAT001',
-      numeroCPN: 4,
-      date: '2024-01-15',
-      ageGestationnel: 36,
-      tension: '12/8',
-      poids: 74,
-      observations: 'Dernière consultation avant accouchement',
-      statut: 'programmee'
-    }
-  ];
-
-  const accouchements = [
-    ...patientes.flatMap(p => p.accouchements || [])
-  ];
-
-  const alertes = [
-    {
-      id: '1',
-      type: 'cpn_manquee',
-      niveau: 'warning',
-      message: 'CPN manquée pour Marie Dupont',
-      patienteId: 'PAT001',
-      dateCreation: new Date().toISOString(),
-      statut: 'active',
-      priorite: 'normale',
-      description: 'CPN4 programmée le 15/01/2024'
-    },
-    {
-      id: '2',
-      type: 'grossesse_risque',
-      niveau: 'error',
-      message: 'Grossesse à risque pour Sophie Martin',
-      patienteId: 'PAT002',
-      dateCreation: new Date().toISOString(),
-      statut: 'active',
-      priorite: 'elevee',
-      description: 'Pré-éclampsie légère détectée'
-    }
-  ];
+  // Les données consultations, accouchements et alertes sont maintenant chargées depuis Supabase
+  // et stockées dans les états : consultations, accouchements, alertes
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -484,8 +641,10 @@ const Maternite: React.FC = () => {
     console.log('Configurer alertes:', config);
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     console.log('Actualiser les données');
+    await loadDossiers();
+    await loadDashboardData();
   };
 
   const handleExportData = (format: string) => {

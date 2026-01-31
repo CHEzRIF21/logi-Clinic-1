@@ -156,13 +156,24 @@ export class MaterniteService {
         throw new Error('Connexion Supabase non initialisée. Vérifiez votre configuration.');
       }
 
+      // Récupérer le clinic_id de l'utilisateur connecté
+      const { getMyClinicId } = await import('./clinicService');
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
+      }
+
       // Récupérer les dossiers avec les grossesses antérieures
       // Utiliser une requête plus simple d'abord pour tester la connexion
-      const { data: dossiersData, error: dossiersError } = await supabase
+      let query = supabase
         .from('dossier_obstetrical')
-        .select('*')
-        .order('date_entree', { ascending: false })
-        .limit(100);
+        .select('*');
+      
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      
+      query = query.order('date_entree', { ascending: false }).limit(100);
+      
+      const { data: dossiersData, error: dossiersError } = await query;
 
       if (dossiersError) {
         console.error('Erreur Supabase lors de la récupération des dossiers:', dossiersError);

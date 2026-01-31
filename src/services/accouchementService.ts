@@ -275,6 +275,13 @@ export class AccouchementService {
 
   static async getAllAccouchements(dossierId?: string): Promise<Accouchement[]> {
     try {
+      // Récupérer le clinic_id de l'utilisateur connecté
+      const { getMyClinicId } = await import('./clinicService');
+      const clinicId = await getMyClinicId();
+      if (!clinicId) {
+        throw new Error('Contexte de clinique manquant. Veuillez vous reconnecter.');
+      }
+
       let query = supabase
         .from('accouchement')
         .select(`
@@ -288,12 +295,26 @@ export class AccouchementService {
           ),
           sensibilisation:sensibilisation_mere (*),
           references:reference_transfert (*)
-        `)
-        .order('date_accouchement', { ascending: false });
-
+        `);
+      
       if (dossierId) {
         query = query.eq('dossier_obstetrical_id', dossierId);
+      } else {
+        // Si pas de dossierId spécifique, charger tous les dossiers de la clinique
+        // puis filtrer les accouchements par ces dossiers
+        const { MaterniteService } = await import('./materniteService');
+        const dossiers = await MaterniteService.getAllDossiers();
+        const dossierIds = dossiers.map(d => d.id);
+        
+        if (dossierIds.length > 0) {
+          query = query.in('dossier_obstetrical_id', dossierIds);
+        } else {
+          // Aucun dossier pour cette clinique, retourner un tableau vide
+          return [];
+        }
       }
+
+      query = query.order('date_accouchement', { ascending: false });
 
       const { data, error } = await query;
       if (error) throw error;

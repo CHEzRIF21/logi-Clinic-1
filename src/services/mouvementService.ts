@@ -1,17 +1,26 @@
 import { supabase, MouvementStockSupabase, MouvementStockFormData } from './stockSupabase';
+import { getMyClinicId } from './clinicService';
 
 export class MouvementService {
   // Récupérer tous les mouvements
   static async getAllMouvements(): Promise<MouvementStockSupabase[]> {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant.');
+
+      let query = supabase
         .from('mouvements_stock')
         .select(`
           *,
           medicaments(nom, code, categorie),
           lots(numero_lot, date_expiration)
-        `)
-        .order('date_mouvement', { ascending: false });
+        `);
+      
+      if (clinicId) query = query.eq('clinic_id', clinicId);
+      
+      query = query.order('date_mouvement', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Erreur lors de la récupération des mouvements:', error);
