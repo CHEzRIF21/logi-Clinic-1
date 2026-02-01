@@ -43,6 +43,30 @@ export default function ResetPasswordPage() {
       }
     };
 
+    // Écouter les changements d'état d'authentification
+    // C'est la SEULE source de vérité pour détecter PASSWORD_RECOVERY
+    // IMPORTANT: Créer le listener AVANT de traiter les tokens pour ne pas manquer l'événement
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!mounted) return;
+
+        console.log('🔐 Reset Password - Event détecté:', event);
+
+        if (event === "PASSWORD_RECOVERY") {
+          // ✅ Session recovery détectée - autoriser le formulaire
+          console.log('✅ PASSWORD_RECOVERY détecté - autorisation du formulaire');
+          cleanUrl(); // Nettoyer l'URL quand on détecte l'événement
+          setReady(true);
+          setCheckingSession(false);
+        } else if (event === "SIGNED_OUT" && !session && !ready) {
+          // Si on est déconnecté et qu'on n'a pas de session recovery, c'est invalide
+          console.log('❌ SIGNED_OUT sans session recovery - accès refusé');
+          setError('Lien de réinitialisation invalide ou expiré.');
+          setCheckingSession(false);
+        }
+      }
+    );
+
     // Traiter les tokens dans l'URL si présents (nécessaire pour créer la session recovery)
     const processUrlTokens = async () => {
       try {
@@ -52,26 +76,65 @@ export default function ResetPasswordPage() {
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
 
+        console.log('🔐 Reset Password - Tokens dans URL:', { 
+          hasAccessToken: !!accessToken, 
+          hasRefreshToken: !!refreshToken, 
+          type 
+        });
+
         // Si on a un token de type recovery, échanger pour une session
         if (accessToken && type === 'recovery') {
+          console.log('🔐 Reset Password - Traitement du token recovery');
           cleanUrl(); // Nettoyer l'URL immédiatement pour la sécurité
 
-          const { error } = await supabase.auth.setSession({
+          const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken || '',
           });
 
           if (error) {
-            console.error('Erreur lors de la récupération de session:', error);
+            console.error('❌ Erreur lors de la récupération de session:', error);
+            if (mounted) {
+              setError('Lien de réinitialisation invalide ou expiré.');
+              setCheckingSession(false);
+            }
+            return;
+          }
+
+          // Vérifier que la session a été créée
+          if (data.session) {
+            console.log('✅ Session créée avec succès - attente de PASSWORD_RECOVERY');
+            // Note: onAuthStateChange devrait détecter PASSWORD_RECOVERY maintenant
+            // Si ce n'est pas le cas, vérifier la session après un court délai
+            setTimeout(async () => {
+              if (mounted && !ready) {
+                const { data: { session: currentSession } } = await supabase.auth.getSession();
+                if (currentSession && mounted && !ready) {
+                  // Si on a une session mais que PASSWORD_RECOVERY n'a pas été détecté,
+                  // c'est peut-être une session recovery qui n'a pas déclenché l'événement
+                  // Dans ce cas, on accepte quand même (fallback de sécurité)
+                  console.log('⚠️ Session détectée mais PASSWORD_RECOVERY non déclenché - fallback');
+                  setReady(true);
+                  setCheckingSession(false);
+                }
+              }
+            }, 500);
+          }
+        } else {
+          // Pas de tokens dans l'URL - vérifier si on a déjà une session recovery
+          console.log('🔐 Reset Password - Pas de tokens dans URL, vérification de la session actuelle');
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (!currentSession) {
+            // Pas de session du tout - accès refusé
+            console.log('❌ Aucune session détectée - accès refusé');
             if (mounted) {
               setError('Lien de réinitialisation invalide ou expiré.');
               setCheckingSession(false);
             }
           }
-          // Note: onAuthStateChange détectera PASSWORD_RECOVERY après setSession
         }
       } catch (err: any) {
-        console.error('Erreur lors du traitement des tokens:', err);
+        console.error('❌ Erreur lors du traitement des tokens:', err);
         if (mounted) {
           setError('Erreur lors de la vérification du lien de réinitialisation.');
           setCheckingSession(false);
@@ -79,31 +142,13 @@ export default function ResetPasswordPage() {
       }
     };
 
-    // Traiter les tokens dans l'URL d'abord
+    // Traiter les tokens dans l'URL (le listener est déjà actif)
     processUrlTokens();
-
-    // Écouter les changements d'état d'authentification
-    // C'est la SEULE source de vérité pour détecter PASSWORD_RECOVERY
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return;
-
-        if (event === "PASSWORD_RECOVERY") {
-          // ✅ Session recovery détectée - autoriser le formulaire
-          cleanUrl(); // Nettoyer l'URL quand on détecte l'événement
-          setReady(true);
-          setCheckingSession(false);
-        } else if (event === "SIGNED_OUT" && !session && !ready) {
-          // Si on est déconnecté et qu'on n'a pas de session recovery, c'est invalide
-          setError('Lien de réinitialisation invalide ou expiré.');
-          setCheckingSession(false);
-        }
-      }
-    );
 
     // Timeout de sécurité : si après 3 secondes on n'a pas détecté PASSWORD_RECOVERY, c'est invalide
     const timeoutId = setTimeout(() => {
       if (mounted && !ready && checkingSession) {
+        console.log('⏱️ Timeout - PASSWORD_RECOVERY non détecté après 3 secondes');
         setError('Lien de réinitialisation invalide ou expiré.');
         setCheckingSession(false);
       }
