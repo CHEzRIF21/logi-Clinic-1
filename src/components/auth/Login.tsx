@@ -2115,7 +2115,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <Button
                   variant="text"
                   size="small"
-                  onClick={() => setShowForgotPasswordDialog(true)}
+                  onClick={(e) => {
+                    // Empêche le warning Chrome "Blocked aria-hidden..." :
+                    // on retire le focus du bouton avant l'ouverture du Dialog (MUI appliquera aria-hidden au background)
+                    (e.currentTarget as HTMLButtonElement).blur();
+                    setShowForgotPasswordDialog(true);
+                  }}
                   sx={{ 
                     textTransform: 'none',
                     color: theme.palette.mode === 'dark' 
