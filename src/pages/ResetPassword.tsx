@@ -31,45 +31,34 @@ export default function ResetPasswordPage() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   // 🔐 Vérifier que la session est bien en mode recovery
+  // IMPORTANT: Utiliser uniquement onAuthStateChange avec PASSWORD_RECOVERY
+  // Ne jamais faire confiance à app_metadata qui peut être manipulé
   useEffect(() => {
     let mounted = true;
-    let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null;
 
-    const checkSession = async () => {
+    // Nettoyer l'URL après avoir lu les paramètres (pour la sécurité)
+    const cleanUrl = () => {
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    };
+
+    // Traiter les tokens dans l'URL si présents (nécessaire pour créer la session recovery)
+    const processUrlTokens = async () => {
       try {
-        // Nettoyer l'URL après avoir lu les paramètres (pour la sécurité)
-        const cleanUrl = () => {
-          if (window.location.hash) {
-            window.history.replaceState(null, '', window.location.pathname + window.location.search);
-          }
-        };
-
-        // Vérifier d'abord les hash parameters (#) - méthode principale de Supabase
+        // Vérifier les hash parameters (#) - méthode principale de Supabase
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
-        
-        // Vérifier aussi les query parameters (?) au cas où
-        const queryParams = new URLSearchParams(window.location.search);
-        const queryAccessToken = queryParams.get('access_token');
-        const queryRefreshToken = queryParams.get('refresh_token');
-        const queryType = queryParams.get('type');
 
-        // Utiliser les hash params en priorité, sinon les query params
-        const token = accessToken || queryAccessToken;
-        const refresh = refreshToken || queryRefreshToken;
-        const tokenType = type || queryType;
+        // Si on a un token de type recovery, échanger pour une session
+        if (accessToken && type === 'recovery') {
+          cleanUrl(); // Nettoyer l'URL immédiatement pour la sécurité
 
-        // Si on a un token et que c'est un type recovery, on est prêt
-        if (token && tokenType === 'recovery') {
-          // Nettoyer l'URL immédiatement pour la sécurité
-          cleanUrl();
-
-          // Échanger le token pour une session
-          const { data, error } = await supabase.auth.setSession({
-            access_token: token,
-            refresh_token: refresh || '',
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
           });
 
           if (error) {
@@ -78,61 +67,11 @@ export default function ResetPasswordPage() {
               setError('Lien de réinitialisation invalide ou expiré.');
               setCheckingSession(false);
             }
-            return;
           }
-
-          // Vérifier que la session est bien en mode recovery
-          if (data.session) {
-            if (mounted) {
-              setReady(true);
-              setCheckingSession(false);
-            }
-            return;
-          }
+          // Note: onAuthStateChange détectera PASSWORD_RECOVERY après setSession
         }
-
-        // Écouter les changements d'état d'authentification
-        authListener = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            if (mounted) {
-              if (event === "PASSWORD_RECOVERY") {
-                cleanUrl(); // Nettoyer l'URL quand on détecte l'événement
-                setReady(true);
-                setCheckingSession(false);
-              } else if (event === "SIGNED_OUT" && !session && !ready) {
-                // Si on est déconnecté et qu'on n'a pas de session recovery, c'est invalide
-                setError('Lien de réinitialisation invalide ou expiré.');
-                setCheckingSession(false);
-              }
-            }
-          }
-        );
-
-        // Vérifier la session actuelle après un court délai
-        setTimeout(async () => {
-          if (mounted && !ready && checkingSession) {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (mounted) {
-              // Si on a une session mais qu'on n'a pas encore détecté PASSWORD_RECOVERY,
-              // vérifier si c'est une session recovery valide
-              if (session) {
-                // Vérifier si c'est une session recovery en regardant les métadonnées
-                const isRecovery = session.user?.app_metadata?.recovery || false;
-                if (isRecovery) {
-                  setReady(true);
-                } else {
-                  // Si ce n'est pas une session recovery, c'est invalide
-                  setError('Lien de réinitialisation invalide ou expiré.');
-                }
-              } else {
-                setError('Lien de réinitialisation invalide ou expiré.');
-              }
-              setCheckingSession(false);
-            }
-          }
-        }, 2000);
       } catch (err: any) {
-        console.error('Erreur lors de la vérification de session:', err);
+        console.error('Erreur lors du traitement des tokens:', err);
         if (mounted) {
           setError('Erreur lors de la vérification du lien de réinitialisation.');
           setCheckingSession(false);
@@ -140,13 +79,40 @@ export default function ResetPasswordPage() {
       }
     };
 
-    checkSession();
+    // Traiter les tokens dans l'URL d'abord
+    processUrlTokens();
+
+    // Écouter les changements d'état d'authentification
+    // C'est la SEULE source de vérité pour détecter PASSWORD_RECOVERY
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!mounted) return;
+
+        if (event === "PASSWORD_RECOVERY") {
+          // ✅ Session recovery détectée - autoriser le formulaire
+          cleanUrl(); // Nettoyer l'URL quand on détecte l'événement
+          setReady(true);
+          setCheckingSession(false);
+        } else if (event === "SIGNED_OUT" && !session && !ready) {
+          // Si on est déconnecté et qu'on n'a pas de session recovery, c'est invalide
+          setError('Lien de réinitialisation invalide ou expiré.');
+          setCheckingSession(false);
+        }
+      }
+    );
+
+    // Timeout de sécurité : si après 3 secondes on n'a pas détecté PASSWORD_RECOVERY, c'est invalide
+    const timeoutId = setTimeout(() => {
+      if (mounted && !ready && checkingSession) {
+        setError('Lien de réinitialisation invalide ou expiré.');
+        setCheckingSession(false);
+      }
+    }, 3000);
 
     return () => {
       mounted = false;
-      if (authListener) {
-        authListener.data.subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -191,13 +157,14 @@ export default function ResetPasswordPage() {
       // Succès
       setSuccess(true);
 
-      // Sécurité : on ferme la session recovery après un court délai
-      setTimeout(async () => {
-        await supabase.auth.signOut();
-        setTimeout(() => {
-          navigate("/login");
-        }, 1000);
-      }, 2000);
+      // Sécurité : fermer IMMÉDIATEMENT la session recovery (one-shot)
+      // La session recovery ne doit être utilisée qu'une seule fois
+      await supabase.auth.signOut();
+      
+      // Rediriger vers la page de connexion après un court délai pour afficher le message de succès
+      setTimeout(() => {
+        navigate("/login");
+      }, 1500);
     } catch (err: any) {
       console.error('Erreur lors de la réinitialisation:', err);
       setError(err.message || "Une erreur inattendue s'est produite.");
