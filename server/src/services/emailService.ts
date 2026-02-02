@@ -363,6 +363,161 @@ Support: tech@logiclinic.org
   }
 
   /**
+   * Envoie un email de notification d'approbation de compte avec lien de vérification
+   * Informe l'utilisateur que son compte est approuvé et qu'il doit vérifier son email
+   */
+  async sendAccountApprovalEmail(data: {
+    nom: string;
+    prenom: string;
+    email: string;
+    clinicCode: string;
+    clinicName?: string;
+    role?: string;
+    verificationLink: string; // Lien pour vérifier l'email
+  }): Promise<boolean> {
+    if (!this.isEmailConfigured()) {
+      console.log('📧 Email non configuré - Email d\'approbation non envoyé:', data.email);
+      return false;
+    }
+
+    try {
+      const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+
+      await this.transporter!.sendMail({
+        from: fromEmail,
+        to: data.email,
+        subject: '✅ Votre compte Logi Clinic a été approuvé',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #16a34a 0%, #059669 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+              .content { background: #f0fdf4; padding: 20px; border-radius: 0 0 8px 8px; }
+              .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #16a34a; }
+              .info-row { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+              .label { font-weight: bold; color: #16a34a; }
+              .value { font-family: monospace; color: #1f2937; font-size: 1.1em; }
+              .success-badge { display: inline-block; background: #16a34a; color: white; padding: 8px 16px; border-radius: 20px; font-weight: bold; margin: 10px 0; }
+              .cta-button { display: inline-block; margin-top: 15px; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+              .footer { margin-top: 20px; padding: 15px; background: #e5e7eb; border-radius: 4px; font-size: 0.9em; }
+              .note { background: #dbeafe; padding: 15px; border-left: 4px solid #2563eb; margin: 15px 0; border-radius: 4px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h2 style="margin: 0;">✅ Votre compte a été approuvé !</h2>
+                <p style="margin: 5px 0 0 0; opacity: 0.9;">Logi Clinic - Accès activé</p>
+              </div>
+              <div class="content">
+                <p>Bonjour <strong>${data.prenom} ${data.nom}</strong>,</p>
+                
+                <div class="success-badge">🎉 Félicitations !</div>
+                
+                <p>Nous sommes heureux de vous informer que votre demande d'inscription à Logi Clinic a été <strong>approuvée</strong> par l'administrateur de votre clinique.</p>
+                
+                <div class="info-box">
+                  <h3 style="margin-top: 0; color: #16a34a;">🔑 Vos informations de connexion :</h3>
+                  
+                  <div class="info-row">
+                    <span class="label">Code clinique :</span><br>
+                    <span class="value">${data.clinicCode}</span>
+                  </div>
+                  
+                  <div class="info-row">
+                    <span class="label">Email (nom d'utilisateur) :</span><br>
+                    <span class="value">${data.email}</span>
+                  </div>
+                  
+                  ${data.role ? `
+                  <div class="info-row">
+                    <span class="label">Rôle attribué :</span><br>
+                    <span class="value">${this.formatRole(data.role)}</span>
+                  </div>
+                  ` : ''}
+                  
+                  ${data.clinicName ? `
+                  <div class="info-row">
+                    <span class="label">Clinique :</span><br>
+                    <span class="value">${data.clinicName}</span>
+                  </div>
+                  ` : ''}
+                </div>
+                
+                <div class="note" style="background: #fef3c7; border-left-color: #f59e0b;">
+                  <strong>⚠️ Action requise :</strong>
+                  <p style="margin: 10px 0 0 0;">
+                    Pour activer votre compte et pouvoir vous connecter, vous devez <strong>vérifier votre adresse email</strong> en cliquant sur le bouton ci-dessous.
+                  </p>
+                  <p style="margin: 10px 0 0 0;">
+                    Cette étape est obligatoire pour des raisons de sécurité.
+                  </p>
+                </div>
+                
+                <div style="text-align: center; margin: 25px 0;">
+                  <a href="${data.verificationLink}" class="cta-button" style="background: #16a34a;">✅ Vérifier mon email</a>
+                </div>
+                
+                <div style="background: #f3f4f6; padding: 15px; border-radius: 4px; margin: 15px 0; font-size: 0.9em; color: #6b7280;">
+                  <strong>💡 Note :</strong> Si le bouton ne fonctionne pas, copiez et collez ce lien dans votre navigateur :<br>
+                  <span style="word-break: break-all; font-family: monospace; color: #2563eb;">${data.verificationLink}</span>
+                </div>
+                
+                <div class="footer">
+                  <p><strong>Prochaines étapes :</strong></p>
+                  <ol style="margin: 10px 0; padding-left: 20px;">
+                    <li><strong>Vérifiez votre email</strong> en cliquant sur le bouton ci-dessus</li>
+                    <li>Une fois votre email vérifié, connectez-vous avec votre code clinique, email et mot de passe</li>
+                    <li>Explorez les fonctionnalités disponibles selon votre rôle</li>
+                  </ol>
+                  
+                  <p style="margin-top: 15px;">
+                    <strong>Besoin d'aide ?</strong><br>
+                    Contactez le support technique à <a href="mailto:tech@logiclinic.org">tech@logiclinic.org</a>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        text: `
+Votre compte Logi Clinic a été approuvé
+
+Bonjour ${data.prenom} ${data.nom},
+
+Félicitations ! Votre demande d'inscription a été approuvée par l'administrateur de votre clinique.
+
+Vos informations de connexion :
+- Code clinique: ${data.clinicCode}
+- Email (nom d'utilisateur): ${data.email}
+${data.role ? `- Rôle attribué: ${this.formatRole(data.role)}` : ''}
+${data.clinicName ? `- Clinique: ${data.clinicName}` : ''}
+
+ACTION REQUISE:
+Pour activer votre compte, vous devez vérifier votre adresse email en cliquant sur ce lien :
+${data.verificationLink}
+
+Une fois votre email vérifié, vous pourrez vous connecter avec votre code clinique, email et le mot de passe que vous avez défini lors de votre inscription.
+
+Ne partagez jamais votre mot de passe et conservez vos identifiants en lieu sûr.
+
+Support: tech@logiclinic.org
+        `,
+      });
+
+      console.log('✅ Email d\'approbation de compte envoyé à', data.email);
+      return true;
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'envoi de l\'email d\'approbation:', error);
+      return false;
+    }
+  }
+
+  /**
    * Formate le nom du rôle pour l'affichage
    */
   private formatRole(role: string): string {

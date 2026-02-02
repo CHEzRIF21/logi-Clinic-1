@@ -87,7 +87,7 @@ export const authenticateToken = async (
     // Récupérer le profil utilisateur depuis la table users
     const { data: userProfile, error: profileError } = await supabase
       .from('users')
-      .select('id, email, role, clinic_id, status, actif, user_metadata')
+      .select('id, email, role, clinic_id, status, actif, email_verified, user_metadata')
       .eq('auth_user_id', authUser.id)
       .maybeSingle();
 
@@ -118,7 +118,14 @@ export const authenticateToken = async (
       actif: userProfile.actif
     });
 
-    if (!userProfile.actif || userProfile.status === 'SUSPENDED' || userProfile.status === 'REJECTED' || userProfile.status === 'PENDING') {
+    // Vérifier le statut du compte
+    if (
+      !userProfile.actif ||
+      userProfile.status === 'SUSPENDED' ||
+      userProfile.status === 'REJECTED' ||
+      userProfile.status === 'PENDING' ||
+      userProfile.status === 'PENDING_APPROVAL'
+    ) {
       console.warn('⚠️ Compte utilisateur inactif ou en attente:', {
         email: userProfile.email,
         actif: userProfile.actif,
@@ -126,8 +133,29 @@ export const authenticateToken = async (
       });
       return res.status(403).json({
         success: false,
-        message: `Compte ${userProfile.status === 'PENDING' ? 'en attente d\'activation' : userProfile.status === 'SUSPENDED' ? 'suspendu' : 'inactif'}. Veuillez contacter l'administrateur.`,
+        message: `Compte ${
+          userProfile.status === 'PENDING' || userProfile.status === 'PENDING_APPROVAL'
+            ? 'en attente d\'approbation'
+            : userProfile.status === 'SUSPENDED'
+              ? 'suspendu'
+              : 'inactif'
+        }. Veuillez contacter l'administrateur.`,
         code: 'ACCOUNT_INACTIVE',
+        status: userProfile.status,
+      });
+    }
+
+    // Vérifier que l'email est vérifié (pour les comptes APPROVED)
+    if (userProfile.status === 'APPROVED' && !userProfile.email_verified) {
+      console.warn('⚠️ Email non vérifié pour compte APPROVED:', {
+        email: userProfile.email,
+        status: userProfile.status,
+        email_verified: userProfile.email_verified
+      });
+      return res.status(403).json({
+        success: false,
+        message: 'Votre email n\'a pas encore été vérifié. Veuillez vérifier votre boîte de réception et cliquer sur le lien de vérification envoyé après l\'approbation de votre compte.',
+        code: 'EMAIL_NOT_VERIFIED',
         status: userProfile.status,
       });
     }

@@ -49,7 +49,15 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
         .eq('id', userId)
         .maybeSingle();
       
-      if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
+      if (
+        userError ||
+        !userData ||
+        !userData.actif ||
+        userData.status === 'SUSPENDED' ||
+        userData.status === 'REJECTED' ||
+        userData.status === 'PENDING' ||
+        userData.status === 'PENDING_APPROVAL'
+      ) {
         return {
           success: false,
           error: new Response(
@@ -76,7 +84,15 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
 
-  if (userError || !userData || !userData.actif || userData.status === 'SUSPENDED' || userData.status === 'REJECTED' || userData.status === 'PENDING') {
+  if (
+    userError ||
+    !userData ||
+    !userData.actif ||
+    userData.status === 'SUSPENDED' ||
+    userData.status === 'REJECTED' ||
+    userData.status === 'PENDING' ||
+    userData.status === 'PENDING_APPROVAL'
+  ) {
     return {
       success: false,
       error: new Response(
@@ -110,31 +126,137 @@ export default async function handler(req: Request, path: string): Promise<Respo
         return new Response(JSON.stringify({ success: false, message: 'Le mot de passe doit contenir au moins 8 caractères' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      let clinicId: string | null = null;
-      if (clinicCode) {
-        const { data: clinic } = await supabase.from('clinics').select('id').eq('code', clinicCode.toUpperCase()).maybeSingle();
-        if (!clinic) {
-          return new Response(JSON.stringify({ success: false, message: 'Code clinique invalide' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        clinicId = clinic.id;
+      // IMPORTANT:
+      // Pour permettre au membre de se connecter avec le mot de passe saisi à l'inscription,
+      // on crée le compte Supabase Auth dès la soumission.
+      // L'accès reste bloqué jusqu'à approbation via public.users (actif=false, status=PENDING_APPROVAL).
+
+      if (!clinicCode || String(clinicCode).trim() === '') {
+        return new Response(JSON.stringify({ success: false, message: 'Le code clinique est requis' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const { data: existingUser } = await supabase.from('registration_requests').select('id').eq('email', email.toLowerCase()).single();
-      if (existingUser) {
-        return new Response(JSON.stringify({ success: false, message: 'Une demande avec cet email existe déjà' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      const clinicCodeUpper = String(clinicCode).toUpperCase().trim();
+      const { data: clinic, error: clinicErr } = await supabase
+        .from('clinics')
+        .select('id, active')
+        .eq('code', clinicCodeUpper)
+        .maybeSingle();
+
+      if (clinicErr || !clinic || !clinic.active) {
+        return new Response(JSON.stringify({ success: false, message: 'Code clinique invalide ou clinique inactive' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
-      const passwordHash = await hashPassword(password);
-      const { data, error } = await supabase.from('registration_requests').insert({
-        nom, prenom, email: email.toLowerCase(), password_hash: passwordHash, telephone, adresse,
-        role_souhaite: roleSouhaite || 'receptionniste', specialite, security_questions: securityQuestions,
-        statut: 'pending', clinic_id: clinicId, clinic_code: clinicCode?.toUpperCase() || null,
+      const clinicId = clinic.id as string;
+      const emailLower = String(email).toLowerCase().trim();
+
+      const { data: existingRequest } = await supabase
+        .from('registration_requests')
+        .select('id')
+        .eq('email', emailLower)
+        .eq('clinic_id', clinicId)
+        .maybeSingle();
+
+      if (existingRequest) {
+        return new Response(JSON.stringify({ success: false, message: 'Une demande avec cet email existe déjà pour cette clinique' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const { data: existingProfile } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', emailLower)
+        .maybeSingle();
+
+      if (existingProfile) {
+        return new Response(JSON.stringify({ success: false, message: 'Un compte avec cet email existe déjà' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 1) Créer utilisateur Supabase Auth (service role)
+      const { data: authRes, error: authErr } = await supabase.auth.admin.createUser({
+        email: emailLower,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          nom,
+          prenom,
+          clinic_id: clinicId,
+          pending_approval: true,
+        },
+      });
+
+      if (authErr || !authRes?.user) {
+        return new Response(JSON.stringify({ success: false, message: authErr?.message || 'Erreur création compte Auth' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const authUserId = authRes.user.id;
+
+      // 2) Créer profil users en attente
+      const { error: profileErr } = await supabase.from('users').insert({
+        nom,
+        prenom,
+        email: emailLower,
+        role: roleSouhaite || 'receptionniste',
+        specialite: specialite || null,
+        telephone: telephone || null,
+        adresse: adresse || null,
+        actif: false,
+        status: 'PENDING_APPROVAL',
+        clinic_id: clinicId,
+        auth_user_id: authUserId,
+      });
+
+      if (profileErr) {
+        await supabase.auth.admin.deleteUser(authUserId);
+        return new Response(JSON.stringify({ success: false, message: 'Erreur création profil utilisateur', error: profileErr.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // 3) Créer demande d'inscription (sans password_hash)
+      let { data, error } = await supabase.from('registration_requests').insert({
+        nom,
+        prenom,
+        email: emailLower,
+        password_hash: null,
+        telephone,
+        adresse,
+        role_souhaite: roleSouhaite || 'receptionniste',
+        specialite,
+        security_questions: securityQuestions,
+        statut: 'pending',
+        clinic_id: clinicId,
+        clinic_code: clinicCodeUpper,
+        auth_user_id: authUserId,
       }).select().single();
 
+      // Compat: si la migration ajoutant auth_user_id n'est pas appliquée, réessayer sans la colonne
+      if (error && (error as any)?.code === '42703' && String((error as any)?.message || '').includes('auth_user_id')) {
+        const retry = await supabase.from('registration_requests').insert({
+          nom,
+          prenom,
+          email: emailLower,
+          password_hash: null,
+          telephone,
+          adresse,
+          role_souhaite: roleSouhaite || 'receptionniste',
+          specialite,
+          security_questions: securityQuestions,
+          statut: 'pending',
+          clinic_id: clinicId,
+          clinic_code: clinicCodeUpper,
+        }).select().single();
+        data = retry.data as any;
+        error = retry.error as any;
+      }
+
       if (error) {
+        await supabase.auth.admin.deleteUser(authUserId);
+        await supabase.from('users').delete().eq('auth_user_id', authUserId);
         return new Response(JSON.stringify({ success: false, message: 'Erreur lors de la création', error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ success: true, message: 'Demande soumise avec succès', data: { id: data.id, email: data.email, statut: data.statut } }), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Demande soumise avec succès. En attente d’approbation par l’administrateur.',
+        data: { id: data.id, email: data.email, statut: data.statut, clinicCode: clinicCodeUpper },
+      }), { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // GET /api/auth/registration-requests (protégé)

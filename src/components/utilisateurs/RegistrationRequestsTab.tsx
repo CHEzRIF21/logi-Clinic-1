@@ -251,7 +251,10 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess(`✅ Demande approuvée ! Le compte de ${selectedRequest.prenom} ${selectedRequest.nom} (${selectedRequest.email}) a été créé automatiquement. Un email avec les identifiants temporaires a été envoyé.`);
+        setSuccess(
+          `✅ Demande approuvée ! Le compte de ${selectedRequest.prenom} ${selectedRequest.nom} (${selectedRequest.email}) est maintenant activé. ` +
+          `Le membre peut se connecter avec le mot de passe défini lors de l'inscription.`
+        );
         setApproveDialogOpen(false);
         setDetailsOpen(false);
         setApproveForm({ role: '', permissions: [], notes: '' });
@@ -454,8 +457,8 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       {/* Info explicative */}
       <Alert severity="info" sx={{ mb: 3 }}>
         <Typography variant="body2">
-          <strong>Workflow automatisé :</strong> Lorsqu'une demande est approuvée, un compte utilisateur est automatiquement créé 
-          et un email avec les identifiants temporaires est envoyé au membre. Vous pouvez ensuite gérer les permissions 
+          <strong>Workflow automatisé :</strong> Lorsqu'une demande est approuvée, le compte du membre est activé 
+          (après validation admin). Vous pouvez ensuite gérer les permissions 
           de l'utilisateur depuis l'onglet "Gestion des Utilisateurs".
         </Typography>
       </Alert>

@@ -124,6 +124,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailVerifiedSuccess, setEmailVerifiedSuccess] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
     email: '',
@@ -241,6 +242,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         document.body.style.overflowX = '';
         document.documentElement.style.overflowX = '';
       };
+    }
+  }, []);
+
+  // Vérifier les paramètres URL pour le message de vérification email
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('emailVerified') === 'true') {
+        setEmailVerifiedSuccess(true);
+        // Nettoyer l'URL
+        window.history.replaceState({}, '', window.location.pathname);
+        // Masquer le message après 10 secondes
+        setTimeout(() => setEmailVerifiedSuccess(false), 10000);
+      }
     }
   }, []);
 
@@ -825,7 +840,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             status,
             clinic_id,
             specialite,
-            actif
+            actif,
+            email_verified
           `)
           .eq('auth_user_id', authUser.id)
           .maybeSingle();
@@ -902,7 +918,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               clinic_id,
               specialite,
               actif,
-              password_hash
+              password_hash,
+              email_verified
             `)
             .eq('email', email)
             .eq('clinic_id', clinic.id)
@@ -923,7 +940,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 clinic_id,
                 specialite,
                 actif,
-                password_hash
+                password_hash,
+                email_verified
               `)
               .eq('email', email)
               .is('clinic_id', null)
@@ -1011,7 +1029,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:718',message:'User inactive',data:{actif:user.actif},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
-        setError('Ce compte est désactivé. Contactez votre administrateur.');
+        if (user.status === 'PENDING_APPROVAL') {
+          setError('Votre compte est en attente d’approbation par l’administrateur de votre clinique.');
+          // Nettoyer la session Supabase si l'auth a réussi mais que le profil est bloqué
+          try { await supabase.auth.signOut(); } catch {}
+        } else {
+          setError('Ce compte est désactivé. Contactez votre administrateur.');
+        }
         setIsLoading(false);
         return;
       }
@@ -1026,6 +1050,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:729',message:'User suspended/rejected',data:{status:user.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         setError('Ce compte est suspendu ou refusé. Contactez votre administrateur.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 5.1. Vérifier que l'email est vérifié pour les comptes APPROVED
+      if (user.status === 'APPROVED' && !user.email_verified) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:email_not_verified',message:'Email not verified for APPROVED account',data:{status:user.status,email_verified:user.email_verified},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        setError('Votre email n\'a pas encore été vérifié. Veuillez vérifier votre boîte de réception et cliquer sur le lien de vérification envoyé après l\'approbation de votre compte.');
+        // Nettoyer la session Supabase
+        try { await supabase.auth.signOut(); } catch {}
         setIsLoading(false);
         return;
       }
@@ -2010,6 +2046,17 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 iconPosition="start"
               />
             </Tabs>
+
+            {emailVerifiedSuccess && (
+              <Alert severity="success" sx={{ mb: 3 }} onClose={() => setEmailVerifiedSuccess(false)}>
+                <Typography variant="body1" fontWeight="bold" gutterBottom>
+                  ✅ Email vérifié avec succès !
+                </Typography>
+                <Typography variant="body2">
+                  Votre compte est maintenant activé. Vous pouvez vous connecter avec votre code clinique, email et mot de passe.
+                </Typography>
+              </Alert>
+            )}
 
             {error && (
               <Alert severity="error" sx={{ mb: 3 }}>

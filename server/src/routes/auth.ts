@@ -208,35 +208,124 @@ router.post('/register-request', async (req: Request, res: Response) => {
       });
     }
 
-    // Hash du mot de passe
-    const passwordHash = hashPassword(password);
+    // IMPORTANT SÉCURITÉ:
+    // On NE doit PAS stocker le mot de passe (même hashé) pour recréer un compte plus tard.
+    // Pour permettre au membre d'utiliser le mot de passe saisi lors de l'inscription,
+    // on crée le compte Supabase Auth dès la soumission, puis on bloque l'accès via public.users (actif=false)
+    // jusqu'à validation par l'admin.
 
-    // Créer la demande d'inscription avec le clinic_id
-    const { data, error } = await supabase
-      .from('registration_requests')
+    if (!supabaseAdmin) {
+      return res.status(500).json({
+        success: false,
+        message: 'Service admin non disponible. Vérifiez SUPABASE_SERVICE_ROLE_KEY',
+      });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+
+    // 1) Créer l'utilisateur Supabase Auth avec le mot de passe saisi
+    const { data: createdAuth, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
+      email: emailLower,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        nom,
+        prenom,
+        clinic_id: clinicId,
+        pending_approval: true,
+      },
+    });
+
+    if (authCreateError || !createdAuth?.user) {
+      const msg = authCreateError?.message || 'Erreur lors de la création du compte Auth';
+      // Message utilisateur plus clair sur le cas courant
+      const isAlreadyRegistered =
+        msg.toLowerCase().includes('already registered') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('exists');
+
+      return res.status(400).json({
+        success: false,
+        message: isAlreadyRegistered
+          ? 'Un compte Supabase Auth existe déjà avec cet email. Essayez de vous connecter ou contactez votre administrateur.'
+          : msg,
+      });
+    }
+
+    const authUserId = createdAuth.user.id;
+
+    // 2) Créer (ou verrouiller) le profil utilisateur en attente d'approbation
+    const { error: profileError } = await supabaseAdmin
+      .from('users')
       .insert({
         nom,
         prenom,
-        email: email.toLowerCase(),
-        password_hash: passwordHash,
+        email: emailLower,
+        role: roleSouhaite || 'receptionniste',
+        specialite,
         telephone,
         adresse,
-        role_souhaite: roleSouhaite || 'receptionniste',
-        specialite,
-        security_questions: securityQuestions,
-        statut: 'pending',
+        actif: false,
+        status: 'PENDING_APPROVAL',
         clinic_id: clinicId,
-        clinic_code: clinicCodeUpper,
-      })
+        auth_user_id: authUserId,
+      });
+
+    if (profileError) {
+      // Rollback: supprimer l'utilisateur Auth créé
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      console.error('Erreur création profil users:', profileError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la création du profil utilisateur',
+        error: profileError.message,
+      });
+    }
+
+    // 3) Créer la demande d'inscription avec clinic_id (+ auth_user_id si la colonne existe)
+    const baseRequestPayload: any = {
+      nom,
+      prenom,
+      email: emailLower,
+      // password_hash volontairement NULL (ne pas stocker le mot de passe)
+      password_hash: null,
+      telephone,
+      adresse,
+      role_souhaite: roleSouhaite || 'receptionniste',
+      specialite,
+      security_questions: securityQuestions,
+      statut: 'pending',
+      clinic_id: clinicId,
+      clinic_code: clinicCodeUpper,
+    };
+
+    let { data, error } = await supabaseAdmin
+      .from('registration_requests')
+      .insert({ ...baseRequestPayload, auth_user_id: authUserId })
       .select()
       .single();
 
+    // Compat: si la migration ajoutant auth_user_id n'est pas encore appliquée, réessayer sans la colonne
+    if (error && (error as any)?.code === '42703' && (error as any)?.message?.includes('auth_user_id')) {
+      const retry = await supabaseAdmin
+        .from('registration_requests')
+        .insert(baseRequestPayload)
+        .select()
+        .single();
+      data = retry.data as any;
+      error = retry.error as any;
+    }
+
     if (error) {
+      // Rollback best-effort
+      await supabaseAdmin.auth.admin.deleteUser(authUserId);
+      await supabaseAdmin.from('users').delete().eq('auth_user_id', authUserId);
+
       console.error('Erreur Supabase:', error);
       return res.status(500).json({
         success: false,
         message: 'Erreur lors de la création de la demande',
-        error: error.message,
+        error: (error as any).message,
       });
     }
 
@@ -505,85 +594,182 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
       });
     }
 
-    // Générer un mot de passe temporaire
-    const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
-
     // Utiliser le rôle souhaité de la demande si aucun rôle n'est spécifié
     const finalRole = role || request.role_souhaite || 'receptionniste';
-    
-    // Créer l'utilisateur dans Supabase Auth
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: request.email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: {
-        nom: request.nom,
-        prenom: request.prenom,
-        role: finalRole,
-        clinic_id: request.clinic_id,
-      },
-    });
+    // Nouveau workflow sécurisé:
+    // - Le compte Supabase Auth est créé AU MOMENT de la soumission (avec le mot de passe saisi).
+    // - Le profil public.users est créé en PENDING_APPROVAL + actif=false.
+    // - L'approbation ACTIVE le profil (actif=true, status=ACTIVE) sans jamais manipuler le mot de passe.
 
-    if (authError || !authUser?.user) {
-      console.error('Erreur création utilisateur Auth:', authError);
-      return res.status(500).json({
-        success: false,
-        message: 'Erreur lors de la création du compte utilisateur',
-        error: authError?.message,
-      });
+    // Lier la demande au compte Supabase Auth:
+    // - cas normal: registration_requests.auth_user_id est rempli
+    // - cas compat (migration pas encore appliquée): retrouver via public.users (email+clinic_id)
+    let requestAuthUserId: string | null = (request as any).auth_user_id || null;
+    if (!requestAuthUserId) {
+      const { data: pendingProfile } = await supabaseAdmin
+        .from('users')
+        .select('auth_user_id, status, clinic_id')
+        .eq('email', request.email)
+        .eq('clinic_id', request.clinic_id)
+        .maybeSingle();
+      if (pendingProfile?.auth_user_id) {
+        requestAuthUserId = pendingProfile.auth_user_id;
+      }
     }
 
-    // Workflow 2 étapes: créer user inactif (PENDING, actif=false); activation via POST /auth/users/:id/activate
-    const { error: userError } = await supabase
-      .from('users')
-      .insert({
-        nom: request.nom,
-        prenom: request.prenom,
+    let activatedAuthUserId: string | null = null;
+
+    if (requestAuthUserId) {
+      activatedAuthUserId = requestAuthUserId;
+
+      // Mettre à jour les metadata (utile pour audit / debug)
+      const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(requestAuthUserId, {
+        user_metadata: {
+          nom: request.nom,
+          prenom: request.prenom,
+          role: finalRole,
+          clinic_id: request.clinic_id,
+          pending_approval: false,
+        },
+      });
+      if (metaErr) {
+        console.warn('⚠️ Impossible de mettre à jour user_metadata (non bloquant):', metaErr.message);
+      }
+
+      // Activer / mettre à jour le profil users
+      const { data: existingProfile, error: profileFetchErr } = await supabaseAdmin
+        .from('users')
+        .select('id, clinic_id')
+        .eq('auth_user_id', requestAuthUserId)
+        .maybeSingle();
+
+      if (profileFetchErr) {
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la récupération du profil utilisateur',
+          error: profileFetchErr.message,
+        });
+      }
+
+      if (existingProfile) {
+        const { error: profileUpdateErr } = await supabaseAdmin
+          .from('users')
+          .update({
+            role: finalRole,
+            actif: false, // Bloqué jusqu'à vérification email
+            status: 'APPROVED', // Statut après approbation admin (avant vérification email)
+            email_verified: false, // Doit vérifier son email avant de pouvoir se connecter
+            clinic_id: request.clinic_id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('auth_user_id', requestAuthUserId);
+
+        if (profileUpdateErr) {
+          return res.status(500).json({
+            success: false,
+            message: 'Erreur lors de l’activation du profil utilisateur',
+            error: profileUpdateErr.message,
+          });
+        }
+      } else {
+        const { error: profileInsertErr } = await supabaseAdmin
+          .from('users')
+          .insert({
+            nom: request.nom,
+            prenom: request.prenom,
+            email: request.email,
+            role: finalRole,
+            specialite: request.specialite,
+            telephone: request.telephone,
+            adresse: request.adresse,
+            actif: false, // Bloqué jusqu'à vérification email
+            status: 'APPROVED', // Statut après approbation admin (avant vérification email)
+            email_verified: false, // Doit vérifier son email avant de pouvoir se connecter
+            clinic_id: request.clinic_id,
+            auth_user_id: requestAuthUserId,
+          });
+
+        if (profileInsertErr) {
+          return res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la création du profil utilisateur',
+            error: profileInsertErr.message,
+          });
+        }
+      }
+    } else {
+      // Fallback legacy (anciennes demandes sans auth_user_id):
+      // on crée un compte Auth avec un mot de passe temporaire et on ACTIVE le profil immédiatement.
+      const tempPassword = `Temp${Math.random().toString(36).slice(-8)}!`;
+
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: request.email,
-        password_hash: request.password_hash,
-        role: finalRole,
-        specialite: request.specialite,
-        telephone: request.telephone,
-        adresse: request.adresse,
-        actif: false,
-        status: 'PENDING',
-        clinic_id: request.clinic_id,
-        auth_user_id: authUser.user.id,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          nom: request.nom,
+          prenom: request.prenom,
+          role: finalRole,
+          clinic_id: request.clinic_id,
+          pending_approval: false,
+        },
       });
 
-    if (userError) {
-      // Rollback: supprimer l'utilisateur Auth créé
-      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-      console.error('Erreur création utilisateur:', userError);
-      return res.status(500).json({
-        success: false,
-        message: 'Erreur lors de la création de l\'utilisateur',
-        error: userError.message,
-      });
-    }
+      if (authError || !authUser?.user) {
+        console.error('Erreur création utilisateur Auth:', authError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la création du compte utilisateur',
+          error: authError?.message,
+        });
+      }
 
-    console.log('✅ Utilisateur créé avec succès:', {
-      authUserId: authUser.user.id,
-      email: request.email,
-      role: finalRole,
-      clinicId: request.clinic_id,
-      clinicCode: clinic.code,
-      nom: request.nom,
-      prenom: request.prenom,
-    });
+      activatedAuthUserId = authUser.user.id;
 
-    // Générer un lien de réinitialisation de mot de passe
-    const { data: resetData, error: resetError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'recovery',
-      email: request.email,
-    });
-    
-    if (resetError) {
-      console.warn('⚠️ Impossible de générer le lien de réinitialisation:', resetError);
+      const { error: userError } = await supabaseAdmin
+        .from('users')
+        .insert({
+          nom: request.nom,
+          prenom: request.prenom,
+          email: request.email,
+          role: finalRole,
+          specialite: request.specialite,
+          telephone: request.telephone,
+          adresse: request.adresse,
+          actif: false, // Bloqué jusqu'à vérification email (legacy)
+          status: 'APPROVED', // Statut après approbation admin (avant vérification email)
+          email_verified: false, // Doit vérifier son email avant de pouvoir se connecter
+          clinic_id: request.clinic_id,
+          auth_user_id: activatedAuthUserId,
+        });
+
+      if (userError) {
+        await supabaseAdmin.auth.admin.deleteUser(activatedAuthUserId);
+        console.error('Erreur création utilisateur:', userError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la création de l\'utilisateur',
+          error: userError.message,
+        });
+      }
+
+      // Pour legacy, on peut proposer un reset (optionnel) mais on garde la réponse simple.
+      try {
+        await emailService.sendAccountValidationEmail({
+          nom: request.nom,
+          prenom: request.prenom,
+          email: request.email,
+          username: request.email,
+          temporaryPassword: tempPassword,
+          clinicCode: clinic.code,
+        });
+      } catch (emailError: any) {
+        console.error('⚠️ Email legacy (non bloquant):', emailError?.message || emailError);
+      }
     }
 
     // Mettre à jour le statut de la demande
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from('registration_requests')
       .update({
         statut: 'approved',
@@ -592,6 +778,7 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
         reviewed_at: new Date().toISOString(),
         date_approbation: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        ...(activatedAuthUserId ? { auth_user_id: activatedAuthUserId } : {}),
       })
       .eq('id', id);
 
@@ -601,41 +788,65 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
       console.log('✅ Demande mise à jour avec statut approved');
     }
 
-    // Récupérer le code clinique pour l'email
-    let clinicCode = 'N/A';
-    if (request.clinic_id) {
-      const { data: clinic } = await supabase
+    // Récupérer les informations de la clinique pour l'email
+    let clinicCode = clinic.code || 'N/A';
+    let clinicName = clinic.name || null;
+    
+    // Si on n'a pas encore récupéré le nom de la clinique, le faire maintenant
+    if (!clinicName && request.clinic_id) {
+      const { data: clinicInfo } = await supabaseAdmin
         .from('clinics')
-        .select('code')
+        .select('code, name')
         .eq('id', request.clinic_id)
-        .single();
+        .maybeSingle();
       
-      if (clinic?.code) {
-        clinicCode = clinic.code;
+      if (clinicInfo) {
+        clinicCode = clinicInfo.code || clinicCode;
+        clinicName = clinicInfo.name || null;
       }
     }
 
-    // Envoyer l'email de validation de compte
+    // Générer un token de vérification email (valide 7 jours)
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiry = new Date();
+    tokenExpiry.setDate(tokenExpiry.getDate() + 7); // 7 jours
+
+    // Stocker le token dans la table users (ou créer une table dédiée)
+    // Pour simplifier, on utilise user_metadata dans Supabase Auth
+    if (activatedAuthUserId) {
+      await supabaseAdmin.auth.admin.updateUserById(activatedAuthUserId, {
+        user_metadata: {
+          email_verification_token: verificationToken,
+          email_verification_expires: tokenExpiry.toISOString(),
+        },
+      });
+    }
+
+    // Construire le lien de vérification (pointe vers le backend qui redirige ensuite)
+    const backendUrl = process.env.API_URL || process.env.BACKEND_URL || 'http://localhost:3000';
+    const verificationLink = `${backendUrl}/api/auth/verify-email?token=${verificationToken}&email=${encodeURIComponent(request.email)}`;
+
+    // Envoyer l'email de notification d'approbation avec lien de vérification
     try {
-      await emailService.sendAccountValidationEmail({
+      await emailService.sendAccountApprovalEmail({
         nom: request.nom,
         prenom: request.prenom,
         email: request.email,
-        username: request.email,
-        temporaryPassword: tempPassword,
         clinicCode: clinicCode,
+        clinicName: clinicName || undefined,
+        role: finalRole,
+        verificationLink: verificationLink,
       });
-      console.log('✅ Email de validation envoyé avec succès à', request.email);
+      console.log('✅ Email d\'approbation avec vérification envoyé avec succès à', request.email);
     } catch (emailError: any) {
       // Ne pas bloquer l'approbation si l'email échoue
-      console.error('⚠️ Erreur lors de l\'envoi de l\'email (non bloquant):', emailError?.message || emailError);
+      console.error('⚠️ Erreur lors de l\'envoi de l\'email d\'approbation (non bloquant):', emailError?.message || emailError);
     }
 
     res.json({
       success: true,
       message: 'Demande approuvée avec succès',
-      recoveryLink: resetData?.properties?.action_link || null,
-      note: 'Un email avec le lien de réinitialisation sera envoyé au membre',
+      note: 'Le membre peut se connecter avec le mot de passe défini lors de l’inscription. Un email de confirmation a été envoyé.',
     });
   } catch (error: any) {
     console.error('Erreur:', error);
@@ -892,6 +1103,142 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: AuthRequ
   }
 });
 
+// GET /api/auth/verify-email - Vérifier l'email après approbation
+router.get('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token, email } = req.query;
+
+    if (!token || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token et email requis pour la vérification',
+      });
+    }
+
+    if (!supabaseAdmin) {
+      return res.status(500).json({
+        success: false,
+        message: 'Service admin non disponible',
+      });
+    }
+
+    const emailLower = String(email).toLowerCase().trim();
+
+    // Trouver l'utilisateur par email
+    const { data: userProfile, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, auth_user_id, status, email_verified')
+      .eq('email', emailLower)
+      .maybeSingle();
+
+    if (userError || !userProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+      });
+    }
+
+    // Vérifier que le compte est en statut APPROVED (après approbation admin)
+    if (userProfile.status !== 'APPROVED') {
+      return res.status(400).json({
+        success: false,
+        message: `Ce compte n'est pas en attente de vérification email. Statut actuel: ${userProfile.status}`,
+      });
+    }
+
+    // Vérifier que l'email n'est pas déjà vérifié
+    if (userProfile.email_verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cet email a déjà été vérifié',
+      });
+    }
+
+    // Vérifier le token dans user_metadata de Supabase Auth
+    if (!userProfile.auth_user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Compte non lié à Supabase Auth',
+      });
+    }
+
+    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(
+      userProfile.auth_user_id
+    );
+
+    if (authError || !authUser?.user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Compte Supabase Auth non trouvé',
+      });
+    }
+
+    const storedToken = authUser.user.user_metadata?.email_verification_token;
+    const tokenExpires = authUser.user.user_metadata?.email_verification_expires;
+
+    if (!storedToken || storedToken !== token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token de vérification invalide',
+      });
+    }
+
+    // Vérifier l'expiration
+    if (tokenExpires && new Date(tokenExpires) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le lien de vérification a expiré. Contactez votre administrateur pour en recevoir un nouveau.',
+      });
+    }
+
+    // Marquer l'email comme vérifié et activer le compte
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        email_verified: true,
+        actif: true,
+        status: 'ACTIVE',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userProfile.id);
+
+    if (updateError) {
+      console.error('Erreur lors de la mise à jour:', updateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la vérification de l\'email',
+        error: updateError.message,
+      });
+    }
+
+    // Nettoyer le token dans user_metadata
+    await supabaseAdmin.auth.admin.updateUserById(userProfile.auth_user_id, {
+      user_metadata: {
+        ...authUser.user.user_metadata,
+        email_verification_token: null,
+        email_verification_expires: null,
+        email_verified: true,
+      },
+    });
+
+    console.log('✅ Email vérifié avec succès pour:', emailLower);
+
+    // Rediriger vers une page de confirmation (ou login avec message)
+    const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:5173';
+    // Option 1: Rediriger vers login avec message de succès
+    res.redirect(`${frontendUrl}/login?emailVerified=true&email=${encodeURIComponent(emailLower)}`);
+    // Option 2: Rediriger vers une page dédiée (à créer)
+    // res.redirect(`${frontendUrl}/email-verified?email=${encodeURIComponent(emailLower)}`);
+  } catch (error: any) {
+    console.error('Erreur lors de la vérification de l\'email:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur',
+      error: error.message,
+    });
+  }
+});
+
 // POST /api/auth/login - Connexion avec code clinique
 router.post('/login', async (req: Request, res: Response) => {
   try {
@@ -950,6 +1297,17 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         message: 'Utilisateur non trouvé',
+      });
+    }
+
+    // Vérifier que l'email est vérifié pour les comptes APPROVED
+    if (userData.status === 'APPROVED' && userData.email_verified === false) {
+      logger.loginError('Email non vérifié', { clinicCode: clinicCodeUpper, email: emailLower, status: userData.status });
+      return res.status(403).json({
+        success: false,
+        message: 'Votre email n\'a pas encore été vérifié. Veuillez vérifier votre boîte de réception et cliquer sur le lien de vérification envoyé après l\'approbation de votre compte.',
+        code: 'EMAIL_NOT_VERIFIED',
+        status: userData.status,
       });
     }
 

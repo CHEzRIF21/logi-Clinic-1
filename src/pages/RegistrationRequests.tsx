@@ -209,7 +209,7 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       console.log('📥 Réponse approbation:', { status: response.status, data });
 
       if (response.ok && data.success) {
-        setSuccess('Demande d\'inscription approuvée avec succès. Un compte a été créé pour l\'utilisateur.');
+        setSuccess('Demande d\'inscription approuvée avec succès. Le compte est maintenant activé (connexion avec le mot de passe choisi à l’inscription).');
         setApproveDialogOpen(false);
         setDetailsOpen(false);
         setApproveForm({ role: '', permissions: [], notes: '' });
