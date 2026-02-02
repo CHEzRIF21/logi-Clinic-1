@@ -108,11 +108,33 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      
+      // Debug: afficher l'utilisateur connecté pour comprendre le contexte
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const currentUser = JSON.parse(userStr);
+          console.log('👤 Utilisateur connecté:', {
+            id: currentUser.id,
+            email: currentUser.email,
+            role: currentUser.role,
+            clinic_id: currentUser.clinic_id,
+            clinicCode: currentUser.clinicCode,
+          });
+        } catch (e) {
+          console.warn('⚠️ Impossible de parser user depuis localStorage');
+        }
+      }
+      
       const query = filterStatus !== 'all' ? `?statut=${filterStatus}` : '';
+      console.log('🔍 Appel GET /auth/registration-requests' + query);
+      
       const data = await apiGet<any>(`/auth/registration-requests${query}`);
+      console.log('📊 Réponse brute:', data);
+      
       if (data.success) {
         // Debug: afficher les données reçues
-        console.log('📋 Demandes d\'inscription reçues:', data.requests);
+        console.log('📋 Demandes d\'inscription reçues:', data.requests?.length, 'demandes');
         if (data.requests && data.requests.length > 0) {
           console.log('📝 Exemple de demande:', {
             id: data.requests[0].id,

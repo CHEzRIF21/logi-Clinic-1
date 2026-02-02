@@ -136,17 +136,23 @@ export default async function handler(req: Request, path: string): Promise<Respo
       }
 
       const clinicCodeUpper = String(clinicCode).toUpperCase().trim();
+      console.log('📝 Inscription - Code clinique saisi:', clinicCodeUpper);
+      
       const { data: clinic, error: clinicErr } = await supabase
         .from('clinics')
-        .select('id, active')
+        .select('id, name, code, active')
         .eq('code', clinicCodeUpper)
         .maybeSingle();
 
+      console.log('🏥 Clinique trouvée:', clinic ? { id: clinic.id, name: clinic.name, code: clinic.code, active: clinic.active } : 'AUCUNE');
+      
       if (clinicErr || !clinic || !clinic.active) {
+        console.error('❌ Code clinique invalide:', clinicCodeUpper, clinicErr?.message || 'Clinique non trouvée ou inactive');
         return new Response(JSON.stringify({ success: false, message: 'Code clinique invalide ou clinique inactive' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
       const clinicId = clinic.id as string;
+      console.log('✅ clinic_id pour la demande:', clinicId);
       const emailLower = String(email).toLowerCase().trim();
 
       const { data: existingRequest } = await supabase
@@ -265,26 +271,63 @@ export default async function handler(req: Request, path: string): Promise<Respo
       if (!authResult.success) return authResult.error!;
       
       const user = authResult.user!;
+      console.log('📋 GET registration-requests - User:', {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clinic_id: user.clinic_id,
+      });
+      
       if (!user.clinic_id) {
+        console.error('❌ Contexte de clinique manquant pour user:', user.id);
         return new Response(JSON.stringify({ success: false, message: 'Contexte de clinique manquant' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       const clinicId = user.clinic_id;
       const statut = url.searchParams.get('statut');
       
+      console.log('🔍 Recherche demandes pour clinic_id:', clinicId, 'statut:', statut || 'tous');
+      
       let query = supabase.from('registration_requests').select('*').eq('clinic_id', clinicId).order('created_at', { ascending: false });
       if (statut) query = query.eq('statut', statut);
 
       const { data, error } = await query;
+      
+      console.log('📊 Résultat requête:', {
+        count: data?.length || 0,
+        error: error?.message || null,
+        clinicId,
+      });
+      
       if (error) {
-        return new Response(JSON.stringify({ success: false, message: 'Erreur' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        console.error('❌ Erreur Supabase:', error);
+        return new Response(JSON.stringify({ success: false, message: 'Erreur', details: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      const sanitizedData = (data || []).map(({ password_hash, ...rest }) => rest);
+      
+      // Mapper snake_case vers camelCase pour le frontend
+      const sanitizedData = (data || []).map(({ password_hash, role_souhaite, created_at, updated_at, reviewed_by, reviewed_at, raison_rejet, clinic_id, clinic_code, security_questions, ...rest }) => ({
+        ...rest,
+        _id: rest.id,
+        roleSouhaite: role_souhaite || 'receptionniste',
+        createdAt: created_at,
+        updatedAt: updated_at,
+        reviewedBy: reviewed_by,
+        reviewedAt: reviewed_at,
+        raisonRejet: raison_rejet,
+        clinicId: clinic_id,
+        clinicCode: clinic_code,
+        securityQuestions: security_questions,
+      }));
+      
       return new Response(JSON.stringify({ success: true, requests: sanitizedData }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // POST /api/auth/approve-registration/:id (protégé)
-    if (method === 'POST' && pathParts[1] === 'approve-registration' && pathParts[2]) {
-      const id = pathParts[2];
+    // POST /api/auth/registration-requests/:id/approve (protégé)
+    // Support aussi l'ancienne route: /api/auth/approve-registration/:id
+    if (method === 'POST' && (
+      (pathParts[1] === 'registration-requests' && pathParts[3] === 'approve') ||
+      (pathParts[1] === 'approve-registration' && pathParts[2])
+    )) {
+      const id = pathParts[1] === 'registration-requests' ? pathParts[2] : pathParts[2];
       const authResult = await authenticateUser(req);
       if (!authResult.success) return authResult.error!;
       
@@ -318,8 +361,12 @@ export default async function handler(req: Request, path: string): Promise<Respo
       return new Response(JSON.stringify({ success: true, message: 'Approuvée' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // POST /api/auth/reject-registration/:id (protégé)
-    if (method === 'POST' && pathParts[1] === 'reject-registration' && pathParts[2]) {
+    // POST /api/auth/registration-requests/:id/reject (protégé)
+    // Support aussi l'ancienne route: /api/auth/reject-registration/:id
+    if (method === 'POST' && (
+      (pathParts[1] === 'registration-requests' && pathParts[3] === 'reject') ||
+      (pathParts[1] === 'reject-registration' && pathParts[2])
+    )) {
       const id = pathParts[2];
       const authResult = await authenticateUser(req);
       if (!authResult.success) return authResult.error!;

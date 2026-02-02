@@ -1416,8 +1416,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     try {
+      const clinicCodeToSend = signupForm.clinicCode.toUpperCase().trim();
+      console.log('📝 Inscription - Envoi demande avec clinicCode:', clinicCodeToSend, 'email:', signupForm.email);
+      
       const data = await apiPost<any>('/auth/register-request', {
-          clinicCode: signupForm.clinicCode.toUpperCase().trim(),
+          clinicCode: clinicCodeToSend,
           nom: signupForm.nom,
           prenom: signupForm.prenom,
           email: signupForm.email,
@@ -1445,6 +1448,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           },
         });
 
+      console.log('✅ Inscription réussie:', data);
       setSignupSuccess(true);
       setSignupForm({
         clinicCode: '',
