@@ -5,6 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { hash, compare } from 'https://deno.land/x/bcrypt/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,6 +22,16 @@ interface CreateClinicRequest {
   clinicEmail?: string;
   validityHours?: number; // Durée de validité du code temporaire (défaut: 72h)
   customTempCode?: string; // Code temporaire personnalisé (optionnel)
+}
+
+// Générer un mot de passe temporaire sécurisé avec crypto.getRandomValues()
+function generateSecurePassword(length = 16): string {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array)
+    .map(x => charset[x % charset.length])
+    .join('');
 }
 
 // Générer un code temporaire sécurisé
@@ -207,7 +218,7 @@ serve(async (req) => {
     }
 
     // 3. Générer un mot de passe temporaire sécurisé
-    const tempPassword = `Temp${Math.random().toString(36).slice(-8)}${Math.random().toString(36).slice(-4)}!`;
+    const tempPassword = generateSecurePassword(16);
 
     // 4. Créer l'utilisateur Admin dans Supabase Auth
     const { data: newAuthUser, error: authCreateError } = await supabaseAdmin.auth.admin.createUser(
@@ -242,12 +253,8 @@ serve(async (req) => {
       );
     }
 
-    // 5. Hasher le mot de passe pour la table users (compatibilité)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(tempPassword + 'logi_clinic_salt');
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // 5. Hasher le mot de passe pour la table users avec bcrypt (sécurité renforcée)
+    const passwordHash = await hash(tempPassword, 12); // 12 rounds pour sécurité optimale
 
     // 6. Créer l'utilisateur dans la table users
     const { data: newUser, error: userCreateError } = await supabaseAdmin
@@ -340,10 +347,11 @@ serve(async (req) => {
         validityHours: validityHours,
       },
       credentials: {
-        // ⚠️ En production, ces informations doivent être envoyées par email sécurisé uniquement
+        // ⚠️ SÉCURITÉ: Le mot de passe temporaire n'est JAMAIS retourné dans la réponse
+        // Il doit être envoyé uniquement par email sécurisé
         clinicCode: temporaryCode,
         email: adminEmail.toLowerCase(),
-        tempPassword: Deno.env.get('ENVIRONMENT') === 'development' ? tempPassword : '(Envoyé par email)',
+        tempPassword: '*** Envoyé par email sécurisé ***',
         resetLink: resetData?.properties?.action_link || null,
       },
       message: `Clinique "${clinicName}" créée avec succès. Le code temporaire ${temporaryCode} est valide jusqu'au ${expiresAt.toLocaleString()}. L'administrateur doit définir un code clinique permanent après sa première connexion.`,
