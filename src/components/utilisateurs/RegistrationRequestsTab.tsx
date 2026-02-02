@@ -41,6 +41,7 @@ import {
 } from '@mui/icons-material';
 import { User } from '../../types/auth';
 import { ALL_ROLES, getRoleLabelByValue } from '../../config/roles';
+import { apiGet, apiPost } from '../../services/apiClient';
 
 interface RegistrationRequest {
   _id: string;
@@ -109,68 +110,13 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
     fetchStats();
   }, [filterStatus]);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-
   const fetchRequests = async () => {
     try {
       setLoading(true);
       setError('');
       
-      const token = localStorage.getItem('token');
-      
-      // Vérifier que le token existe
-      if (!token) {
-        setError('Session expirée. Veuillez vous reconnecter.');
-        console.error('❌ Token manquant dans localStorage');
-        return;
-      }
-
-      // Vérifier que le token est un JWT valide
-      const isValidJWT = token && token.includes('.') && token.split('.').length === 3;
-      if (!isValidJWT) {
-        setError('Token d\'authentification invalide. Veuillez vous reconnecter.');
-        console.error('❌ Token non-JWT détecté:', token.substring(0, 20) + '...');
-        localStorage.removeItem('token');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests?statut=${filterStatus !== 'all' ? filterStatus : ''}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      // Gérer les erreurs HTTP avec des messages spécifiques
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        
-        if (response.status === 401) {
-          setError('Session expirée ou token invalide. Veuillez vous reconnecter.');
-          console.error('❌ Erreur 401 - Authentification échouée:', errorData);
-          // Nettoyer le token invalide
-          localStorage.removeItem('token');
-          // Optionnel: rediriger vers la page de login
-          // window.location.href = '/login';
-          return;
-        }
-        
-        if (response.status === 403) {
-          setError(errorData.message || 'Vous n\'avez pas les permissions nécessaires pour accéder aux demandes d\'inscription.');
-          console.error('❌ Erreur 403 - Permission refusée:', errorData);
-          return;
-        }
-        
-        if (response.status === 400) {
-          setError(errorData.message || 'Requête invalide. Vérifiez votre connexion à la clinique.');
-          console.error('❌ Erreur 400 - Requête invalide:', errorData);
-          return;
-        }
-        
-        throw new Error(errorData.message || `Erreur ${response.status} lors du chargement des demandes`);
-      }
-
-      const data = await response.json();
+      const query = filterStatus !== 'all' ? `?statut=${filterStatus}` : '';
+      const data = await apiGet<any>(`/auth/registration-requests${query}`);
       if (data.success) {
         setRequests(data.requests || []);
         setError('');
@@ -188,34 +134,15 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-        console.warn('⚠️ Token manquant pour les statistiques');
-        return;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.requests) {
-          const allRequests = data.requests;
-          setStats({
-            total: allRequests.length,
-            pending: allRequests.filter((r: RegistrationRequest) => r.statut === 'pending').length,
-            approved: allRequests.filter((r: RegistrationRequest) => r.statut === 'approved').length,
-            rejected: allRequests.filter((r: RegistrationRequest) => r.statut === 'rejected').length,
-          });
-        }
-      } else if (response.status === 401) {
-        console.warn('⚠️ Session expirée lors du chargement des statistiques');
-        localStorage.removeItem('token');
+      const data = await apiGet<any>('/auth/registration-requests');
+      if (data.success && data.requests) {
+        const allRequests = data.requests;
+        setStats({
+          total: allRequests.length,
+          pending: allRequests.filter((r: RegistrationRequest) => r.statut === 'pending').length,
+          approved: allRequests.filter((r: RegistrationRequest) => r.statut === 'approved').length,
+          rejected: allRequests.filter((r: RegistrationRequest) => r.statut === 'rejected').length,
+        });
       }
     } catch (err) {
       console.error('Erreur lors du chargement des statistiques:', err);
@@ -232,25 +159,15 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       setLoading(true);
       setError('');
       
-      const token = localStorage.getItem('token');
       const requestId = selectedRequest.id || selectedRequest._id;
       
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
-          permissions: approveForm.permissions,
-          notes: approveForm.notes,
-        }),
+      const data = await apiPost<any>(`/auth/registration-requests/${requestId}/approve`, {
+        role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
+        permissions: approveForm.permissions,
+        notes: approveForm.notes,
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (data.success) {
         setSuccess(
           `✅ Demande approuvée ! Le compte de ${selectedRequest.prenom} ${selectedRequest.nom} (${selectedRequest.email}) est maintenant activé. ` +
           `Le membre peut se connecter avec le mot de passe défini lors de l'inscription.`
@@ -292,24 +209,14 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
       setLoading(true);
       setError('');
       
-      const token = localStorage.getItem('token');
       const requestId = selectedRequest.id || selectedRequest._id;
       
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          raisonRejet: rejectForm.raisonRejet,
-          notes: rejectForm.notes,
-        }),
+      const data = await apiPost<any>(`/auth/registration-requests/${requestId}/reject`, {
+        raisonRejet: rejectForm.raisonRejet,
+        notes: rejectForm.notes,
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (data.success) {
         setSuccess('Demande d\'inscription rejetée');
         setRejectDialogOpen(false);
         setDetailsOpen(false);

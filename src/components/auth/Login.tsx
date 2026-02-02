@@ -58,6 +58,7 @@ import ForgotPasswordDialog from './ForgotPasswordDialog';
 import { REGISTRATION_ROLES } from '../../config/roles';
 import ThemeToggleButton from '../ui/ThemeToggleButton';
 import { SECURITY_QUESTIONS, SecurityQuestionOption } from '../../data/securityQuestions';
+import { apiPost } from '../../services/apiClient';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -1415,17 +1416,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     try {
-      // URL de production par défaut (Supabase Edge Functions)
-      const PRODUCTION_API_URL = 'https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api';
-      const API_BASE_URL = import.meta.env.VITE_API_URL || PRODUCTION_API_URL;
-      
-      const requestUrl = `${API_BASE_URL}/auth/register-request`;
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const data = await apiPost<any>('/auth/register-request', {
           clinicCode: signupForm.clinicCode.toUpperCase().trim(),
           nom: signupForm.nom,
           prenom: signupForm.prenom,
@@ -1452,14 +1443,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               },
             } : {}),
           },
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erreur lors de la soumission de la demande');
-      }
+        });
 
       setSignupSuccess(true);
       setSignupForm({

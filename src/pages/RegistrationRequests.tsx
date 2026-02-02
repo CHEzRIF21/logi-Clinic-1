@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { User } from '../types/auth';
 import { ALL_ROLES, getRoleLabelByValue } from '../config/roles';
+import { apiGet, apiPost } from '../services/apiClient';
 
 interface RegistrationRequest {
   _id: string;
@@ -104,24 +105,11 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
     fetchStats();
   }, [filterStatus]);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || '';
-
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests?statut=${filterStatus !== 'all' ? filterStatus : ''}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des demandes');
-      }
-
-      const data = await response.json();
+      const query = filterStatus !== 'all' ? `?statut=${filterStatus}` : '';
+      const data = await apiGet<any>(`/auth/registration-requests${query}`);
       if (data.success) {
         // Debug: afficher les données reçues
         console.log('📋 Demandes d\'inscription reçues:', data.requests);
@@ -147,25 +135,15 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.requests) {
-          const allRequests = data.requests;
-          setStats({
-            total: allRequests.length,
-            pending: allRequests.filter((r: RegistrationRequest) => r.statut === 'pending').length,
-            approved: allRequests.filter((r: RegistrationRequest) => r.statut === 'approved').length,
-            rejected: allRequests.filter((r: RegistrationRequest) => r.statut === 'rejected').length,
-          });
-        }
+      const data = await apiGet<any>('/auth/registration-requests');
+      if (data.success && data.requests) {
+        const allRequests = data.requests;
+        setStats({
+          total: allRequests.length,
+          pending: allRequests.filter((r: RegistrationRequest) => r.statut === 'pending').length,
+          approved: allRequests.filter((r: RegistrationRequest) => r.statut === 'approved').length,
+          rejected: allRequests.filter((r: RegistrationRequest) => r.statut === 'rejected').length,
+        });
       }
     } catch (err) {
       console.error('Erreur lors du chargement des statistiques:', err);
@@ -192,23 +170,14 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
         token: token ? 'présent' : 'absent',
       });
       
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
-          permissions: approveForm.permissions,
-          notes: approveForm.notes,
-        }),
+      const data = await apiPost<any>(`/auth/registration-requests/${requestId}/approve`, {
+        role: approveForm.role || selectedRequest.roleSouhaite || 'receptionniste',
+        permissions: approveForm.permissions,
+        notes: approveForm.notes,
       });
+      console.log('📥 Réponse approbation:', { data });
 
-      const data = await response.json();
-      console.log('📥 Réponse approbation:', { status: response.status, data });
-
-      if (response.ok && data.success) {
+      if (data.success) {
         setSuccess('Demande d\'inscription approuvée avec succès. Le compte est maintenant activé (connexion avec le mot de passe choisi à l’inscription).');
         setApproveDialogOpen(false);
         setDetailsOpen(false);
@@ -247,22 +216,13 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       
       console.log('🔄 Rejet de la demande:', { requestId, raison: rejectForm.raisonRejet });
       
-      const response = await fetch(`${API_BASE_URL}/auth/registration-requests/${requestId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          raisonRejet: rejectForm.raisonRejet,
-          notes: rejectForm.notes,
-        }),
+      const data = await apiPost<any>(`/auth/registration-requests/${requestId}/reject`, {
+        raisonRejet: rejectForm.raisonRejet,
+        notes: rejectForm.notes,
       });
+      console.log('📥 Réponse rejet:', { data });
 
-      const data = await response.json();
-      console.log('📥 Réponse rejet:', { status: response.status, data });
-
-      if (response.ok && data.success) {
+      if (data.success) {
         setSuccess('Demande d\'inscription rejetée');
         setRejectDialogOpen(false);
         setDetailsOpen(false);

@@ -11,15 +11,24 @@
 // URL de production par défaut (Supabase Edge Functions)
 const PRODUCTION_API_URL = 'https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api';
 
-// Support pour Vite (import.meta.env) et CRA (process.env) pour compatibilité
-// En production, utilise l'URL Supabase Edge Functions par défaut
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
-  PRODUCTION_API_URL;
+/**
+ * Source unique de vérité pour l'URL API.
+ *
+ * - Si `VITE_API_URL` est défini → on l'utilise (dev/prod)
+ * - Sinon en DEV → base URL relative (''), pour pointer vers le même origin (proxy / serveur local)
+ * - Sinon en PROD → fallback Supabase Edge Functions
+ */
+const ENV_API_URL =
+  (import.meta.env.VITE_API_URL ?? null) ||
+  ((typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) ?? null);
+
+const API_BASE_URL = ENV_API_URL !== null
+  ? ENV_API_URL
+  : (import.meta.env.DEV ? '' : PRODUCTION_API_URL);
 
 // Log pour debug (uniquement en développement)
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  console.log('🔗 API URL configurée:', API_BASE_URL);
+  console.log('🔗 API URL configurée (source unique):', API_BASE_URL || '(relative)');
 }
 
 /**
@@ -134,8 +143,9 @@ async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error('VITE_API_URL n\'est pas configuré. Veuillez configurer la variable d\'environnement VITE_API_URL.');
+  // API_BASE_URL peut être '' (relative) en développement: c'est valide
+  if (API_BASE_URL === null || API_BASE_URL === undefined) {
+    throw new Error('URL API non configurée. Veuillez configurer VITE_API_URL (ou REACT_APP_API_URL).');
   }
 
   const token = getAuthToken();
@@ -281,8 +291,9 @@ export async function apiPatch<T>(endpoint: string, body?: any): Promise<T> {
  * Upload de fichier avec authentification
  */
 export async function apiUpload<T>(endpoint: string, formData: FormData): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error('VITE_API_URL n\'est pas configuré.');
+  // API_BASE_URL peut être '' (relative) en développement: c'est valide
+  if (API_BASE_URL === null || API_BASE_URL === undefined) {
+    throw new Error('URL API non configurée. Veuillez configurer VITE_API_URL (ou REACT_APP_API_URL).');
   }
 
   const token = getAuthToken();
