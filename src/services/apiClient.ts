@@ -247,8 +247,10 @@ async function apiRequest<T>(
       // Gérer l'erreur 401 - Non authentifié
       if (response.status === 401) {
         logError(endpoint, 401, 'Session expirée ou token invalide');
-        handleAuthError();
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
+        // Ne pas vider le localStorage sur 401 : évite de "déconnecter" l'utilisateur
+        // quand le backend renvoie 401 (ex: Edge Function mal configurée ou token refusé).
+        // L'UI affiche l'erreur et l'utilisateur peut réessayer ou se reconnecter manuellement.
+        throw new Error('Session expirée ou accès refusé. Veuillez réessayer ou vous reconnecter.');
       }
       
       // Gérer l'erreur 403 - Non autorisé
@@ -389,8 +391,7 @@ export async function apiUpload<T>(endpoint: string, formData: FormData): Promis
 
     if (!response.ok) {
       if (response.status === 401) {
-        handleAuthError();
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
+        throw new Error('Session expirée ou accès refusé. Veuillez vous reconnecter.');
       }
       if (response.status === 403) {
         throw new Error('Vous n\'avez pas les permissions nécessaires.');

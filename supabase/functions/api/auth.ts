@@ -27,16 +27,44 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
     };
   }
 
-  const token = authHeader.replace('Bearer ', '');
+  const token = authHeader.replace(/^\s*Bearer\s+/i, '').trim();
   const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
-  
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('[auth] SUPABASE_URL or SUPABASE_ANON_KEY manquant (Edge Function config)');
+    return {
+      success: false,
+      error: new Response(
+        JSON.stringify({ success: false, message: 'Configuration serveur incomplète' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+
+  // Client avec en-tête Authorization pour que getUser() utilise le JWT de la requête
   const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user: authUser }, error: authError } = await supabaseClient.auth.getUser(token);
-  
+  // Valider le JWT avec auth.getUser(token) ; try/catch pour éviter les crash en production
+  let authUser: { id: string } | null = null;
+  let authError: { message: string } | null = null;
+  try {
+    const result = await supabaseClient.auth.getUser(token);
+    authUser = result.data?.user ?? null;
+    authError = result.error ?? null;
+  } catch (e) {
+    authError = { message: e instanceof Error ? e.message : String(e) };
+  }
+
+  if (authError) {
+    console.error('[auth] JWT validation failed:', authError.message, { hasToken: !!token, tokenLen: token?.length });
+  }
+  if (!authUser && !authError) {
+    console.warn('[auth] getUser returned no user and no error');
+  }
+
   if (authError || !authUser) {
     // Fallback: token interne (format: internal-<user_id>-<timestamp>)
     const internalMatch = token.match(/^internal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i);
@@ -84,15 +112,18 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
 
-  if (
-    userError ||
-    !userData ||
-    !userData.actif ||
-    userData.status === 'SUSPENDED' ||
-    userData.status === 'REJECTED' ||
-    userData.status === 'PENDING' ||
-    userData.status === 'PENDING_APPROVAL'
-  ) {
+  if (userError) {
+    console.error('[auth] users table lookup failed:', userError.message, { authUserId: authUser.id });
+  }
+  if (!userData && !userError) {
+    console.warn('[auth] No user row for auth_user_id:', authUser.id);
+  }
+
+  const statusUpper = (userData?.status ?? '').toString().toUpperCase();
+  const isBlockedStatus = ['SUSPENDED', 'REJECTED', 'PENDING', 'PENDING_APPROVAL'].includes(statusUpper);
+  const isActive = userData?.actif === true;
+
+  if (userError || !userData || !isActive || isBlockedStatus) {
     return {
       success: false,
       error: new Response(
