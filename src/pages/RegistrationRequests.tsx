@@ -73,6 +73,10 @@ interface RegistrationRequestsProps {
 }
 
 const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => {
+  // #region agent log
+  console.log('🔍 RegistrationRequests component mounted', { hasUser: !!user, userRole: user?.role, userId: user?.id });
+  // #endregion
+  
   const [requests, setRequests] = useState<RegistrationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -101,16 +105,26 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
   });
 
   useEffect(() => {
+    // #region agent log
+    console.log('🔍 RegistrationRequests useEffect triggered', { filterStatus, hasUser: !!user });
+    // #endregion
     fetchRequests();
     fetchStats();
   }, [filterStatus]);
 
   const fetchRequests = async () => {
     try {
+      // #region agent log
+      console.log('🔍 fetchRequests called', { filterStatus });
+      // #endregion
       setLoading(true);
       
       // Debug: afficher l'utilisateur connecté pour comprendre le contexte
       const userStr = localStorage.getItem('user');
+      const tokenStr = localStorage.getItem('token');
+      // #region agent log
+      console.log('🔍 localStorage check', { hasUser: !!userStr, hasToken: !!tokenStr, tokenType: tokenStr?.substring(0, 20) });
+      // #endregion
       if (userStr) {
         try {
           const currentUser = JSON.parse(userStr);
@@ -121,6 +135,12 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
             clinic_id: currentUser.clinic_id,
             clinicCode: currentUser.clinicCode,
           });
+          // #region agent log
+          console.log('🔍 User role check', { role: currentUser.role, roleUpper: currentUser.role?.toUpperCase(), isAdmin: currentUser.role?.toUpperCase() === 'ADMIN' || currentUser.role?.toUpperCase() === 'CLINIC_ADMIN' });
+          // #endregion
+          // #region agent log
+          console.log('🔍 User role check', { role: currentUser.role, roleUpper: currentUser.role?.toUpperCase(), isAdmin: currentUser.role?.toUpperCase() === 'ADMIN' || currentUser.role?.toUpperCase() === 'CLINIC_ADMIN' });
+          // #endregion
         } catch (e) {
           console.warn('⚠️ Impossible de parser user depuis localStorage');
         }
@@ -129,7 +149,13 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       const query = filterStatus !== 'all' ? `?statut=${filterStatus}` : '';
       console.log('🔍 Appel GET /auth/registration-requests' + query);
       
+      // #region agent log
+      console.log('🔍 About to call apiGet');
+      // #endregion
       const data = await apiGet<any>(`/auth/registration-requests${query}`);
+      // #region agent log
+      console.log('🔍 apiGet completed', { hasData: !!data, success: data?.success });
+      // #endregion
       console.log('📊 Réponse brute:', data);
       
       if (data.success) {
@@ -149,6 +175,9 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
         throw new Error(data.message || 'Erreur lors du chargement des demandes');
       }
     } catch (err: any) {
+      // #region agent log
+      console.error('🔍 fetchRequests error', { error: err.message, errorType: err.constructor.name, stack: err.stack });
+      // #endregion
       setError(err.message || 'Erreur lors du chargement des demandes');
     } finally {
       setLoading(false);

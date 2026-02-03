@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
@@ -53,10 +53,17 @@ import { canManageUsers } from './utils/permissions';
 import { clearClinicCache } from './services/clinicService';
 
 function App() {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:53',message:'App component mounted',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-  // #endregion
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
+  // #region agent log — s'affiche dans la CONSOLE DU NAVIGATEUR (F12) quand vous allez sur /registration-requests
+  if (location.pathname === '/registration-requests') {
+    console.log('🔍 [DEBUG] App: route /registration-requests atteinte', {
+      pathname: location.pathname,
+      hasUser: !!user,
+      userRole: user?.role,
+    });
+  }
+  // #endregion
   const [isLoading, setIsLoading] = useState(true);
   const { enqueueSnackbar } = useSnackbar();
 
@@ -92,19 +99,24 @@ function App() {
   const handleLogin = (userData: User, token: string) => {
     setUser(userData);
     
-    // IMPORTANT: Ne stocker que les JWT valides dans localStorage
-    // Les tokens internes (comme "internal-xxx") ne doivent pas être stockés
-    // car ils causent des erreurs "JWT malformé" quand utilisés avec Supabase Auth
+    // IMPORTANT: Stocker tous les tokens valides (JWT et internal-*) dans localStorage
+    // Les tokens internal-* sont nécessaires pour les appels API vers les Edge Functions
+    // Ne pas les utiliser avec supabase.auth.getUser() mais ils sont valides pour apiClient
     const isValidJWT = token && token.includes('.') && token.split('.').length === 3;
+    const isInternalToken = token && token.startsWith('internal-');
     
     if (isValidJWT) {
       localStorage.setItem('token', token);
       console.log('✅ JWT valide stocké dans localStorage');
+    } else if (isInternalToken) {
+      // Token interne (compte démo) - stocker pour les appels API
+      // ⚠️ Ne PAS utiliser ce token avec supabase.auth.getUser() ou autres endpoints Supabase Auth
+      // Il est uniquement pour l'authentification interne via apiClient
+      localStorage.setItem('token', token);
+      console.log('✅ Token interne stocké dans localStorage (pour appels API uniquement)');
     } else {
-      // Token interne (compte démo) - ne pas stocker dans localStorage
-      // La session Supabase sera gérée automatiquement par le client Supabase
-      console.warn('⚠️ Token interne détecté - non stocké dans localStorage (compte démo)');
-      // Ne pas stocker le token interne pour éviter les erreurs JWT malformé
+      // Token invalide ou format inconnu
+      console.warn('⚠️ Token invalide détecté - non stocké dans localStorage');
       localStorage.removeItem('token');
     }
     
@@ -246,15 +258,36 @@ function App() {
         path="/registration-requests"
         element={
           <ProtectedRoute user={user}>
-            {canManageUsers(user) ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <Suspense fallback={<LoadingFallback />}>
-                <RegistrationRequests user={user} />
-                </Suspense>
-              </Layout>
-            ) : (
-              <Navigate to="/" replace />
-            )}
+            {(() => {
+              // #region agent log
+              const canManage = canManageUsers(user);
+              console.log('🔍 registration-requests route check', { hasUser: !!user, userRole: user?.role, canManageUsers: canManage, userId: user?.id });
+              fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:253',message:'registration-requests route check',data:{hasUser:!!user,userRole:user?.role,canManageUsers:canManage,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+              return canManage ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <Suspense fallback={<LoadingFallback />}>
+                  <RegistrationRequests user={user} />
+                  </Suspense>
+                </Layout>
+              ) : (
+                (() => {
+                  // Debug: logger pourquoi l'accès est refusé
+                  if (import.meta.env.DEV) {
+                    console.warn('🚫 Accès refusé à /registration-requests:', {
+                      hasUser: !!user,
+                      userRole: user?.role,
+                      canManageUsers: canManageUsers(user),
+                    });
+                  }
+                  // #region agent log
+                  console.warn('🔍 Redirecting to landing page - access denied', { hasUser: !!user, userRole: user?.role, canManageUsers: canManageUsers(user) });
+                  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:261',message:'redirecting to landing page',data:{hasUser:!!user,userRole:user?.role,canManageUsers:canManageUsers(user)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                  // #endregion
+                  return <Navigate to="/" replace />;
+                })()
+              );
+            })()}
           </ProtectedRoute>
         }
       />

@@ -95,36 +95,104 @@ function isValidJWT(token: string | null): boolean {
 
 /**
  * Récupère le token JWT depuis le localStorage
- * IMPORTANT: Ne retourne que les tokens JWT valides pour éviter les erreurs "JWT malformé"
+ * IMPORTANT:
+ * - On accepte les JWT (xxx.yyy.zzz)
+ * - On accepte aussi les tokens internes `internal-...` (utilisés par nos Edge Functions)
+ * - On refuse les autres formats non-JWT
  */
 function getAuthToken(): string | null {
+  // #region agent log
+  console.log('🔍 getAuthToken called');
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:103',message:'getAuthToken entry',data:{hasToken:!!localStorage.getItem('token'),hasAuthToken:!!localStorage.getItem('authToken')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const token = localStorage.getItem('token') || localStorage.getItem('authToken');
   
-  // Si le token n'est pas un JWT valide, ne pas l'utiliser avec Supabase Auth
-  // Les tokens internes (comme "internal-xxx" ou "token-xxx") ne doivent pas être utilisés
-  if (token && !isValidJWT(token)) {
-    console.warn('⚠️ Token non-JWT détecté dans localStorage. Ce token ne peut pas être utilisé avec Supabase Auth.');
-    // Pour les comptes démo, on peut retourner null et laisser Supabase gérer la session
-    // Si Supabase Auth a réussi, la session sera automatiquement stockée par le client
+  if (!token) {
+    // #region agent log
+    console.log('🔍 getAuthToken: no token found');
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:107',message:'getAuthToken no token',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     return null;
   }
+
+  // JWT Supabase classique
+  if (isValidJWT(token)) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:112',message:'getAuthToken JWT valid',data:{tokenLength:token.length,tokenPrefix:token.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    return token;
+  }
+
+  // Token interne supporté côté backend (Edge Functions /api/auth/*)
+  if (token.startsWith('internal-')) {
+    // #region agent log
+    console.log('🔍 getAuthToken: internal token found', { tokenPrefix: token.substring(0, 30) });
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:118',message:'getAuthToken internal token',data:{tokenLength:token.length,tokenPrefix:token.substring(0,30)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    return token;
+  }
+
+  // Autres formats: ne pas les envoyer pour éviter des erreurs côté auth
+  console.warn('⚠️ Token non supporté détecté dans localStorage. Ignoré pour les appels API.');
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:125',message:'getAuthToken unsupported format',data:{tokenLength:token.length,tokenPrefix:token.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  return null;
   
-  return token;
+  // unreachable
 }
 
 /**
  * Nettoie les données d'authentification et redirige vers la page de login
  */
 function handleAuthError(): void {
+  // #region agent log
+  console.error('🔍 handleAuthError called', {
+    currentPath: typeof window !== 'undefined' ? window.location.pathname : 'unknown',
+  });
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'apiClient.ts:124',
+      message: 'handleAuthError called',
+      data: { currentPath: typeof window !== 'undefined' ? window.location.pathname : 'unknown' },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'A',
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  // Nettoyer uniquement le stockage local.
+  // On NE force PLUS de redirection globale ici pour éviter les aller-retours
+  // vers la landing page /login en plein milieu d'une navigation.
   localStorage.removeItem('token');
   localStorage.removeItem('authToken');
   localStorage.removeItem('user');
   localStorage.removeItem('clinic_id');
-  
-  // Rediriger vers la page de login si on n'y est pas déjà
-  if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-    window.location.href = '/login';
-  }
+
+  // #region agent log
+  console.error('🔍 handleAuthError: localStorage cleared (aucune redirection forcée)');
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'apiClient.ts:132',
+      message: 'handleAuthError storage cleared',
+      data: { currentPath: typeof window !== 'undefined' ? window.location.pathname : 'unknown' },
+      timestamp: Date.now(),
+      sessionId: 'debug-session',
+      runId: 'run1',
+      hypothesisId: 'A',
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  // La redirection éventuelle est désormais gérée au niveau des composants UI
+  // (ex: messages "Session expirée" + bouton "Se reconnecter"),
+  // au lieu de forcer un window.location.href ici.
 }
 
 /**
@@ -150,6 +218,10 @@ async function apiRequest<T>(
 
   const token = getAuthToken();
   
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:157',message:'apiRequest before fetch',data:{endpoint,hasToken:!!token,tokenType:token?token.startsWith('internal-')?'internal':'jwt':'none',apiBaseUrl:API_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
+  
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -157,6 +229,9 @@ async function apiRequest<T>(
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:165',message:'Authorization header set',data:{endpoint,authorizationPrefix:headers['Authorization']?.substring(0,30)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
