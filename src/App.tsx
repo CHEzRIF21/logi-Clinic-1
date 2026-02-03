@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
@@ -54,7 +54,21 @@ import { clearClinicCache } from './services/clinicService';
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
+
+  // Rediriger vers /reset-password si le lien de réinitialisation arrive sur une autre page (ex. / ou /login)
+  // Supabase peut rediriger vers la "Site URL" au lieu de /reset-password si l'URL n'est pas dans la whitelist
+  useEffect(() => {
+    if (location.pathname === '/reset-password') return;
+    const hash = window.location.hash;
+    if (!hash) return;
+    const params = new URLSearchParams(hash.substring(1));
+    if (params.get('type') === 'recovery' && params.get('access_token')) {
+      navigate(`/reset-password${hash}`, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
   // #region agent log — s'affiche dans la CONSOLE DU NAVIGATEUR (F12) quand vous allez sur /registration-requests
   if (location.pathname === '/registration-requests') {
     console.log('🔍 [DEBUG] App: route /registration-requests atteinte', {

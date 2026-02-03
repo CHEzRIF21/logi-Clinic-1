@@ -1,5 +1,26 @@
 # 🔧 Dépannage Reset Password - Logiclinic
 
+## ❌ Problème : Le lien de réinitialisation renvoie à la page d'accueil (landing) au lieu de la page de reset
+
+**Symptôme :** Vous recevez l'email avec le lien de réinitialisation, mais en cliquant vous arrivez sur la page d'accueil (ou la page de connexion) au lieu de la page « Réinitialiser le mot de passe ».
+
+**Cause :** Supabase redirige vers la **Site URL** (ex. `https://www.logiclinic.org/`) au lieu de `https://www.logiclinic.org/reset-password` lorsque l'URL `/reset-password` n'est pas dans la whitelist des Redirect URLs.
+
+**Corrections :**
+
+1. **Côté application (déjà en place)**  
+   L'app détecte les tokens de réinitialisation dans l'URL (hash `#access_token=...&type=recovery`). Si vous arrivez sur `/` ou `/login` avec ce hash, vous êtes **automatiquement redirigé** vers `/reset-password` en conservant les tokens. Rechargez la page si la redirection ne s'est pas faite au premier clic.
+
+2. **Côté Supabase (recommandé)**  
+   Ajoutez l'URL exacte de la page de reset dans les Redirect URLs :
+   - **Authentication** → **URL Configuration** → **Redirect URLs**
+   - Ajoutez : `https://www.logiclinic.org/reset-password` (et en dev : `http://localhost:5173/reset-password`)
+   - Pas de slash final, domaine exact (avec ou sans `www` selon votre site).
+
+Après avoir ajouté l'URL, renvoyez un nouveau lien « Mot de passe oublié » : les prochains emails redirigeront directement vers la page de réinitialisation.
+
+---
+
 ## ❌ Problème : Le formulaire ne s'affiche pas
 
 Si vous voyez le message "Lien invalide ou expiré" sur `https://www.logiclinic.org/reset-password`, voici les étapes de dépannage :
