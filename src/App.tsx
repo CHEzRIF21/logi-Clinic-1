@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Box, CircularProgress, Typography } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
 // Composants d'authentification (chargés immédiatement car critiques)
@@ -155,6 +155,31 @@ function App() {
         minHeight="100vh"
       >
         Chargement...
+      </Box>
+    );
+  }
+
+  // Lien de réinitialisation arrivé sur / ou /login : ne pas rendre les routes pour éviter
+  // que ProtectedRoute redirige vers /login et fasse perdre le hash (#access_token&type=recovery)
+  const hash = typeof window !== 'undefined' ? window.location.hash : '';
+  const hashParams = hash ? new URLSearchParams(hash.substring(1)) : null;
+  const isRecoveryLink = hashParams?.get('type') === 'recovery' && hashParams?.get('access_token');
+  const shouldRedirectToReset = location.pathname !== '/reset-password' && isRecoveryLink;
+
+  if (shouldRedirectToReset) {
+    return (
+      <Box
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        justifyContent="center"
+        minHeight="100vh"
+        gap={2}
+      >
+        <CircularProgress />
+        <Typography variant="body2" color="text.secondary">
+          Redirection vers la page de réinitialisation...
+        </Typography>
       </Box>
     );
   }
