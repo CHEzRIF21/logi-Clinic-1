@@ -55,7 +55,7 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
   
   if (authError || !authUser) {
     // Fallback: essayer avec un token interne (format: internal-<user_id>-<timestamp>)
-    const internalMatch = token.match(/^internal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i);
+    const internalMatch = token.match(/^(?:internal|token)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-|$)/i);
     
     if (internalMatch) {
       const userId = internalMatch[1];

@@ -39,7 +39,7 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
   
   if (authError || !authUser) {
     // Fallback: token interne (format: internal-<user_id>-<timestamp>)
-    const internalMatch = token.match(/^internal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i);
+    const internalMatch = token.match(/^(?:internal|token)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-|$)/i);
     
     if (internalMatch) {
       const userId = internalMatch[1];

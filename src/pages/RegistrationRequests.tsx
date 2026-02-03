@@ -148,11 +148,13 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       
       const query = filterStatus !== 'all' ? `?statut=${filterStatus}` : '';
       console.log('🔍 Appel GET /auth/registration-requests' + query);
-      
+      const currentUser = userStr ? (() => { try { return JSON.parse(userStr); } catch { return null; } })() : null;
+      const clinicCode = currentUser?.clinicCode || currentUser?.clinic_code || '';
+      const headers: HeadersInit = clinicCode ? { 'X-Clinic-Code': clinicCode } : {};
       // #region agent log
-      console.log('🔍 About to call apiGet');
+      console.log('🔍 About to call apiGet', { clinicCode: clinicCode || '(none)' });
       // #endregion
-      const data = await apiGet<any>(`/auth/registration-requests${query}`);
+      const data = await apiGet<any>(`/auth/registration-requests${query}`, { headers });
       // #region agent log
       console.log('🔍 apiGet completed', { hasData: !!data, success: data?.success });
       // #endregion

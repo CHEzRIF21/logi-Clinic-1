@@ -6,7 +6,10 @@
  * - Retry logic avec backoff exponentiel
  * - Gestion intelligente des erreurs 5xx
  * - Pas de retry pour les erreurs 4xx (erreurs client)
+ * - Utilisation du JWT de la session Supabase en priorité (évite 401 sur token expiré)
  */
+
+import { supabase } from './supabase';
 
 // URL de production par défaut (Supabase Edge Functions)
 const PRODUCTION_API_URL = 'https://bnfgemmlokvetmohiqch.supabase.co/functions/v1/api';
@@ -132,6 +135,11 @@ function getAuthToken(): string | null {
     return token;
   }
 
+  // Token au format token-<user_id> ou token-<user_id>-<timestamp> (compatibilité avec anciennes sessions)
+  if (token.startsWith('token-') && /^token-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-|$)/i.test(token)) {
+    return token;
+  }
+
   // Autres formats: ne pas les envoyer pour éviter des erreurs côté auth
   console.warn('⚠️ Token non supporté détecté dans localStorage. Ignoré pour les appels API.');
   // #region agent log
@@ -205,6 +213,23 @@ function logError(endpoint: string, status: number, message: string): void {
 }
 
 /**
+ * Récupère le token à envoyer aux Edge Functions.
+ * Priorité: JWT de la session Supabase (rafraîchi automatiquement) puis token du localStorage.
+ * Évite les 401 dus à un JWT expiré en localStorage alors que la session est encore valide.
+ */
+async function getTokenForApi(): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token && isValidJWT(data.session.access_token)) {
+      return data.session.access_token;
+    }
+  } catch (_) {
+    // Ignorer (pas de session ou erreur réseau)
+  }
+  return getAuthToken();
+}
+
+/**
  * Effectue une requête HTTP avec authentification
  */
 async function apiRequest<T>(
@@ -216,7 +241,7 @@ async function apiRequest<T>(
     throw new Error('URL API non configurée. Veuillez configurer VITE_API_URL (ou REACT_APP_API_URL).');
   }
 
-  const token = getAuthToken();
+  const token = await getTokenForApi();
   
   // #region agent log
   fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'apiClient.ts:157',message:'apiRequest before fetch',data:{endpoint,hasToken:!!token,tokenType:token?token.startsWith('internal-')?'internal':'jwt':'none',apiBaseUrl:API_BASE_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -323,8 +348,8 @@ async function apiRequest<T>(
 /**
  * GET request
  */
-export async function apiGet<T>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, { method: 'GET' });
+export async function apiGet<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  return apiRequest<T>(endpoint, { ...options, method: 'GET' });
 }
 
 /**
@@ -373,7 +398,7 @@ export async function apiUpload<T>(endpoint: string, formData: FormData): Promis
     throw new Error('URL API non configurée. Veuillez configurer VITE_API_URL (ou REACT_APP_API_URL).');
   }
 
-  const token = getAuthToken();
+  const token = await getTokenForApi();
   const headers: HeadersInit = {};
 
   if (token) {

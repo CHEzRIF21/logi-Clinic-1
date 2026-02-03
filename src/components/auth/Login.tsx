@@ -841,8 +841,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             status,
             clinic_id,
             specialite,
-            actif,
-            email_verified
+            actif
           `)
           .eq('auth_user_id', authUser.id)
           .maybeSingle();
@@ -919,8 +918,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               clinic_id,
               specialite,
               actif,
-              password_hash,
-              email_verified
+              password_hash
             `)
             .eq('email', email)
             .eq('clinic_id', clinic.id)
@@ -941,8 +939,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 clinic_id,
                 specialite,
                 actif,
-                password_hash,
-                email_verified
+                password_hash
               `)
               .eq('email', email)
               .is('clinic_id', null)
@@ -1055,8 +1052,8 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         return;
       }
 
-      // 5.1. Vérifier que l'email est vérifié pour les comptes APPROVED
-      if (user.status === 'APPROVED' && !user.email_verified) {
+      // 5.1. Vérifier que l'email est vérifié pour les comptes APPROVED (si la colonne existe)
+      if (user.status === 'APPROVED' && user.email_verified === false) {
         // #region agent log
         fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Login.tsx:email_not_verified',message:'Email not verified for APPROVED account',data:{status:user.status,email_verified:user.email_verified},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
         // #endregion

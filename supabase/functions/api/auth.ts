@@ -66,8 +66,8 @@ async function authenticateUser(req: Request): Promise<{ success: boolean; user?
   }
 
   if (authError || !authUser) {
-    // Fallback: token interne (format: internal-<user_id>-<timestamp>)
-    const internalMatch = token.match(/^internal-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i);
+    // Fallback: token interne (format: internal-<user_id>-<timestamp> ou token-<user_id>-<timestamp>)
+    const internalMatch = token.match(/^(?:internal|token)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:-|$)/i);
     
     if (internalMatch) {
       const userId = internalMatch[1];
@@ -309,11 +309,26 @@ export default async function handler(req: Request, path: string): Promise<Respo
         clinic_id: user.clinic_id,
       });
       
-      if (!user.clinic_id) {
-        console.error('❌ Contexte de clinique manquant pour user:', user.id);
+      let clinicId = user.clinic_id;
+      if (!clinicId) {
+        const clinicCodeHeader = req.headers.get('X-Clinic-Code')?.trim();
+        if (clinicCodeHeader) {
+          const { data: clinicRow, error: clinicErr } = await supabase
+            .from('clinics')
+            .select('id')
+            .ilike('code', clinicCodeHeader)
+            .limit(1)
+            .maybeSingle();
+          if (!clinicErr && clinicRow?.id) {
+            clinicId = clinicRow.id;
+            console.log('📋 GET registration-requests - clinic_id résolu via X-Clinic-Code:', clinicCodeHeader, '→', clinicId);
+          }
+        }
+      }
+      if (!clinicId) {
+        console.error('❌ Contexte de clinique manquant pour user:', user.id, '(pas de clinic_id ni X-Clinic-Code valide)');
         return new Response(JSON.stringify({ success: false, message: 'Contexte de clinique manquant' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
-      const clinicId = user.clinic_id;
       const statut = url.searchParams.get('statut');
       
       console.log('🔍 Recherche demandes pour clinic_id:', clinicId, 'statut:', statut || 'tous');

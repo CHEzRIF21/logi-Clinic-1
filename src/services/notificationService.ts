@@ -89,25 +89,26 @@ export class NotificationService {
    * Récupère les notifications pour l'utilisateur actuel
    */
   static async getUserNotifications(userId: string, limit: number = 50): Promise<Notification[]> {
-    const { data, error } = await supabase
-      .from('notification_recipients')
-      .select(`
-        *,
-        notification:notifications(
+    try {
+      const { data, error } = await supabase
+        .from('notification_recipients')
+        .select(`
           *,
-          type:notification_types(*)
-        )
-      `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+          notification:notifications(
+            *,
+            type:notification_types(*)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-    if (error) {
-      console.error('Erreur lors de la récupération des notifications:', error);
-      throw error;
-    }
+      if (error) {
+        console.warn('notification_recipients non disponible:', error.message);
+        return [];
+      }
 
-    return (data || []).map((r: any) => ({
+      return (data || []).map((r: any) => ({
       id: r.notification.id,
       clinic_id: r.notification.clinic_id,
       type_id: r.notification.type_id,
@@ -130,6 +131,10 @@ export class NotificationService {
       created_at: new Date(r.notification.created_at),
       updated_at: new Date(r.notification.updated_at),
     }));
+    } catch (e) {
+      console.warn('notification_recipients erreur:', e);
+      return [];
+    }
   }
 
   /**
@@ -405,18 +410,23 @@ export class NotificationService {
    * Récupère le nombre de notifications non lues pour un utilisateur
    */
   static async getUnreadCount(userId: string): Promise<number> {
-    const { count, error } = await supabase
-      .from('notification_recipients')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .eq('lu', false);
+    try {
+      const { count, error } = await supabase
+        .from('notification_recipients')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('lu', false);
 
-    if (error) {
-      console.error('Erreur lors du comptage:', error);
+      if (error) {
+        console.warn('notification_recipients non disponible:', error.message);
+        return 0;
+      }
+
+      return count || 0;
+    } catch (e) {
+      console.warn('notification_recipients erreur:', e);
       return 0;
     }
-
-    return count || 0;
   }
 
   /**
@@ -486,6 +496,10 @@ export class NotificationService {
         .select('notification_id')
         .eq('user_id', userId)
         .eq('lu', false);
+
+      if (recipientsError) {
+        console.warn('notification_recipients non disponible (table/RLS):', recipientsError.message);
+      }
 
       if (!recipientsError && recipients && recipients.length > 0) {
         const notificationIds = recipients.map(r => r.notification_id);

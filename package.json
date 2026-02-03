@@ -52,7 +52,11 @@
     "license:generate": "node scripts/generate-license.js",
     "build:secure": "cd client && npm run build:secure",
     "build:server": "cd server && npm run build",
-    "build:all": "npm run build:server && npm run build:secure"
+    "build:all": "npm run build:server && npm run build:secure",
+    "supabase": "supabase",
+    "supabase:db:push": "supabase db push",
+    "supabase:functions:deploy": "supabase functions deploy",
+    "supabase:link": "supabase link --project-ref bnfgemmlokvetmohiqch"
   },
   "eslintConfig": {
     "extends": [
@@ -77,6 +81,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.22",
     "postcss": "^8.5.6",
+    "supabase": "^2.0.0",
     "tailwindcss": "^4.1.17",
     "vite": "^5.4.21",
     "vitest": "^1.0.0"
