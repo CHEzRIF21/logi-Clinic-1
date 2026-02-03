@@ -32,7 +32,7 @@ export const useSpeechRecognitionAPI = (
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<number | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL || 
     (typeof process !== 'undefined' && process.env?.REACT_APP_API_URL) || 
