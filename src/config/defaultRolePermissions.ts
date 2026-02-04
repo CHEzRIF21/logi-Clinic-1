@@ -9,8 +9,11 @@ import { UserRole } from '../types/auth';
 /**
  * Permissions par défaut pour chaque rôle
  * Structure: Module -> Actions -> Sous-modules (optionnel)
+ *
+ * On utilise Partial<Record<...>> pour éviter que l'ajout d'un nouveau rôle
+ * (ex: super_admin) ne casse la compilation tant qu'il n'a pas de config dédiée.
  */
-export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, ModulePermission[]> = {
+export const DEFAULT_ROLE_PERMISSIONS: Partial<Record<UserRole, ModulePermission[]>> = {
   // Administrateur Clinique - Accès complet à tous les modules
   admin: [
     {
@@ -509,7 +512,8 @@ export function roleHasPermission(
  * Obtient la description d'un rôle
  */
 export function getRoleDescription(role: UserRole): string {
-  const descriptions: Record<UserRole, string> = {
+  const descriptions: Partial<Record<UserRole, string>> = {
+    super_admin: 'Super administrateur de la plateforme - Gestion multi-cliniques',
     admin: 'Responsable du centre - Accès complet à tous les modules',
     medecin: 'Prise en charge médicale - Diagnostic et prescription',
     infirmier: 'Soins et suivi - Constantes et soins',

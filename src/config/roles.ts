@@ -64,8 +64,12 @@ export const ALL_ROLES: Array<{ value: UserRole; label: string; description?: st
 
 /**
  * Mapping des rôles UserRole vers RoleUtilisateur
+ *
+ * Note: le rôle `super_admin` est un rôle plateforme (gestion multi-cliniques).
+ * On le mappe sur le rôle métier `administrateur_clinique` pour la partie permissions.
  */
 export const ROLE_TO_ROLE_UTILISATEUR: Record<UserRole, RoleUtilisateur> = {
+  super_admin: 'administrateur_clinique',
   admin: 'administrateur_clinique',
   medecin: 'medecin',
   infirmier: 'infirmier',
