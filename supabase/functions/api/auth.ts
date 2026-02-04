@@ -4,8 +4,8 @@ import { supabase } from '../_shared/supabase.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
-// Hash password avec Web Crypto API (Deno)
-async function hashPassword(password: string): Promise<string> {
+// Hash password avec Web Crypto API (Deno) - exporté pour super_admin
+export async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password + 'logi_clinic_salt');
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -13,8 +13,8 @@ async function hashPassword(password: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Fonction d'authentification inline
-async function authenticateUser(req: Request): Promise<{ success: boolean; user?: any; error?: Response }> {
+// Fonction d'authentification inline - exportée pour super_admin
+export async function authenticateUser(req: Request): Promise<{ success: boolean; user?: any; error?: Response }> {
   const authHeader = req.headers.get('Authorization');
   
   if (!authHeader) {
@@ -437,6 +437,40 @@ export default async function handler(req: Request, path: string): Promise<Respo
         reviewed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
       }).eq('id', id);
       return new Response(JSON.stringify({ success: true, message: 'Rejetée' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // POST /api/auth/super-admin-login (public) - email + password only, SUPER_ADMIN with clinic_id IS NULL
+    if (method === 'POST' && pathParts[1] === 'super-admin-login') {
+      const body = await req.json();
+      if (!body.email || !body.password) {
+        return new Response(JSON.stringify({ success: false, message: 'Email et mot de passe requis' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const emailLower = String(body.email).toLowerCase().trim();
+      const passwordHash = await hashPassword(body.password);
+      const { data: user, error: userErr } = await supabase
+        .from('users')
+        .select('*')
+        .ilike('email', emailLower)
+        .eq('password_hash', passwordHash)
+        .is('clinic_id', null)
+        .eq('role', 'SUPER_ADMIN')
+        .eq('actif', true)
+        .maybeSingle();
+      if (userErr || !user) {
+        return new Response(JSON.stringify({ success: false, message: 'Identifiants incorrects ou accès non autorisé' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const statusUpper = (user.status ?? '').toString().toUpperCase();
+      if (['SUSPENDED', 'REJECTED', 'PENDING', 'PENDING_APPROVAL'].includes(statusUpper)) {
+        return new Response(JSON.stringify({ success: false, message: 'Compte en attente ou désactivé' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+      const token = `internal-${user.id}-${Date.now()}`;
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Connexion réussie',
+        user: { id: user.id, nom: user.nom, prenom: user.prenom, email: user.email, role: user.role, clinic_id: user.clinic_id },
+        token,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // POST /api/auth/login (public)

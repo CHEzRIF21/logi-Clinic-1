@@ -99,7 +99,8 @@ const menuItemsConfig: MenuItemConfig[] = [
   { text: 'Gestion Patients', icon: <People />, path: '/patients', badge: null, module: 'patients' },
   { text: "Utilisateur et permission", icon: <AccountCircle />, path: '/utilisateurs-permissions', badge: null, module: 'utilisateurs', requiresAdmin: true },
   { text: "Gestion Récupération", icon: <Lock />, path: '/account-recovery-management', badge: null, module: null, requiresAdmin: true },
-  { text: "Demandes d'inscription", icon: <PersonAdd />, path: '/registration-requests', badge: null, module: null, requiresAdmin: true },
+  // Demandes d'inscription désactivées : gestion des agents par le Super Admin uniquement
+  // { text: "Demandes d'inscription", icon: <PersonAdd />, path: '/registration-requests', badge: null, module: null, requiresAdmin: true },
 ];
 
 // Types de notifications supprimés - gérés dans le module Utilisateurs et Permissions

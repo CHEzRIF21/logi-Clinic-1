@@ -59,6 +59,7 @@ import { REGISTRATION_ROLES } from '../../config/roles';
 import ThemeToggleButton from '../ui/ThemeToggleButton';
 import { SECURITY_QUESTIONS, SecurityQuestionOption } from '../../data/securityQuestions';
 import { apiPost } from '../../services/apiClient';
+import { Link } from 'react-router-dom';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -2024,12 +2025,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 icon={<Lock sx={{ mb: 0.5 }} />}
                 iconPosition="start"
               />
-              <Tab 
-                label="Inscription" 
-                value="signup"
-                icon={<PersonAdd sx={{ mb: 0.5 }} />}
-                iconPosition="start"
-              />
+              {/* Onglet Inscription masqué : création des agents par le Super Admin uniquement */}
+              {false && (
+                <Tab 
+                  label="Inscription" 
+                  value="signup"
+                  icon={<PersonAdd sx={{ mb: 0.5 }} />}
+                  iconPosition="start"
+                />
+              )}
             </Tabs>
 
             {emailVerifiedSuccess && (
@@ -2148,8 +2152,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   variant="text"
                   size="small"
                   onClick={(e) => {
-                    // Empêche le warning Chrome "Blocked aria-hidden..." :
-                    // on retire le focus du bouton avant l'ouverture du Dialog (MUI appliquera aria-hidden au background)
                     (e.currentTarget as HTMLButtonElement).blur();
                     setShowForgotPasswordDialog(true);
                   }}
@@ -2167,6 +2169,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 >
                   Mot de passe oublié ?
                 </Button>
+              </Box>
+              <Box sx={{ mt: 1.5, textAlign: 'center' }}>
+                <Typography variant="caption" color="text.secondary">
+                  <Link to="/super-admin/login" style={{ color: 'inherit', textDecoration: 'none' }}>Accès Super Admin</Link>
+                </Typography>
               </Box>
             </Box>
             ) : (

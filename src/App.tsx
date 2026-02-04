@@ -7,6 +7,8 @@ import { useSnackbar } from 'notistack';
 import Login from './components/auth/Login';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ProtectedModuleRoute from './components/auth/ProtectedModuleRoute';
+import SuperAdminRoute from './components/auth/SuperAdminRoute';
+import SuperAdminLogin from './pages/SuperAdminLogin';
 import ResetPassword from './pages/ResetPassword';
 
 // Composants de navigation (chargés immédiatement)
@@ -29,6 +31,10 @@ const Imagerie = lazy(() => import('./pages/Imagerie'));
 const AccountRecoveryManagement = lazy(() => import('./pages/AccountRecoveryManagement'));
 const RegistrationRequests = lazy(() => import('./pages/RegistrationRequests'));
 const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
+const SuperAdminLayout = lazy(() => import('./components/layout/SuperAdminLayout'));
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'));
+const SuperAdminClinics = lazy(() => import('./pages/SuperAdminClinics'));
+const SuperAdminClinicUsers = lazy(() => import('./pages/SuperAdminClinicUsers'));
 
 // Composant de chargement pour Suspense
 const LoadingFallback = () => (
@@ -49,7 +55,7 @@ const LoadingFallback = () => (
 import { User } from './types/auth';
 
 // Utilitaires de permissions
-import { canManageUsers } from './utils/permissions';
+import { canManageUsers, isSuperAdmin } from './utils/permissions';
 import { clearClinicCache } from './services/clinicService';
 
 function App() {
@@ -198,6 +204,30 @@ function App() {
         }
       />
       <Route
+        path="/super-admin/login"
+        element={
+          user && isSuperAdmin(user) ? (
+            <Navigate to="/super-admin" replace />
+          ) : (
+            <SuperAdminLogin onLogin={handleLogin} />
+          )
+        }
+      />
+      <Route
+        path="/super-admin"
+        element={
+          <SuperAdminRoute user={user}>
+            <Suspense fallback={<LoadingFallback />}>
+              <SuperAdminLayout user={user} onLogout={handleLogout} />
+            </Suspense>
+          </SuperAdminRoute>
+        }
+      >
+        <Route index element={<Suspense fallback={<LoadingFallback />}><SuperAdminDashboard user={user} /></Suspense>} />
+        <Route path="clinics" element={<Suspense fallback={<LoadingFallback />}><SuperAdminClinics /></Suspense>} />
+        <Route path="clinics/:clinicId/users" element={<Suspense fallback={<LoadingFallback />}><SuperAdminClinicUsers /></Suspense>} />
+      </Route>
+      <Route
         path="/reset-password"
         element={<ResetPassword />}
       />
@@ -293,43 +323,8 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/registration-requests"
-        element={
-          <ProtectedRoute user={user}>
-            {(() => {
-              // #region agent log
-              const canManage = canManageUsers(user);
-              console.log('🔍 registration-requests route check', { hasUser: !!user, userRole: user?.role, canManageUsers: canManage, userId: user?.id });
-              fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:253',message:'registration-requests route check',data:{hasUser:!!user,userRole:user?.role,canManageUsers:canManage,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-              // #endregion
-              return canManage ? (
-                <Layout user={user} onLogout={handleLogout}>
-                  <Suspense fallback={<LoadingFallback />}>
-                  <RegistrationRequests user={user} />
-                  </Suspense>
-                </Layout>
-              ) : (
-                (() => {
-                  // Debug: logger pourquoi l'accès est refusé
-                  if (import.meta.env.DEV) {
-                    console.warn('🚫 Accès refusé à /registration-requests:', {
-                      hasUser: !!user,
-                      userRole: user?.role,
-                      canManageUsers: canManageUsers(user),
-                    });
-                  }
-                  // #region agent log
-                  console.warn('🔍 Redirecting to landing page - access denied', { hasUser: !!user, userRole: user?.role, canManageUsers: canManageUsers(user) });
-                  fetch('http://127.0.0.1:7242/ingest/fd5cac79-85ca-4f03-aa34-b9d071e2f65f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'App.tsx:261',message:'redirecting to landing page',data:{hasUser:!!user,userRole:user?.role,canManageUsers:canManageUsers(user)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                  // #endregion
-                  return <Navigate to="/" replace />;
-                })()
-              );
-            })()}
-          </ProtectedRoute>
-        }
-      />
+      {/* Module "Demandes d'inscription" désactivé : création des agents par le Super Admin uniquement */}
+      <Route path="/registration-requests" element={<Navigate to="/" replace />} />
       <Route
         path="/staff-management"
         element={

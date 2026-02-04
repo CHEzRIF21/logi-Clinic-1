@@ -1,0 +1,6 @@
+Starting seed via fetch...
+Failed to setup clinic: Error: API Error 403: {"code":"42501","details":null,"hint":null,"message":"permission denied for schema public"}...
+    at apiCall (C:\Users\Mustafa\Desktop\logi Clinic 1\server\scripts\seed_fetch_js.js:154:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async main (C:\Users\Mustafa\Desktop\logi Clinic 1\server\scripts\seed_fetch_js.js:165:25)
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 76

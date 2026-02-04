@@ -4,6 +4,7 @@ import { corsHeaders, handleCors } from '../_shared/cors.ts';
 
 // Import des handlers
 import authHandler from './auth.ts';
+import superAdminHandler from './super_admin.ts';
 import patientsHandler from './patients.ts';
 import invoicesHandler from './invoices.ts';
 import pharmacyHandler from './pharmacy.ts';
@@ -24,6 +25,8 @@ serve(async (req) => {
     // Router les requêtes vers les bonnes fonctions
     if (path.startsWith('/auth')) {
       return await authHandler(req, path);
+    } else if (path.startsWith('/super-admin')) {
+      return await superAdminHandler(req, path);
     } else if (path.startsWith('/patients')) {
       return await patientsHandler(req, path);
     } else if (path.startsWith('/invoices')) {

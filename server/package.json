@@ -16,7 +16,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "fix:users": "ts-node scripts/fix-users-and-auth.ts"
+    "fix:users": "ts-node scripts/fix-users-and-auth.ts",
+    "seed:clinical": "ts-node scripts/seed-clinical-users.ts",
+    "seed:campus001": "ts-node scripts/seed-campus-001-users.ts"
   },
   "keywords": [
     "clinic",

@@ -10,6 +10,15 @@ export function isAdminRole(role: string | undefined | null): boolean {
 }
 
 /**
+ * Détecte si l'utilisateur est Super Admin (gestion cliniques et agents).
+ */
+export function isSuperAdmin(user: User | null): boolean {
+  if (!user) return false;
+  const r = (user.role ?? '').toString();
+  return r === 'super_admin' || r.toUpperCase() === 'SUPER_ADMIN';
+}
+
+/**
  * Vérifie si un utilisateur a accès à un module spécifique
  */
 export function hasModuleAccess(user: User | null, module: ModulePermission): boolean {

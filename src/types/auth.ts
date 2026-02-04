@@ -1,5 +1,6 @@
 // Types de rôles disponibles (LogiClinic)
 export type UserRole = 
+  | 'super_admin'             // Super Admin (gestion cliniques et agents)
   | 'admin'                    // Administrateur Clinique
   | 'medecin'                  // Médecin
   | 'infirmier'                // Infirmier
@@ -36,7 +37,7 @@ export interface User {
   role: UserRole;
   nom: string;
   prenom: string;
-  clinicCode: string; // Code de la clinique
+  clinicCode?: string; // Code de la clinique (vide pour super_admin)
   clinicId?: string; // ID de la clinique dans la base de données
   permissions: ModulePermission[]; // Modules accessibles
   status: 'actif' | 'inactif' | 'suspendu';
