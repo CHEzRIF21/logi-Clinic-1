@@ -1,0 +1,5 @@
+Querying for: {
+  emailLower: 'babocher21@gmail.com',
+  v_password_hash: '2e29b5849b0bc9c8e9490433d3f114a4a483450ceb6c2381db3abfe409d58495'
+}
+User found: babocher21@gmail.com

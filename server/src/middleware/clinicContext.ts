@@ -34,8 +34,8 @@ export function requireClinicContext(
 
   const isSuperAdmin = user.role === 'SUPER_ADMIN';
 
-  // clinic_id OBLIGATOIRE pour tous (y compris SUPER_ADMIN) — isolation stricte
-  if (!user.clinic_id) {
+  // clinic_id OBLIGATOIRE pour tous (SAUF SUPER_ADMIN) — isolation stricte
+  if (!user.clinic_id && !isSuperAdmin) {
     return res.status(403).json({
       success: false,
       message: 'Contexte de clinique manquant. Votre compte doit être associé à une clinique.',
@@ -44,7 +44,7 @@ export function requireClinicContext(
   }
 
   const clinicReq = req as ClinicContextRequest;
-  clinicReq.clinicId = user.clinic_id;
+  clinicReq.clinicId = user.clinic_id || ''; // Vide pour Super Admin si non défini
   clinicReq.isSuperAdmin = isSuperAdmin;
 
   next();

@@ -22,8 +22,8 @@ function hashPassword(password: string): string {
 router.post('/register-request', async (req: Request, res: Response) => {
   // #region agent log
   try {
-    fs.appendFileSync(logPath, JSON.stringify({location:'auth.ts:15',message:'Route register-request appelée',data:{method:req.method,bodyKeys:Object.keys(req.body || {}),hasClinicCode:!!req.body?.clinicCode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
-  } catch(e) {}
+    fs.appendFileSync(logPath, JSON.stringify({ location: 'auth.ts:15', message: 'Route register-request appelée', data: { method: req.method, bodyKeys: Object.keys(req.body || {}), hasClinicCode: !!req.body?.clinicCode }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) + '\n');
+  } catch (e) { }
   // #endregion
   try {
     const {
@@ -372,7 +372,7 @@ router.post('/register-request', async (req: Request, res: Response) => {
 router.get('/registration-requests', authenticateToken, requireClinicContext, async (req: AuthRequest, res: Response) => {
   try {
     console.log('📥 Requête GET /registration-requests reçue');
-    
+
     if (!supabase) {
       console.error('❌ Service Supabase non disponible');
       return res.status(500).json({
@@ -395,8 +395,8 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
       statutFilter: statut || 'tous'
     });
 
-    // TOUJOURS filtrer par clinic_id (même pour Super Admin selon nouvelle exigence)
-    if (!clinicId) {
+    // Filtrage par clinic_id (sauf pour Super Admin si non spécifié)
+    if (!clinicId && !isSuperAdmin) {
       console.error('❌ Contexte de clinique manquant pour l\'utilisateur:', req.user?.id);
       return res.status(400).json({
         success: false,
@@ -407,11 +407,16 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
 
     let query = supabase
       .from('registration_requests')
-      .select('*')
-      .eq('clinic_id', clinicId) // Toujours appliquer le filtre
-      .order('created_at', { ascending: false });
+      .select('*');
 
-    console.log('🔒 Filtrage par clinic_id:', clinicId);
+    if (clinicId) {
+      query = query.eq('clinic_id', clinicId);
+      console.log('🔒 Filtrage par clinic_id:', clinicId);
+    } else if (isSuperAdmin) {
+      console.log('🔓 Super Admin : affichage de toutes les demandes');
+    }
+
+    query = query.order('created_at', { ascending: false });
 
     if (statut && statut !== '') {
       query = query.eq('statut', statut);
@@ -440,7 +445,7 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
       clinicId,
       statutFilter: statut || 'tous'
     });
-    
+
     const sanitizedData = (data || []).map((item: any) => {
       const {
         id,
@@ -456,14 +461,14 @@ router.get('/registration-requests', authenticateToken, requireClinicContext, as
         security_questions,
         ...rest
       } = item;
-      
+
       // Préserver le rôle souhaité tel quel, utiliser un fallback seulement si vraiment absent
-      const mappedRole = role_souhaite !== undefined && role_souhaite !== null 
-        ? role_souhaite 
+      const mappedRole = role_souhaite !== undefined && role_souhaite !== null
+        ? role_souhaite
         : 'receptionniste';
-      
+
       console.log(`📝 Demande ${id}: role_souhaite brut = "${role_souhaite}", mappé = "${mappedRole}"`);
-      
+
       return {
         ...rest,
         _id: id, // Compatibilité avec l'interface frontend
@@ -791,7 +796,7 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
     // Récupérer les informations de la clinique pour l'email
     let clinicCode = clinic.code || 'N/A';
     let clinicName = clinic.name || null;
-    
+
     // Si on n'a pas encore récupéré le nom de la clinique, le faire maintenant
     if (!clinicName && request.clinic_id) {
       const { data: clinicInfo } = await supabaseAdmin
@@ -799,7 +804,7 @@ router.post('/registration-requests/:id/approve', authenticateToken, requireClin
         .select('code, name')
         .eq('id', request.clinic_id)
         .maybeSingle();
-      
+
       if (clinicInfo) {
         clinicCode = clinicInfo.code || clinicCode;
         clinicName = clinicInfo.name || null;
@@ -922,7 +927,7 @@ router.post('/registration-requests/:id/reject', authenticateToken, requireClini
         error: error.message,
       });
     }
-    
+
     console.log('✅ Demande rejetée avec succès, ID:', id);
 
     res.json({
@@ -983,7 +988,7 @@ router.post('/users/:id/activate', authenticateToken, requireClinicContext, asyn
 router.post('/users/:id/reset-password', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     if (!supabaseAdmin) {
       return res.status(500).json({
         success: false,
@@ -1064,7 +1069,7 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: AuthRequ
         .select('code')
         .eq('id', fullUser.clinic_id)
         .single();
-      
+
       if (clinic?.code) {
         clinicCode = clinic.code;
       }
@@ -1235,6 +1240,92 @@ router.get('/verify-email', async (req: Request, res: Response) => {
       success: false,
       message: 'Erreur interne du serveur',
       error: error.message,
+    });
+  }
+});
+
+// POST /api/auth/super-admin-login - Connexion Super Admin (sans code clinique)
+router.post('/super-admin-login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email et mot de passe requis',
+      });
+    }
+
+    if (!supabase) {
+      return res.status(500).json({
+        success: false,
+        message: 'Service de base de données non disponible',
+      });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+    const v_password_hash = hashPassword(password);
+
+    console.log('👤 Tentative login Super Admin:', emailLower);
+
+    // Rechercher l'utilisateur dans la table users avec le client admin (pour contourner RLS)
+    const { data: user, error: userErr } = await supabaseAdmin!
+      .from('users')
+      .select('*')
+      .ilike('email', emailLower)
+      .eq('password_hash', v_password_hash)
+      .is('clinic_id', null)
+      .eq('role', 'SUPER_ADMIN')
+      .eq('actif', true)
+      .maybeSingle();
+
+    if (userErr || !user) {
+      console.warn('❌ Login Super Admin échoué pour:', emailLower, userErr?.message || 'Utilisateur non trouvé ou non autorisé');
+      return res.status(401).json({
+        success: false,
+        message: 'Identifiants incorrects ou accès non autorisé',
+      });
+    }
+
+    // Vérifier le statut
+    const statusUpper = (user.status || '').toString().toUpperCase();
+    if (['SUSPENDED', 'REJECTED', 'PENDING', 'PENDING_APPROVAL'].includes(statusUpper)) {
+      console.warn('❌ Compte Super Admin non actif:', emailLower, 'Staut:', statusUpper);
+      return res.status(401).json({
+        success: false,
+        message: 'Compte en attente ou désactivé',
+      });
+    }
+
+    // Mettre à jour la date de dernière connexion avec le client admin
+    await supabaseAdmin!.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+
+    // Générer un token interne compatible avec authenticateToken
+    // Format: internal-<user_id>-<timestamp>
+    const token = `internal-${user.id}-${Date.now()}`;
+
+    console.log('✅ Login Super Admin réussi:', emailLower);
+
+    res.json({
+      success: true,
+      message: 'Connexion réussie',
+      user: {
+        id: user.id,
+        nom: user.nom,
+        prenom: user.prenom,
+        email: user.email,
+        role: user.role,
+        clinic_id: user.clinic_id,
+        status: user.status,
+      },
+      token,
+    });
+  } catch (error: any) {
+    console.error('[SUPER-ADMIN-LOGIN] Erreur:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur interne du serveur',
+      details: error.message,
     });
   }
 });

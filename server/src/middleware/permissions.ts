@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from './auth';
 
-export type Permission = 
+export type Permission =
   | 'patients:read'
   | 'patients:write'
   | 'patients:delete'
@@ -198,6 +198,9 @@ const PERMISSIONS_BY_ROLE: Record<string, Permission[]> = {
  * Vérifie si un utilisateur a une permission
  */
 export function hasPermission(userRole: string, permission: Permission): boolean {
+  // Super Admin a toutes les permissions
+  if (userRole === 'SUPER_ADMIN') return true;
+
   const permissions = PERMISSIONS_BY_ROLE[userRole] || [];
   return permissions.includes(permission);
 }

@@ -1,0 +1,57 @@
+Note: Unnecessary use of -X or --request, POST is already inferred.
+* Host localhost:3000 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying [::1]:3000...
+* Established connection to localhost (::1 port 3000) from ::1 port 53057 
+* using HTTP/1.x
+> POST /api/auth/super-admin-login HTTP/1.1
+
+> Host: localhost:3000
+
+> User-Agent: curl/8.16.0
+
+> Accept: */*
+
+> Content-Type: application/json
+
+> Content-Length: 2
+
+> 
+
+} [2 bytes data]
+* upload completely sent off: 2 bytes
+< HTTP/1.1 500 Internal Server Error
+
+< X-Powered-By: Express
+
+< Vary: Origin
+
+< Access-Control-Allow-Credentials: true
+
+< Content-Type: application/json; charset=utf-8
+
+< Content-Length: 1052
+
+< ETag: W/"41c-iSDiOsbfdKEWfRqpkSnGiCgxj1U"
+
+< Date: Thu, 05 Feb 2026 09:57:44 GMT
+
+< Connection: keep-alive
+
+< Keep-Alive: timeout=5
+
+< 
+
+{ [1052 bytes data]
+
+100  1054  100  1052  100     2  47334     89 --:--:-- --:--:-- --:--:-- 47909
+* Connection #0 to host localhost:3000 left intact
+Note: Unnecessary use of -X or --request, POST is already inferred.
+* URL rejected: Malformed input to a URL function
+* closing connection #-1
+curl: (3) URL rejected: Malformed input to a URL function
+{"success":false,"message":"Expected property name or '}' in JSON at position 1 (line 1 column 2)","stack":"SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n    at JSON.parse (<anonymous>)\n    at parse (C:\\Users\\Mustafa\\Desktop\\logi Clinic 1\\server\\node_modules\\body-parser\\lib\\types\\json.js:92:19)\n    at C:\\Users\\Mustafa\\Desktop\\logi Clinic 1\\server\\node_modules\\body-parser\\lib\\read.js:128:18\n    at AsyncResource.runInAsyncScope (node:async_hooks:226:14)\n    at invokeCallback (C:\\Users\\Mustafa\\Desktop\\logi Clinic 1\\server\\node_modules\\raw-body\\index.js:238:16)\n    at done (C:\\Users\\Mustafa\\Desktop\\logi Clinic 1\\server\\node_modules\\raw-body\\index.js:227:7)\n    at IncomingMessage.onEnd (C:\\Users\\Mustafa\\Desktop\\logi Clinic 1\\server\\node_modules\\raw-body\\index.js:287:7)\n    at IncomingMessage.emit (node:events:508:20)\n    at endReadableNT (node:internal/streams/readable:1729:12)\n    at processTicksAndRejections (node:internal/process/task_queues:90:21)"}

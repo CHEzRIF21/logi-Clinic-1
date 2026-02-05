@@ -36,6 +36,7 @@ import laboratoireRouter from './routes/laboratoire';
 import imagerieRouter from './routes/imagerie';
 import materniteRouter from './routes/maternite';
 import configurationsRouter from './routes/configurations';
+import usersRouter from './routes/users';
 
 const app = express();
 
@@ -58,7 +59,7 @@ if (process.env.NODE_ENV === 'production' && process.env.LICENSE_KEY) {
     .then((result) => {
       if (result.valid) {
         console.log('✅ Licence valide - Serveur autorisé à démarrer');
-        
+
         // Démarrer la vérification périodique
         const checkInterval = parseInt(process.env.LICENSE_CHECK_INTERVAL || '3600000', 10);
         licenseService.checkLicensePeriodically(licenseKey, domain, checkInterval);
@@ -98,8 +99,8 @@ app.get('/health', (_req, res) => {
 // #region agent log
 app.use('/api/auth', (req, _res, next) => {
   try {
-    fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:93',message:'Requête reçue sur /api/auth',data:{method:req.method,path:req.path,originalUrl:req.originalUrl,ip:req.ip},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');
-  } catch(e) {}
+    fs.appendFileSync(logPath, JSON.stringify({ location: 'index.ts:93', message: 'Requête reçue sur /api/auth', data: { method: req.method, path: req.path, originalUrl: req.originalUrl, ip: req.ip }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'A' }) + '\n');
+  } catch (e) { }
   next();
 });
 // #endregion
@@ -128,6 +129,7 @@ app.use('/api/laboratoire', laboratoireRouter);
 app.use('/api/imagerie', imagerieRouter);
 app.use('/api/maternite', materniteRouter);
 app.use('/api/configurations', configurationsRouter);
+app.use('/api/users', usersRouter);
 
 // Error handler
 app.use(errorHandler);
@@ -144,8 +146,8 @@ const PORT = config.port;
 
 // #region agent log
 try {
-  fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:128',message:'Démarrage serveur - avant app.listen',data:{port:PORT,configPort:config.port,nodeEnv:config.nodeEnv},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
-} catch(e) {}
+  fs.appendFileSync(logPath, JSON.stringify({ location: 'index.ts:128', message: 'Démarrage serveur - avant app.listen', data: { port: PORT, configPort: config.port, nodeEnv: config.nodeEnv }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) + '\n');
+} catch (e) { }
 // #endregion
 
 app.listen(PORT, () => {
@@ -154,8 +156,8 @@ app.listen(PORT, () => {
   console.log(`🔗 API disponible sur http://localhost:${PORT}/api`);
   // #region agent log
   try {
-    fs.appendFileSync(logPath, JSON.stringify({location:'index.ts:131',message:'Serveur démarré avec succès',data:{port:PORT,hostname:'localhost',apiUrl:`http://localhost:${PORT}/api`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');
-  } catch(e) {}
+    fs.appendFileSync(logPath, JSON.stringify({ location: 'index.ts:131', message: 'Serveur démarré avec succès', data: { port: PORT, hostname: 'localhost', apiUrl: `http://localhost:${PORT}/api` }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) + '\n');
+  } catch (e) { }
   // #endregion
 });
 

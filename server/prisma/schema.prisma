@@ -11,27 +11,26 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(uuid())
-  authUserId  String?   @unique // Lien avec Supabase Auth (auth.users.id)
-  name        String
-  nom         String?   // Nom de famille
-  prenom      String?   // Prénom
-  email       String    @unique
-  password    String?   // Hash du mot de passe (optionnel si auth via Supabase)
-  role        String    @default("STAFF") // SUPER_ADMIN, CLINIC_ADMIN, STAFF, ADMIN, CAISSIER, etc.
-  status      String    @default("PENDING") // PENDING, ACTIVE, SUSPENDED, REJECTED
-  specialite  String?   // Spécialité médicale
-  telephone   String?
-  adresse     String?
-  lastLogin   DateTime?
-  clinic      Clinic?   @relation(fields: [clinicId], references: [id])
-  clinicId    String?
-  createdBy   String?   // ID de l'utilisateur qui a créé ce compte
-  creator     User?     @relation("UserCreator", fields: [createdBy], references: [id])
-  createdUsers User[]   @relation("UserCreator") // Utilisateurs créés par cet utilisateur
-  actif       Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String    @id @default(uuid())
+  authUserId   String?   @unique @map("auth_user_id")
+  nom          String?
+  prenom       String?
+  email        String    @unique
+  role         String    @default("STAFF")
+  status       String    @default("PENDING")
+  specialite   String?
+  telephone    String?
+  adresse      String?
+  lastLogin    DateTime? @map("last_login")
+  firstLoginAt DateTime? @map("first_login_at")
+  emailVerified Boolean  @default(false) @map("email_verified")
+  passwordHash String?   @map("password_hash")
+  clinic       Clinic?   @relation(fields: [clinicId], references: [id])
+  clinicId     String?   @map("clinic_id")
+  createdBy    String?   @map("created_by")
+  actif        Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   auditLogs           AuditLog[]
   pricingHistory      ClinicPricingHistory[]
@@ -42,6 +41,7 @@ model User {
   @@index([status])
   @@index([clinicId])
   @@index([createdBy])
+  @@map("users")
 }
 
 model Patient {
@@ -474,31 +474,32 @@ model DeploymentAttempt {
 // Modèle pour les demandes d'inscription
 
 model RegistrationRequest {
-  id               String    @id @default(uuid())
-  nom              String
-  prenom           String
-  email            String
-  passwordHash     String?
-  telephone        String?
-  adresse          String?
-  roleSouhaite     String    @default("STAFF") // Rôle demandé
-  specialite       String?
-  securityQuestions Json?    // Questions de sécurité
-  clinicCode       String?   // Code de la clinique où s'inscrire
-  clinic           Clinic?   @relation(fields: [clinicId], references: [id])
-  clinicId         String?
-  statut           String    @default("pending") // pending, approved, rejected
-  reviewedBy       String?   // ID de l'admin qui a traité la demande
-  reviewer         User?     @relation("Reviewer", fields: [reviewedBy], references: [id])
-  reviewedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                String    @id @default(uuid())
+  nom               String
+  prenom            String
+  email             String
+  passwordHash      String?   @map("password_hash")
+  telephone         String?
+  adresse           String?
+  roleSouhaite      String    @default("STAFF") @map("role_souhaite")
+  specialite        String?
+  securityQuestions Json?     @map("security_questions")
+  clinicCode        String?   @map("clinic_code")
+  clinic            Clinic?   @relation(fields: [clinicId], references: [id])
+  clinicId          String?   @map("clinic_id")
+  statut            String    @default("pending")
+  reviewedBy        String?   @map("reviewed_by")
+  reviewer          User?     @relation("Reviewer", fields: [reviewedBy], references: [id])
+  reviewedAt        DateTime? @map("reviewed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@unique([email, clinicCode])
   @@index([clinicId])
   @@index([statut])
   @@index([email])
   @@index([reviewedBy])
+  @@map("registration_requests")
 }
 
 // Modèles pour le système de tarification multi-clinique
@@ -511,24 +512,28 @@ model Clinic {
   phone                String?
   email                String?
   active               Boolean  @default(true)
-  createdBySuperAdmin  String?  // UUID du SUPER_ADMIN qui a créé cette clinique
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdBySuperAdmin  String?  @map("created_by_super_admin")
+  isDemo               Boolean  @default(false) @map("is_demo")
+  isTemporaryCode      Boolean  @default(false) @map("is_temporary_code")
+  requiresCodeChange   Boolean  @default(false) @map("requires_code_change")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   users                User[]
   pricing              ClinicPricing[]
   registrationRequests RegistrationRequest[]
   licenses             License[]
-  patients             Patient[]    // ✅ AJOUTÉ - Relation avec patients
-  invoices             Invoice[]    // ✅ AJOUTÉ - Relation avec invoices
-  operations           Operation[] // ✅ AJOUTÉ - Relation avec operations
-  products             Product[]   // ✅ AJOUTÉ - Relation avec products
-  assurances           Assurance[] // ✅ AJOUTÉ - Relation avec assurances
-  payments             Payment[]   // ✅ AJOUTÉ - Relation avec payments
+  patients             Patient[]    
+  invoices             Invoice[]    
+  operations           Operation[] 
+  products             Product[]   
+  assurances           Assurance[] 
+  payments             Payment[]   
 
   @@index([code])
   @@index([active])
   @@index([createdBySuperAdmin])
+  @@map("clinics")
 }
 
 model ClinicPricing {

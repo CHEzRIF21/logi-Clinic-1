@@ -1,0 +1,9 @@
+Creating Super Admin...
+Auth User Created: 69649440-b612-4b93-b3c4-2d36affd8c81
+Profile created/updated successfully!
+
+=== SUPER ADMIN CREATED ===
+Email: babocher21@gmail.com
+Password: BABOchif21
+Role: SUPER_ADMIN
+===========================
