@@ -50,6 +50,7 @@ const DB_ROLE_TO_FRONT: Record<string, string> = {
   CAISSIER: 'caissier',
   COMPTABLE: 'comptable',
   RECEPTIONNISTE: 'receptionniste',
+  AIDE_SOIGNANT: 'aide_soignant',
   SECRETAIRE: 'secretaire',
   AUDITEUR: 'auditeur',
 };

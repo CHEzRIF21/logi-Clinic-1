@@ -1107,13 +1107,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           ] as User['permissions'];
         }
         
-        // Mapper les autres rôles
+        // Mapper les autres rôles (réceptionniste et aide-soignante = même accès : patients + rendez-vous)
         const roleMap: Record<string, User['permissions']> = {
           'MEDECIN': ['consultations', 'patients', 'rendezvous'],
           'PHARMACIEN': ['pharmacie', 'stock', 'patients'],
           'INFIRMIER': ['consultations', 'patients'],
           'CAISSIER': ['caisse', 'patients'],
           'LABORANTIN': ['laboratoire', 'patients'],
+          'RECEPTIONNISTE': ['patients', 'rendezvous'],
+          'AIDE_SOIGNANT': ['patients', 'rendezvous'],
         };
         
         return roleMap[roleUpper] || ['patients'];
@@ -1130,9 +1132,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         if (roleUpper === 'PHARMACIEN') return 'pharmacien';
         if (roleUpper === 'CAISSIER') return 'caissier';
         if (roleUpper === 'LABORANTIN') return 'laborantin';
+        if (roleUpper === 'RECEPTIONNISTE') return 'receptionniste';
+        if (roleUpper === 'AIDE_SOIGNANT') return 'aide_soignant';
         if (roleUpper === 'SECRETAIRE') return 'secretaire';
         if (roleUpper === 'COMPTABLE') return 'comptable';
-        return 'admin'; // Par défaut
+        if (roleUpper === 'AUDITEUR') return 'auditeur';
+        if (roleUpper === 'SAGE_FEMME') return 'sage_femme';
+        if (roleUpper === 'TECHNICIEN_LABO') return 'technicien_labo';
+        if (roleUpper === 'IMAGERIE') return 'imagerie';
+        return 'receptionniste'; // Rôle inconnu = accès réception (limité), pas admin
       };
 
       // 8. Construire l'objet User pour l'application

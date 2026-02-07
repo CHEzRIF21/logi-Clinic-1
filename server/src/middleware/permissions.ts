@@ -129,8 +129,24 @@ const PERMISSIONS_BY_ROLE: Record<string, Permission[]> = {
     'reports:read',
     'pricing:read',
   ],
-  // Réceptionniste - Patients (création uniquement)
+  // Réceptionniste - Patients (création), RDV
   receptionniste: [
+    'patients:read', 'patients:write',
+    'operations:read',
+    'pricing:read',
+  ],
+  // Aide-soignante - Exactement comme réceptionniste (réception)
+  aide_soignant: [
+    'patients:read', 'patients:write',
+    'operations:read',
+    'pricing:read',
+  ],
+  AIDE_SOIGNANT: [
+    'patients:read', 'patients:write',
+    'operations:read',
+    'pricing:read',
+  ],
+  RECEPTIONNISTE: [
     'patients:read', 'patients:write',
     'operations:read',
     'pricing:read',

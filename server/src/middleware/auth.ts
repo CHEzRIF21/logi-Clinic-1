@@ -238,6 +238,7 @@ export const checkPermission = (permission: string) => {
       LABORANTIN: ['view_lab_requests', 'create_results', 'validate_results'],
       CAISSIER: ['view_invoices', 'process_payments'],
       RECEPTIONNISTE: ['view_patients', 'create_appointments'],
+      AIDE_SOIGNANT: ['view_patients', 'create_appointments'],
       USER: ['view_own'],
     };
 

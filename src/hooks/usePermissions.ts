@@ -42,7 +42,7 @@ export const usePermissions = () => {
    */
   const canCreatePatient = (): boolean => {
     if (!userRole) return false;
-    return userRole === 'receptionniste' || userRole === 'secretaire' || userRole === 'admin';
+    return userRole === 'receptionniste' || userRole === 'aide_soignant' || userRole === 'secretaire' || userRole === 'admin';
   };
 
   /**
@@ -52,6 +52,7 @@ export const usePermissions = () => {
     if (!userRole) return false;
     return hasPermission('gestion_patients', 'write', 'modification') || 
            userRole === 'receptionniste' || 
+           userRole === 'aide_soignant' || 
            userRole === 'secretaire' || 
            userRole === 'admin';
   };

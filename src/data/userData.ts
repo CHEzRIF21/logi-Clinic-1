@@ -12,6 +12,7 @@ const roleMapping: Record<string, RoleUtilisateur> = {
   imagerie: 'imagerie',
   caissier: 'caissier',
   receptionniste: 'receptionniste',
+  aide_soignant: 'receptionniste',
   auditeur: 'auditeur',
 };
 

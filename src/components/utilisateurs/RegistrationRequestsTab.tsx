@@ -285,6 +285,7 @@ const RegistrationRequestsTab: React.FC<RegistrationRequestsTabProps> = ({
     } catch {
       const roleMap: Record<string, string> = {
         'receptionniste': 'Réceptionniste',
+        'aide_soignant': 'Aide-soignante',
         'medecin': 'Médecin',
         'pharmacien': 'Pharmacien',
         'infirmier': 'Infirmier',

@@ -12,6 +12,7 @@ export type RoleUtilisateur =
   | 'caissier'                 // Caissier
   | 'comptable'                // Comptable
   | 'receptionniste'           // Réceptionniste / Accueil
+  | 'aide_soignant'            // Aide-soignante (mêmes accès que réceptionniste)
   | 'secretaire'               // Secrétaire
   | 'auditeur';                // Auditeur / Direction
 
@@ -234,6 +235,23 @@ export const PERMISSIONS_PAR_ROLE: Record<RoleUtilisateur, Permission[]> = {
     { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
   ],
 
+  aide_soignant: [
+    { action: 'lecture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'accès au stock' },
+    { action: 'gestion_medicaments', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_lots', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_transferts', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_dispensations', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_pertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_retours', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_alertes', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_inventaires', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'generation_rapports', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'export_donnees', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'gestion_utilisateurs', magasin: 'aucun', description: 'Pas d\'accès' },
+    { action: 'configuration_systeme', magasin: 'aucun', description: 'Pas d\'accès' },
+  ],
+
   auditeur: [
     { action: 'lecture_stock', magasin: 'tous', description: 'Lecture seule des stocks' },
     { action: 'ecriture_stock', magasin: 'aucun', description: 'Pas d\'écriture' },
@@ -326,6 +344,7 @@ export const getRoleLabel = (role: RoleUtilisateur): string => {
     caissier: 'Caissier',
     comptable: 'Comptable',
     receptionniste: 'Réceptionniste / Accueil',
+    aide_soignant: 'Aide-soignante',
     secretaire: 'Secrétaire',
     auditeur: 'Auditeur / Direction',
   };

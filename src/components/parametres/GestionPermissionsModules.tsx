@@ -62,6 +62,7 @@ const roleMapping: Record<RoleUtilisateur, UserRole> = {
   caissier: 'caissier',
   comptable: 'comptable',
   receptionniste: 'receptionniste',
+  aide_soignant: 'aide_soignant',
   secretaire: 'secretaire',
   auditeur: 'auditeur',
 };

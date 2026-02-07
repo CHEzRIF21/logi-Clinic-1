@@ -56,6 +56,11 @@ export const ALL_ROLES: Array<{ value: UserRole; label: string; description?: st
     description: 'Enregistrement & RDV - Création patients et rendez-vous',
   },
   {
+    value: 'aide_soignant',
+    label: 'Aide-soignante',
+    description: 'Mêmes accès que réceptionniste - Enregistrement & RDV à la réception',
+  },
+  {
     value: 'auditeur',
     label: 'Auditeur / Direction',
     description: 'Lecture stratégique - Rapports en lecture seule',
@@ -81,6 +86,7 @@ export const ROLE_TO_ROLE_UTILISATEUR: Record<UserRole, RoleUtilisateur> = {
   caissier: 'caissier',
   comptable: 'comptable',
   receptionniste: 'receptionniste',
+  aide_soignant: 'receptionniste',
   secretaire: 'secretaire',
   auditeur: 'auditeur',
 };

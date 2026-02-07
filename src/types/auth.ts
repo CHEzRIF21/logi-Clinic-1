@@ -12,6 +12,7 @@ export type UserRole =
   | 'caissier'                 // Caissier
   | 'comptable'                // Comptable
   | 'receptionniste'           // Réceptionniste / Accueil
+  | 'aide_soignant'            // Aide-soignante (mêmes accès que réceptionniste)
   | 'secretaire'               // Secrétaire
   | 'auditeur';                // Auditeur / Direction
 

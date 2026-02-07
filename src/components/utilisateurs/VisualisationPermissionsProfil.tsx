@@ -54,6 +54,7 @@ const VisualisationPermissionsProfil: React.FC<VisualisationPermissionsProfilPro
     'imagerie',
     'caissier',
     'receptionniste',
+    'aide_soignant',
     'auditeur',
     'comptable',
     'secretaire',

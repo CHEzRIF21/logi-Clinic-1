@@ -349,6 +349,7 @@ const RegistrationRequests: React.FC<RegistrationRequestsProps> = ({ user }) => 
       // Fallback sur un mapping simple si le rôle n'est pas trouvé
       const roleMap: Record<string, string> = {
         'receptionniste': 'Réceptionniste',
+        'aide_soignant': 'Aide-soignante',
         'medecin': 'Médecin',
         'pharmacien': 'Pharmacien',
         'infirmier': 'Infirmier',

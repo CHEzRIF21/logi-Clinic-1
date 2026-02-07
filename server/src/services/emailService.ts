@@ -525,6 +525,7 @@ Support: tech@logiclinic.org
       'admin': 'Administrateur',
       'medecin': 'Médecin',
       'receptionniste': 'Réceptionniste',
+      'aide_soignant': 'Aide-soignante',
       'pharmacien': 'Pharmacien',
       'infirmier': 'Infirmier',
       'laborantin': 'Laborantin',

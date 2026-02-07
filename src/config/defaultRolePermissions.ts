@@ -336,6 +336,28 @@ export const DEFAULT_ROLE_PERMISSIONS: Partial<Record<UserRole, ModulePermission
     },
   ],
 
+  // Aide-soignante - Exactement les mêmes accès que réceptionniste (réception)
+  aide_soignant: [
+    {
+      module: 'gestion_patients',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'creation', actions: ['read', 'write'] },
+        { submodule: 'modification', actions: ['read', 'write'] },
+        { submodule: 'dossier', actions: ['read'] },
+      ],
+    },
+    {
+      module: 'rendez_vous',
+      actions: ['read', 'write'],
+      submodules: [
+        { submodule: 'planification', actions: ['read', 'write'] },
+        { submodule: 'gestion', actions: ['read', 'write'] },
+        { submodule: 'annulation', actions: ['read', 'write'] },
+      ],
+    },
+  ],
+
   // Auditeur / Direction - Lecture seule sur tous les modules + Rapports financiers
   auditeur: [
     {
@@ -525,6 +547,7 @@ export function getRoleDescription(role: UserRole): string {
     caissier: 'Facturation et paiements - Caisse et journal',
     comptable: 'Gestion comptable - Rapports et finances',
     receptionniste: 'Enregistrement & RDV - Création patients et rendez-vous',
+    aide_soignant: 'Aide-soignante - Mêmes accès que réceptionniste (réception)',
     secretaire: 'Accueil et secrétariat - Gestion administrative',
     auditeur: 'Lecture stratégique - Rapports en lecture seule',
   };
