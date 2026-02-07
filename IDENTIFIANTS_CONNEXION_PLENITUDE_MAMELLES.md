@@ -33,13 +33,11 @@ Les opérations suivantes ont été effectuées :
 |-------|--------|
 | **Code Clinique** | `PLENITUDE-001` |
 | **Email (Nom d'utilisateur)** | `laplenitude.hc@yahoo.com` |
-| **Mot de passe temporaire** | `TempPlenitude2026!` |
+| **Mot de passe (fixe)** | `TempPlenitude2026!` |
 | **Nom** | BOKO |
 | **Prénom** | Chantal |
 | **Rôle** | `CLINIC_ADMIN` |
-| **Status** | `PENDING` (doit changer le mot de passe au premier login) |
-
-⚠️ **IMPORTANT** : Le mot de passe est temporaire et ne peut être utilisé qu'une seule fois. L'admin devra le changer lors de la première connexion.
+| **Status** | `ACTIVE` (pas de changement de mot de passe forcé) |
 
 ---
 
@@ -49,13 +47,11 @@ Les opérations suivantes ont été effectuées :
 |-------|--------|
 | **Code Clinique** | `PLENITUDE-001` |
 | **Email (Nom d'utilisateur)** | `hakpovi95@yahoo.fr` |
-| **Mot de passe temporaire** | `TempHakpovi2026!` |
+| **Mot de passe (fixe)** | `TempHakpovi2026!` |
 | **Nom** | AKPOVI |
 | **Prénom** | Hilaire |
 | **Rôle** | `CLINIC_ADMIN` |
-| **Status** | `PENDING` (doit changer le mot de passe au premier login) |
-
-⚠️ **IMPORTANT** : Le mot de passe est temporaire et ne peut être utilisé qu'une seule fois. L'admin devra le changer lors de la première connexion.
+| **Status** | `ACTIVE` (pas de changement de mot de passe forcé) |
 
 ---
 
@@ -80,13 +76,21 @@ Les opérations suivantes ont été effectuées :
 |-------|--------|
 | **Code Clinique** | `MAMELLES-001` |
 | **Email (Nom d'utilisateur)** | `dieudange@gmail.com` |
-| **Mot de passe temporaire** | `TempMamelles2026!` |
+| **Mot de passe (fixe)** | `DDMamelles2026!` |
 | **Nom** | MINHOU |
 | **Prénom** | Ange Kevin Dieudonne |
 | **Rôle** | `CLINIC_ADMIN` |
-| **Status** | `PENDING` (doit changer le mot de passe au premier login) |
+| **Status** | `ACTIVE` (pas de changement de mot de passe forcé) |
 
-⚠️ **IMPORTANT** : Le mot de passe est temporaire et ne peut être utilisé qu'une seule fois. L'admin devra le changer lors de la première connexion.
+---
+
+## 📋 Création des comptes (identifiants FIXES)
+
+Exécuter dans l’ordre :
+1. Migration SQL : `84_CREATE_PLENITUDE_AND_MAMELLES_CLINICS.sql`
+2. Script Node : `node server/scripts/seed-plenitude-mamelles-admins.js`
+
+Voir `docs/CURSOR_ADMINS_PLENITUDE_MAMELLES.md` pour le format pro et Cursor.
 
 ---
 

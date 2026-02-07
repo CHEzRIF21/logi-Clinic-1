@@ -1,0 +1,31 @@
+{
+  "clinics": [
+    {
+      "name": "Clinique Plénitude",
+      "clinic_code": "PLENITUDE-001",
+      "admins": [
+        {
+          "email": "laplenitude.hc@yahoo.com",
+          "password": "TempPlenitude2026!",
+          "role": "admin"
+        },
+        {
+          "email": "hakpovi95@yahoo.fr",
+          "password": "TempHakpovi2026!",
+          "role": "admin"
+        }
+      ]
+    },
+    {
+      "name": "Clinique Mamelles",
+      "clinic_code": "MAMELLES-001",
+      "admins": [
+        {
+          "email": "dieudange@gmail.com",
+          "password": "DDMamelles2026!",
+          "role": "admin"
+        }
+      ]
+    }
+  ]
+}
