@@ -400,8 +400,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Vue récapitulative de la surveillance post-partum
-CREATE OR REPLACE VIEW vue_resume_post_partum AS
+-- Vue récapitulative de la surveillance post-partum (SECURITY INVOKER pour respecter RLS / clinic_id)
+CREATE OR REPLACE VIEW vue_resume_post_partum WITH (security_invoker = on) AS
 SELECT 
     s.id as surveillance_id,
     s.accouchement_id,

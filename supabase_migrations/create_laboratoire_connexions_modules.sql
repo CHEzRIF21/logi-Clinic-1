@@ -7,8 +7,8 @@
 -- Récupération de l'âge et du sexe pour valeurs normales automatiques
 -- ============================================
 
--- Vue pour récupérer les informations patient nécessaires au laboratoire
-CREATE OR REPLACE VIEW v_patient_labo_info AS
+-- Vue pour récupérer les informations patient nécessaires au laboratoire (SECURITY INVOKER pour respecter RLS / clinic_id)
+CREATE OR REPLACE VIEW v_patient_labo_info WITH (security_invoker = on) AS
 SELECT 
   p.id,
   p.identifiant,

@@ -66,8 +66,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Vue pour inclure l'âge calculé dynamiquement
-CREATE OR REPLACE VIEW patients_with_age AS
+-- Vue pour inclure l'âge calculé dynamiquement (SECURITY INVOKER pour respecter RLS / clinic_id)
+CREATE OR REPLACE VIEW patients_with_age WITH (security_invoker = on) AS
 SELECT 
     *,
     calculate_patient_age(date_naissance) as age

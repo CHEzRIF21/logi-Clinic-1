@@ -256,8 +256,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Vue pour obtenir un résumé des CPN par dossier
-CREATE OR REPLACE VIEW vue_resume_cpn AS
+-- Vue pour obtenir un résumé des CPN par dossier (SECURITY INVOKER pour respecter RLS / clinic_id)
+CREATE OR REPLACE VIEW vue_resume_cpn WITH (security_invoker = on) AS
 SELECT 
     d.id as dossier_id,
     d.patient_id,

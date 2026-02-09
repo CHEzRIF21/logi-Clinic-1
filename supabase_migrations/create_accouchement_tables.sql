@@ -489,8 +489,8 @@ CREATE TRIGGER auto_calculer_apgar_trigger
     FOR EACH ROW
     EXECUTE FUNCTION auto_calculer_apgar();
 
--- Vue récapitulative des accouchements
-CREATE OR REPLACE VIEW vue_resume_accouchements AS
+-- Vue récapitulative des accouchements (SECURITY INVOKER pour respecter RLS / clinic_id)
+CREATE OR REPLACE VIEW vue_resume_accouchements WITH (security_invoker = on) AS
 SELECT 
     a.id as accouchement_id,
     a.dossier_obstetrical_id,
