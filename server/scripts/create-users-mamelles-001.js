@@ -7,9 +7,13 @@
  * Ce script :
  * 1. Crée chaque utilisateur dans Supabase Auth (email/password, email confirmé)
  * 2. Insère l'enregistrement dans public.users (profil lié à auth.users) avec clinic_id = MAMELLES-001
- * 3. Garantit l'isolation RLS : chaque utilisateur ne voit que les données de MAMELLES-001
+ * 3. Utilise les role_code reconnus par LogiClinic (role_definitions / default_role_permissions)
+ *    pour que get_user_permissions attribue les bonnes permissions par rôle (imagerie, technicien_labo, etc.)
+ * 4. Garantit l'isolation RLS : chaque utilisateur ne voit que les données de MAMELLES-001
  *
  * Note : LogiClinic utilise la table public.users (liaison auth_user_id), pas "profiles".
+ * Les permissions par rôle viennent de default_role_permissions ; le champ users.role doit
+ * correspondre à un role_code existant (infirmier, sage_femme, imagerie, technicien_labo, pharmacien, caissier).
  *
  * Prérequis : SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY dans server/.env
  * Exécution : node server/scripts/create-users-mamelles-001.js
@@ -36,8 +40,26 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 const CLINIC_CODE = 'MAMELLES-001';
 
+/**
+ * Mapping rôle métier → role_code LogiClinic (doit exister dans role_definitions / default_role_permissions).
+ * Sans ce mapping, get_user_permissions ne trouve aucune permission par défaut et tous les staff ont le même accès.
+ */
+const ROLE_TO_LOGICLINIC_CODE = {
+    imaging_tech: 'imagerie',
+    lab_tech: 'technicien_labo',
+    midwife: 'sage_femme',
+    nurse: 'infirmier',
+    pharmacist: 'pharmacien',
+    finance: 'caissier'
+};
+
+function toRoleCode(role) {
+    return ROLE_TO_LOGICLINIC_CODE[role] || role;
+}
+
 // Liste des utilisateurs à créer (un seul compte Auth par email)
-// MITOBABA Expera (n°7) a le même email que MITOBABA Chabelle (n°6) → un seul compte créé pour Chabelle, Expera nécessite un email distinct
+// role = clé métier ; en base on enregistre le role_code LogiClinic (imagerie, technicien_labo, sage_femme, infirmier, pharmacien, caissier)
+// MITOBABA Expera (n°7) a le même email que MITOBABA Chabelle (n°6) → un seul compte créé pour Chabelle
 const USERS = [
     { full_name: 'Richy MITOKPE', email: 'richylheureux@gmail.com', password: 'Imagi26@R', role: 'imaging_tech', fonction: 'Technicien imagerie' },
     { full_name: 'TOSSOU Francine', email: 'tossoufrancine1@gmail.com', password: 'Echo-F26', role: 'imaging_tech', fonction: 'Technicienne imagerie' },
@@ -45,7 +67,6 @@ const USERS = [
     { full_name: 'GUIDIGAN Gloria', email: 'gloriaguidigan@gmail.com', password: 'GloLab26!', role: 'lab_tech', fonction: 'Technicienne laboratoire' },
     { full_name: 'CHABI Isabelle', email: 'isabchabi@gmail.com', password: 'Sage26!I', role: 'midwife', fonction: 'Sage-femme' },
     { full_name: 'MITOBABA Chabelle', email: 'chabellemitobaba@gmail.com', password: 'Chab@26S', role: 'midwife', fonction: 'Sage-femme' },
-    // MITOBABA Expera : même email que Chabelle → pas de second compte Auth possible ; créer un compte séparé si besoin avec un email dédié
     { full_name: 'BALLOGOUN Tawakalitou', email: 'ballogoun.tawakalitou@mamelles.local', password: 'Nurse26@T', role: 'nurse', fonction: 'Infirmier(ère)' },
     { full_name: 'BOKO Josué', email: 'bokojosue0@gmail.com', password: 'Boko26!N', role: 'nurse', fonction: 'Infirmier(ère)' },
     { full_name: 'Azongbo Bernadette', email: 'azongbob@gmail.com', password: 'Azon26@N', role: 'nurse', fonction: 'Infirmier(ère)' },
@@ -102,13 +123,14 @@ async function run() {
                 wasExisting = true;
                 console.log('Auth existant');
             } else {
+                const roleCode = toRoleCode(u.role);
                 const { data: newAuth, error: authError } = await supabase.auth.admin.createUser({
                     email: emailLower,
                     password: u.password,
                     email_confirm: true,
                     user_metadata: {
                         full_name: u.full_name,
-                        role: u.role,
+                        role: roleCode,
                         fonction: u.fonction,
                         clinic_id: clinic.id
                     }
@@ -123,6 +145,7 @@ async function run() {
             }
 
             const { nom, prenom } = parseFullName(u.full_name);
+            const roleCode = toRoleCode(u.role);
             const row = {
                 auth_user_id: authUserId,
                 clinic_id: clinic.id,
@@ -130,7 +153,7 @@ async function run() {
                 full_name: u.full_name,
                 nom,
                 prenom,
-                role: u.role,
+                role: roleCode,
                 fonction: u.fonction,
                 actif: true,
                 status: 'ACTIVE'
@@ -167,6 +190,8 @@ async function run() {
         errors.forEach(r => console.log(`   ${r.email}: ${r.message}`));
     }
     console.log('\n🔒 Isolation multi-tenant : chaque utilisateur ne voit que les données de MAMELLES-001 (RLS).');
+    console.log('📋 Rôles enregistrés (role_code LogiClinic) : imagerie, technicien_labo, sage_femme, infirmier, pharmacien, caissier.');
+    console.log('   Les permissions par rôle viennent de default_role_permissions (get_user_permissions).');
     console.log('\n⚠️  MITOBABA Expera (n°7) : même email que MITOBABA Chabelle. Un seul compte Auth par email.');
     console.log('   Pour un compte séparé pour Expera, utilisez un email dédié puis relancez le script.');
     console.log('═'.repeat(60));
