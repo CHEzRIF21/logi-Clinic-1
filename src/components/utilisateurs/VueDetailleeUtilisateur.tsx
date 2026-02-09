@@ -40,7 +40,7 @@ import { User } from '../../types/auth';
 import { ModulePermission } from '../../types/modulePermissions';
 import { UserPermissionsService, ExtendedUser } from '../../services/userPermissionsService';
 import { ALL_MODULES, ACTION_LABELS } from '../../types/modulePermissions';
-import { getRoleLabelByValue } from '../../config/roles';
+import { getRoleLabelByValue, dbRoleToUserRole } from '../../config/roles';
 import GestionPermissionsModules from '../parametres/GestionPermissionsModules';
 import { ProfilUtilisateur } from '../../types/permissions';
 
@@ -159,7 +159,7 @@ const VueDetailleeUtilisateur: React.FC<VueDetailleeUtilisateurProps> = ({
               </Typography>
               <Box display="flex" gap={1} mt={1} flexWrap="wrap">
                 <Chip
-                  label={getRoleLabelByValue(user.role as any)}
+                  label={getRoleLabelByValue(dbRoleToUserRole(user.role) as any)}
                   color={isAdmin ? 'error' : 'primary'}
                   icon={isAdmin ? <AdminPanelSettings /> : <Work />}
                 />

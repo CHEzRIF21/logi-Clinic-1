@@ -55,7 +55,7 @@ import Logo from '../ui/Logo';
 import { supabase } from '../../services/supabase';
 import ChangePasswordDialog from './ChangePasswordDialog';
 import ForgotPasswordDialog from './ForgotPasswordDialog';
-import { REGISTRATION_ROLES } from '../../config/roles';
+import { REGISTRATION_ROLES, dbRoleToUserRole } from '../../config/roles';
 import ThemeToggleButton from '../ui/ThemeToggleButton';
 import { SECURITY_QUESTIONS, SecurityQuestionOption } from '../../data/securityQuestions';
 import { apiPost } from '../../services/apiClient';
@@ -1112,48 +1112,36 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           'MEDECIN': ['consultations', 'patients', 'rendezvous'],
           'PHARMACIEN': ['pharmacie', 'stock', 'patients'],
           'INFIRMIER': ['consultations', 'patients'],
+          'SAGE_FEMME': ['consultations', 'patients', 'maternite'],
           'CAISSIER': ['caisse', 'patients'],
+          'COMPTABLE': ['caisse', 'patients'],
           'LABORANTIN': ['laboratoire', 'patients'],
+          'TECHNICIEN_LABO': ['laboratoire', 'patients'],
+          'IMAGERIE': ['imagerie', 'patients'],
           'RECEPTIONNISTE': ['patients', 'rendezvous'],
           'AIDE_SOIGNANT': ['patients', 'rendezvous'],
+          'SECRETAIRE': ['patients', 'rendezvous'],
+          'AUDITEUR': ['consultations', 'patients', 'pharmacie', 'caisse', 'laboratoire', 'imagerie'],
         };
         
         return roleMap[roleUpper] || ['patients'];
       };
 
-      // 7. Mapper le rôle vers UserRole
-      const mapRoleToUserRole = (role: string): User['role'] => {
-        const roleUpper = role.toUpperCase();
-        if (roleUpper === 'SUPER_ADMIN' || roleUpper === 'CLINIC_ADMIN' || roleUpper === 'ADMIN') {
-          return 'admin';
-        }
-        if (roleUpper === 'MEDECIN') return 'medecin';
-        if (roleUpper === 'INFIRMIER') return 'infirmier';
-        if (roleUpper === 'PHARMACIEN') return 'pharmacien';
-        if (roleUpper === 'CAISSIER') return 'caissier';
-        if (roleUpper === 'LABORANTIN') return 'laborantin';
-        if (roleUpper === 'RECEPTIONNISTE') return 'receptionniste';
-        if (roleUpper === 'AIDE_SOIGNANT') return 'aide_soignant';
-        if (roleUpper === 'SECRETAIRE') return 'secretaire';
-        if (roleUpper === 'COMPTABLE') return 'comptable';
-        if (roleUpper === 'AUDITEUR') return 'auditeur';
-        if (roleUpper === 'SAGE_FEMME') return 'sage_femme';
-        if (roleUpper === 'TECHNICIEN_LABO') return 'technicien_labo';
-        if (roleUpper === 'IMAGERIE') return 'imagerie';
-        return 'receptionniste'; // Rôle inconnu = accès réception (limité), pas admin
-      };
+      // 7. Mapper le rôle DB (users.role) vers UserRole frontend (centralisé dans config/roles)
+      // Gère les role_code standard (imagerie, infirmier, ...) et les anciens codes (imaging_tech, nurse, ...)
+      const frontRole = dbRoleToUserRole(user.role);
 
       // 8. Construire l'objet User pour l'application
       const appUser: User = {
         id: user.id,
         username: user.email,
         email: user.email,
-        role: mapRoleToUserRole(user.role),
+        role: frontRole,
         nom: user.nom || '',
         prenom: user.prenom || '',
         clinicCode: clinic.code,
         clinicId: user.clinic_id || clinic.id,
-        permissions: getPermissionsByRole(user.role),
+        permissions: getPermissionsByRole(frontRole),
         status: user.status === 'ACTIVE' ? 'actif' : 
                 user.status === 'PENDING' ? 'actif' : 
                 'inactif',

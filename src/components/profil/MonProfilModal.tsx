@@ -24,7 +24,7 @@ import {
 import { User } from '../../types/auth';
 import { ExtendedUser } from '../../services/userPermissionsService';
 import { UserPermissionsService } from '../../services/userPermissionsService';
-import { getRoleLabelByValue } from '../../config/roles';
+import { getRoleLabelByValue, dbRoleToUserRole } from '../../config/roles';
 import ActiviteTab from './ActiviteTab';
 import ConnexionsTab from './ConnexionsTab';
 import NotificationsHistoryTab from './NotificationsHistoryTab';
@@ -149,7 +149,7 @@ const MonProfilModal: React.FC<MonProfilModalProps> = ({ open, onClose, user }) 
                   </Typography>
                   <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
                     <Chip
-                      label={getRoleLabelByValue(displayUser.role as any)}
+                      label={getRoleLabelByValue(dbRoleToUserRole(displayUser.role) as any)}
                       icon={isAdmin ? <AdminPanelSettings /> : <Work />}
                       sx={{
                         bgcolor: 'rgba(255, 255, 255, 0.2)',

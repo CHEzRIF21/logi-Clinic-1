@@ -11,15 +11,29 @@ ADD COLUMN IF NOT EXISTS accompagnant_telephone VARCHAR(20),
 ADD COLUMN IF NOT EXISTS accompagnant_quartier VARCHAR(100),
 ADD COLUMN IF NOT EXISTS accompagnant_profession VARCHAR(100);
 
--- Ajout des colonnes pour la personne à prévenir
+-- Ajout des colonnes pour la personne à prévenir (VARCHAR(30) pour accepter 'identique_accompagnant')
 ALTER TABLE patients
-ADD COLUMN IF NOT EXISTS personne_prevenir_option VARCHAR(20) CHECK (personne_prevenir_option IN ('identique_accompagnant', 'autre')),
+ADD COLUMN IF NOT EXISTS personne_prevenir_option VARCHAR(30),
 ADD COLUMN IF NOT EXISTS personne_prevenir_nom VARCHAR(100),
 ADD COLUMN IF NOT EXISTS personne_prevenir_prenoms VARCHAR(100),
 ADD COLUMN IF NOT EXISTS personne_prevenir_filiation VARCHAR(50),
 ADD COLUMN IF NOT EXISTS personne_prevenir_telephone VARCHAR(20),
 ADD COLUMN IF NOT EXISTS personne_prevenir_quartier VARCHAR(100),
 ADD COLUMN IF NOT EXISTS personne_prevenir_profession VARCHAR(100);
+
+-- Contrainte CHECK pour personne_prevenir_option (identique_accompagnant = 22 caractères)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'patients_personne_prevenir_option_check'
+    AND conrelid = 'public.patients'::regclass
+  ) THEN
+    ALTER TABLE patients
+    ADD CONSTRAINT patients_personne_prevenir_option_check
+    CHECK (personne_prevenir_option IS NULL OR personne_prevenir_option IN ('identique_accompagnant', 'autre'));
+  END IF;
+END $$;
 
 -- Commentaires sur les nouvelles colonnes
 COMMENT ON COLUMN patients.accompagnant_nom IS 'Nom de famille de l''accompagnant';

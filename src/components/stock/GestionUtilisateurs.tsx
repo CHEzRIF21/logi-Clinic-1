@@ -63,12 +63,12 @@ import {
   ActionStock,
   Permission,
   PERMISSIONS_PAR_ROLE,
-  getRoleLabel,
   getMagasinLabel,
 } from '../../types/permissions';
 import { ModulePermission } from '../../types/modulePermissions';
 import GestionPermissionsModules from '../parametres/GestionPermissionsModules';
 import { UserPermissionsService } from '../../services/userPermissionsService';
+import { getRoleLabelByValue, dbRoleToUserRole } from '../../config/roles';
 
 interface GestionUtilisateursProps {
   utilisateurs: UtilisateurStock[];
@@ -649,7 +649,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                         <TableCell>{utilisateur.email}</TableCell>
                         <TableCell>
                           <Chip
-                            label={getRoleLabel(utilisateur.role)}
+                            label={getRoleLabelByValue(dbRoleToUserRole(utilisateur.role) as any)}
                             color="primary"
                             size="small"
                           />
@@ -832,7 +832,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                       </Box>
 
                       <Typography variant="body2" color="text.secondary" gutterBottom>
-                        Rôle: {getRoleLabel(profil.role)}
+                        Rôle: {getRoleLabelByValue(dbRoleToUserRole(profil.role) as any)}
                       </Typography>
 
                       {profil.magasinsAcces && profil.magasinsAcces.length > 0 && (
@@ -944,7 +944,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 >
                   {Object.keys(PERMISSIONS_PAR_ROLE).map((role) => (
                     <MenuItem key={role} value={role}>
-                      {getRoleLabel(role as RoleUtilisateur)}
+                      {getRoleLabelByValue(dbRoleToUserRole(role) as any)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -996,7 +996,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                 >
                   {Object.keys(PERMISSIONS_PAR_ROLE).map((role) => (
                     <MenuItem key={role} value={role}>
-                      {getRoleLabel(role as RoleUtilisateur)}
+                      {getRoleLabelByValue(dbRoleToUserRole(role) as any)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -1135,7 +1135,7 @@ const GestionUtilisateursComponent: React.FC<GestionUtilisateursProps> = ({
                     {userToDelete.email}
                   </Typography>
                   <Chip
-                    label={getRoleLabel(userToDelete.role)}
+                    label={getRoleLabelByValue(dbRoleToUserRole(userToDelete.role) as any)}
                     color="primary"
                     size="small"
                     sx={{ mt: 1 }}

@@ -334,7 +334,8 @@ export class PatientService {
           } else if (retryError.message) {
             errorMessage = retryError.message;
           }
-          throw new Error(`${errorMessage}. Note: Les migrations de base de données doivent être appliquées pour utiliser toutes les fonctionnalités.`);
+          const migrationNote = ' Appliquez la migration add_patient_accompagnant_personne_prevenir dans Supabase pour activer les champs accompagnant et personne à prévenir.';
+          throw new Error(`${errorMessage}.${migrationNote}`);
         }
         
         return retryData;

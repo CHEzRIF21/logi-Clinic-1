@@ -7,6 +7,47 @@ import { UserRole } from '../types/auth';
 import { RoleUtilisateur, getRoleLabel } from '../types/permissions';
 
 /**
+ * Mapping rôle venant de la base (users.role) → UserRole frontend.
+ * Inclut les role_code standard (IMAGERIE, INFIRMIER, ...) et les anciens codes métier
+ * (IMAGING_TECH, NURSE, MIDWIFE, LAB_TECH, PHARMACIST, FINANCE) pour affichage correct.
+ */
+export const DB_ROLE_TO_USER_ROLE: Record<string, UserRole> = {
+  SUPER_ADMIN: 'admin',
+  CLINIC_ADMIN: 'admin',
+  ADMIN: 'admin',
+  MEDECIN: 'medecin',
+  INFIRMIER: 'infirmier',
+  SAGE_FEMME: 'sage_femme',
+  PHARMACIEN: 'pharmacien',
+  TECHNICIEN_LABO: 'technicien_labo',
+  LABORANTIN: 'laborantin',
+  IMAGERIE: 'imagerie',
+  CAISSIER: 'caissier',
+  COMPTABLE: 'comptable',
+  RECEPTIONNISTE: 'receptionniste',
+  AIDE_SOIGNANT: 'aide_soignant',
+  SECRETAIRE: 'secretaire',
+  AUDITEUR: 'auditeur',
+  // Anciens codes métier (script MAMELLES-001, etc.) → role_code LogiClinic
+  IMAGING_TECH: 'imagerie',
+  LAB_TECH: 'technicien_labo',
+  MIDWIFE: 'sage_femme',
+  NURSE: 'infirmier',
+  PHARMACIST: 'pharmacien',
+  FINANCE: 'caissier',
+};
+
+/**
+ * Convertit un rôle venant de la base (users.role) en UserRole pour le frontend.
+ * Si le rôle est inconnu, retourne 'receptionniste' (accès limité) au lieu d'afficher un rôle incorrect.
+ */
+export function dbRoleToUserRole(role: string | null | undefined): UserRole {
+  if (role == null || role === '') return 'receptionniste';
+  const key = role.toString().toUpperCase().replace(/-/g, '_');
+  return DB_ROLE_TO_USER_ROLE[key] ?? 'receptionniste';
+}
+
+/**
  * Liste de tous les rôles disponibles avec leurs labels
  */
 export const ALL_ROLES: Array<{ value: UserRole; label: string; description?: string }> = [
@@ -42,7 +83,7 @@ export const ALL_ROLES: Array<{ value: UserRole; label: string; description?: st
   },
   {
     value: 'imagerie',
-    label: 'Imagerie / Échographie',
+    label: 'Imagerie médicale',
     description: 'Examens d\'imagerie - Échographie et imagerie médicale',
   },
   {

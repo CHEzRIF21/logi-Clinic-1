@@ -340,7 +340,7 @@ export const getRoleLabel = (role: RoleUtilisateur): string => {
     pharmacien: 'Pharmacien',
     technicien_labo: 'Technicien de Laboratoire',
     laborantin: 'Laborantin',
-    imagerie: 'Imagerie / Échographie',
+    imagerie: 'Imagerie médicale',
     caissier: 'Caissier',
     comptable: 'Comptable',
     receptionniste: 'Réceptionniste / Accueil',

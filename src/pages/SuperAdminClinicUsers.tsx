@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 import { Add, Edit, ArrowBack } from '@mui/icons-material';
 import { apiGet, apiPost, apiPatch } from '../services/apiClient';
-import { ALL_ROLES, getRoleLabelByValue } from '../config/roles';
+import { ALL_ROLES, getRoleLabelByValue, dbRoleToUserRole } from '../config/roles';
 
 interface ClinicUser {
   id: string;
@@ -38,25 +38,8 @@ interface ClinicUser {
   actif?: boolean;
 }
 
-const DB_ROLE_TO_FRONT: Record<string, string> = {
-  CLINIC_ADMIN: 'admin',
-  MEDECIN: 'medecin',
-  INFIRMIER: 'infirmier',
-  SAGE_FEMME: 'sage_femme',
-  PHARMACIEN: 'pharmacien',
-  TECHNICIEN_LABO: 'technicien_labo',
-  LABORANTIN: 'laborantin',
-  IMAGERIE: 'imagerie',
-  CAISSIER: 'caissier',
-  COMPTABLE: 'comptable',
-  RECEPTIONNISTE: 'receptionniste',
-  AIDE_SOIGNANT: 'aide_soignant',
-  SECRETAIRE: 'secretaire',
-  AUDITEUR: 'auditeur',
-};
-
 function toFrontRole(dbRole: string): string {
-  return DB_ROLE_TO_FRONT[dbRole?.toUpperCase()] ?? dbRole?.toLowerCase() ?? 'receptionniste';
+  return dbRoleToUserRole(dbRole);
 }
 
 function toDbRole(frontRole: string): string {
