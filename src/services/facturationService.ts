@@ -361,10 +361,14 @@ export class FacturationService {
     });
     
     // Créer les lignes de facture
+    // IMPORTANT multi-tenant: lignes_facture a un clinic_id avec RLS
+    // Policy: clinic_id = get_current_user_clinic_id() OR check_is_super_admin()
+    // → on doit toujours renseigner clinic_id pour respecter l'isolation.
     const lignesAvecFactureId = formData.lignes.map((ligne, index) => ({
       ...ligne,
       facture_id: facture.id,
-      ordre: index + 1
+      ordre: index + 1,
+      clinic_id: facture.clinic_id, // hérite de la facture (même clinique)
     }));
     
     const { error: lignesError } = await supabase

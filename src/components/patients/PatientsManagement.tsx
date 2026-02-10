@@ -34,6 +34,7 @@ export const PatientsManagement: React.FC = () => {
     createPatient,
     updatePatient,
     deletePatient,
+    loadPatients,
     clearError,
   } = usePatients();
   
@@ -233,7 +234,20 @@ export const PatientsManagement: React.FC = () => {
           <PatientRegistrationWithBilling
             onComplete={(patientId, consultationId) => {
               setOpenRegistrationWithBilling(false);
-              showSnackbar('Patient enregistré et consultation créée avec succès. Redirection vers la Caisse pour le paiement.', 'success');
+              // Recharger les patients pour refléter les éventuelles mises à jour (statut, service, etc.)
+              loadPatients();
+
+              // Ouvrir directement la fiche patient avec le suivi actualisé
+              const patient = patients.find((p) => p.id === patientId) || null;
+              if (patient) {
+                setSelectedPatient(patient);
+                setOpenDetailsDialog(true);
+              }
+
+              showSnackbar(
+                'Patient enregistré, consultation et facture créées avec succès. Retour à la gestion des patients.',
+                'success'
+              );
             }}
             onCancel={() => setOpenRegistrationWithBilling(false)}
           />
