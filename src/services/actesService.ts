@@ -208,13 +208,18 @@ export class ActesService {
   ): Promise<Acte | null> {
     const services = await FacturationService.getServicesFacturables('consultation');
     const codeMap: Record<string, string> = {
-      generale: 'CONSULT-GEN',
-      specialisee: 'CONSULT-SPEC',
-      urgence: 'CONSULT-URG',
+      // Codes alignés sur services_facturables (voir create_facturation_tables / seed)
+      generale: 'CONS-GEN',
+      specialisee: 'CONS-SPEC',
+      urgence: 'CONS-URG',
     };
 
-    const code = codeMap[type] || 'CONSULT-GEN';
-    const service = services.find(s => s.code === code || s.nom.toLowerCase().includes(type));
+    const code = codeMap[type] || 'CONS-GEN';
+
+    // D'abord chercher par code exact, puis par nom contenant le type
+    const service =
+      services.find(s => s.code === code) ||
+      services.find(s => s.nom.toLowerCase().includes(type));
 
     if (service) {
       return {

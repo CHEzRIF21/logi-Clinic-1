@@ -70,19 +70,28 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
   const [typeServiceFiltre, setTypeServiceFiltre] = useState<string>('');
   const [analysesLaboChargees, setAnalysesLaboChargees] = useState(false);
   
-  // Mapper le service consulté vers le type de service pour la facture
+  // Mapper le service consulté (module UI) vers le type de service facturable
   const getTypeServiceFromServiceConsulte = (service: string): string => {
     const mapping: { [key: string]: string } = {
+      // Modules de consultations
       'Consultation': 'consultation',
+      'Pédiatrie': 'consultation',
+      'Urgences': 'consultation',
+      'Chirurgie': 'consultation',
+
+      // Modules spécialisés
       'Maternité': 'maternite',
-      'Pédiatrie': 'pediatrie',
       'Laboratoire': 'laboratoire',
-      'Imagerie médicale': 'imagerie_medicale',
-      'Urgences': 'urgences',
-      'Chirurgie': 'chirurgie',
+      'Imagerie médicale': 'imagerie',
       'Vaccination': 'vaccination',
-      'Soins infirmiers': 'soins_infirmiers',
       'Pharmacie': 'pharmacie',
+
+      // Modules regroupés dans \"autre\" côté facturation
+      'Soins infirmiers': 'autre',
+      'Hospitalisation': 'autre',
+      'Bilan médical': 'autre',
+      'Bilans': 'autre',
+      'Documents': 'autre',
     };
     return mapping[service] || 'consultation';
   };
@@ -341,10 +350,15 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
     );
   };
 
-  // Filtrer les actes en fonction du service consulté et de la recherche
+  // Filtrer les actes en fonction du service consulté / filtre de type et de la recherche
   const actesFiltres = actesDisponibles.filter(acte => {
-    // Si un service est sélectionné, filtrer par type de service correspondant
-    const matchType = !serviceConsulte || acte.type_service === typeServiceFacture;
+    // Déterminer le type de service à utiliser pour le filtre :
+    // priorité au filtre manuel, sinon type dérivé du service consulté
+    const effectiveType =
+      typeServiceFiltre || (serviceConsulte ? typeServiceFacture : '');
+
+    const matchType =
+      !effectiveType || acte.type_service === effectiveType;
     const matchRecherche = !recherche || 
       acte.nom.toLowerCase().includes(recherche.toLowerCase()) ||
       acte.code.toLowerCase().includes(recherche.toLowerCase());
@@ -393,8 +407,9 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                 <Select
                   value={typeServiceFiltre}
                   onChange={(e) => {
-                    setTypeServiceFiltre(e.target.value);
-                    if (e.target.value === 'pharmacie') {
+                    const value = e.target.value;
+                    setTypeServiceFiltre(value);
+                    if (value === 'pharmacie') {
                       loadMedicaments();
                     }
                   }}
@@ -403,14 +418,11 @@ export const SelectionActesFacturables: React.FC<SelectionActesFacturablesProps>
                   <MenuItem value="">Tous les services</MenuItem>
                   <MenuItem value="consultation">Consultation</MenuItem>
                   <MenuItem value="maternite">Maternité</MenuItem>
-                  <MenuItem value="pediatrie">Pédiatrie</MenuItem>
                   <MenuItem value="laboratoire">Laboratoire</MenuItem>
-                  <MenuItem value="imagerie_medicale">Imagerie médicale</MenuItem>
-                  <MenuItem value="urgences">Urgences</MenuItem>
-                  <MenuItem value="chirurgie">Chirurgie</MenuItem>
+                  <MenuItem value="imagerie">Imagerie médicale</MenuItem>
                   <MenuItem value="vaccination">Vaccination</MenuItem>
-                  <MenuItem value="soins_infirmiers">Soins infirmiers</MenuItem>
                   <MenuItem value="pharmacie">Pharmacie</MenuItem>
+                  <MenuItem value="autre">Autres (Soins infirmiers, Hospitalisation, Documents, Bilans)</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
