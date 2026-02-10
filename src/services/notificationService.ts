@@ -59,6 +59,10 @@ export interface NotificationRule {
  * Service pour gérer les notifications
  */
 export class NotificationService {
+  // Indicateur global pour savoir si le système de notifications SQL est disponible.
+  // S'il manque la table notification_recipients (cas de ton projet actuel),
+  // on désactive proprement tous les appels REST associés pour éviter les 404 en boucle.
+  private static notificationsSqlAvailable = true;
   /**
    * Récupère tous les types de notifications
    */
@@ -491,30 +495,39 @@ export class NotificationService {
       const clinicId = await getMyClinicId();
 
       // 1. Notifications système (via notification_recipients)
-      const { data: recipients, error: recipientsError } = await supabase
-        .from('notification_recipients')
-        .select('notification_id')
-        .eq('user_id', userId)
-        .eq('lu', false);
+      // Dans certains environnements, le système SQL de notifications (notifications + notification_recipients)
+      // n'est pas encore déployé. Dans ce cas, Supabase renvoie une 404 / erreur de schéma.
+      // On détecte ce cas une fois puis on désactive ces appels pour le reste de la session.
+      if (NotificationService.notificationsSqlAvailable) {
+        const { data: recipients, error: recipientsError } = await supabase
+          .from('notification_recipients')
+          .select('notification_id')
+          .eq('user_id', userId)
+          .eq('lu', false);
 
-      if (recipientsError) {
-        console.warn('notification_recipients non disponible (table/RLS):', recipientsError.message);
-      }
+        if (recipientsError) {
+          const msg = recipientsError.message || '';
+          console.warn('notification_recipients non disponible (table/RLS):', msg);
 
-      if (!recipientsError && recipients && recipients.length > 0) {
-        const notificationIds = recipients.map(r => r.notification_id);
-        const { data: notifications } = await supabase
-          .from('notifications')
-          .select('id, lien')
-          .in('id', notificationIds);
+          // Cas typique : "Could not find the table 'public.notification_recipients' in the schema cache"
+          if (msg.includes("Could not find the table 'public.notification_recipients' in the schema cache")) {
+            NotificationService.notificationsSqlAvailable = false;
+          }
+        } else if (recipients && recipients.length > 0) {
+          const notificationIds = recipients.map(r => r.notification_id);
+          const { data: notifications } = await supabase
+            .from('notifications')
+            .select('id, lien')
+            .in('id', notificationIds);
 
-        if (notifications) {
-          notifications.forEach(notif => {
-            if (notif.lien) {
-              const normalizedPath = notif.lien.split('?')[0].split('#')[0];
-              counts[normalizedPath] = (counts[normalizedPath] || 0) + 1;
-            }
-          });
+          if (notifications) {
+            notifications.forEach(notif => {
+              if (notif.lien) {
+                const normalizedPath = notif.lien.split('?')[0].split('#')[0];
+                counts[normalizedPath] = (counts[normalizedPath] || 0) + 1;
+              }
+            });
+          }
         }
       }
 
