@@ -35,6 +35,10 @@ interface ModernConsultationLayoutProps {
   onStepClick: (step: number) => void;
   onNext: () => void;
   onBack: () => void;
+  /** Sauvegarde explicite de l'étape courante sans changer d'étape */
+  onSaveStep?: () => void;
+  /** Indique si la sauvegarde est possible (par ex. données modifiées) */
+  canSaveStep?: boolean;
   canGoNext: boolean;
   loading?: boolean;
   children: React.ReactNode;
@@ -47,6 +51,8 @@ export const ModernConsultationLayout: React.FC<ModernConsultationLayoutProps> =
   onStepClick,
   onNext,
   onBack,
+  onSaveStep,
+  canSaveStep = true,
   canGoNext,
   loading = false,
   children,
@@ -194,6 +200,16 @@ export const ModernConsultationLayout: React.FC<ModernConsultationLayoutProps> =
           Retour
         </Button>
         <Box display="flex" gap={2}>
+          {onSaveStep && (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={onSaveStep}
+              disabled={loading || !canSaveStep}
+            >
+              Sauvegarder
+            </Button>
+          )}
           {activeStep < steps.length - 1 ? (
             <Button
               variant="contained"

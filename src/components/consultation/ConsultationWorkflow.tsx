@@ -278,6 +278,26 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     }
   };
 
+  const handleSaveStep = async () => {
+    const stepNumber = activeStep + 1;
+    const dataToSave = stepData[activeStep] || {};
+
+    // Ne rien faire s'il n'y a aucune donnée à sauvegarder (sauf étape 11)
+    if (Object.keys(dataToSave).length === 0 && stepNumber !== 11) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave, userId);
+      await onStepComplete(stepNumber, dataToSave);
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde de l’étape:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStepClick = (step: number) => {
     // Permettre de revenir aux étapes précédentes ou complétées
     if (step <= activeStep || completedSteps.has(step)) {
@@ -424,6 +444,8 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         onStepClick={handleStepClick}
         onNext={handleNext}
         onBack={handleBack}
+        onSaveStep={handleSaveStep}
+        canSaveStep={Boolean(stepData[activeStep] && Object.keys(stepData[activeStep]).length > 0)}
         canGoNext={canGoNext()}
         loading={loading}
       >
