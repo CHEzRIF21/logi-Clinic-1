@@ -434,16 +434,28 @@ export class ConsultationService {
   }
 
   /**
-   * Récupérer les demandes de labo
+   * Récupérer les demandes de labo (lab_prescriptions au lieu de lab_requests inexistant)
    */
   static async getLabRequests(consultationId: string): Promise<LabRequest[]> {
     const { data, error } = await supabase
-      .from('lab_requests')
+      .from('lab_prescriptions')
       .select('*')
       .eq('consultation_id', consultationId);
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      consultation_id: r.consultation_id,
+      patient_id: r.patient_id,
+      type_examen: r.type_examen,
+      type: r.origine === 'urgence' ? 'EXTERNE' : 'INTERNE',
+      clinical_info: r.details,
+      details: r.details,
+      statut: r.statut === 'prescrit' ? 'en_attente' : r.statut === 'preleve' ? 'preleve' : r.statut === 'annule' ? 'annule' : 'termine',
+      tests: r.details ? [{ nom: r.type_examen, details: r.details }] : [],
+      facturable: true,
+      created_at: r.created_at,
+    }));
   }
 
   /**

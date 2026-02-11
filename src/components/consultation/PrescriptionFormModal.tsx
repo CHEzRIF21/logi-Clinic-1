@@ -48,6 +48,7 @@ import { supabase } from '../../services/supabase';
 import { PrescriptionPrintService, OrdonnanceData } from '../../services/prescriptionPrintService';
 import { MedicamentService } from '../../services/medicamentService';
 import { MedicamentSupabase } from '../../services/stockSupabase';
+import { medicamentsFrequents } from '../../data/medicamentsFrequents';
 
 interface PrescriptionFormModalProps {
   open: boolean;
@@ -207,99 +208,138 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
     };
   }, [lines.map((l) => l.selectedMedicament?.id).join(',')]);
 
+  // Convertir medicamentsFrequents en MedicamentSafetyInfo pour fallback
+  const fallbackMedicamentOptions = useMemo((): MedicamentSafetyInfo[] => {
+    return medicamentsFrequents.slice(0, 30).map((m, idx) => ({
+      id: `fallback-${idx}`,
+      code: m.dci?.substring(0, 10) || `FB-${idx}`,
+      nom: m.nom,
+      dosage: m.dosage,
+      unite: m.unite,
+      categorie: m.categorie,
+      prescription_requise: false,
+      seuil_alerte: 0,
+      seuil_rupture: 0,
+      stock_detail: 0,
+      stock_gros: 0,
+      stock_total: 0,
+      molecules: [],
+    }));
+  }, []);
+
   // Rechercher les médicaments avec leurs stocks en temps réel
   useEffect(() => {
-    if (!optionsQuery || optionsQuery.trim().length < 1) {
-      setMedicamentOptions([]);
-      setLoadingMedicaments(false);
-      return;
-    }
-
     let cancelled = false;
+
+    const buildOptionsFromMedicaments = async (meds: MedicamentSupabase[]): Promise<MedicamentSafetyInfo[]> => {
+      const slice = meds.slice(0, 25).map(async (med) => {
+        try {
+          const stock = await PrescriptionSafetyService.getMedicamentStock(med.id);
+          return {
+            id: med.id,
+            code: med.code,
+            nom: med.nom,
+            dosage: med.dosage,
+            unite: med.unite,
+            categorie: med.categorie,
+            prescription_requise: med.prescription_requise,
+            seuil_alerte: med.seuil_alerte,
+            seuil_rupture: med.seuil_rupture,
+            stock_detail: stock.stock_detail,
+            stock_gros: stock.stock_gros,
+            stock_total: stock.stock_total,
+            molecules: [],
+          } as MedicamentSafetyInfo;
+        } catch {
+          return {
+            id: med.id,
+            code: med.code,
+            nom: med.nom,
+            dosage: med.dosage,
+            unite: med.unite,
+            categorie: med.categorie,
+            prescription_requise: med.prescription_requise,
+            seuil_alerte: med.seuil_alerte,
+            seuil_rupture: med.seuil_rupture,
+            stock_detail: 0,
+            stock_gros: 0,
+            stock_total: 0,
+            molecules: [],
+          } as MedicamentSafetyInfo;
+        }
+      });
+      return Promise.all(slice);
+    };
 
     const searchMedicaments = async () => {
       try {
         setLoadingMedicaments(true);
-        
+
+        // Si la requête est vide : afficher les premiers médicaments ou le fallback
+        if (!optionsQuery || optionsQuery.trim().length < 1) {
+          if (allMedicaments.length > 0) {
+            const results = await buildOptionsFromMedicaments(allMedicaments);
+            if (!cancelled) {
+              setMedicamentOptions(results);
+            }
+          } else {
+            // Fallback : liste des médicaments fréquents quand la table est vide
+            if (!cancelled) {
+              setMedicamentOptions(fallbackMedicamentOptions);
+            }
+          }
+          if (!cancelled) setLoadingMedicaments(false);
+          return;
+        }
+
         // Si la requête fait moins de 2 caractères, utiliser la recherche locale
         if (optionsQuery.trim().length < 2) {
           const filtered = allMedicaments
             .filter((med) => {
               const nom = (med.nom || '').toLowerCase();
               const code = (med.code || '').toLowerCase();
-              return nom.includes(optionsQuery.toLowerCase()) || code.includes(optionsQuery.toLowerCase());
+              const q = optionsQuery.toLowerCase();
+              return nom.includes(q) || code.includes(q);
             })
-            .slice(0, 20)
-            .map(async (med) => {
-              // Récupérer les stocks pour chaque médicament
-              try {
-                const stock = await PrescriptionSafetyService.getMedicamentStock(med.id);
-                return {
-                  id: med.id,
-                  code: med.code,
-                  nom: med.nom,
-                  dosage: med.dosage,
-                  unite: med.unite,
-                  categorie: med.categorie,
-                  prescription_requise: med.prescription_requise,
-                  seuil_alerte: med.seuil_alerte,
-                  seuil_rupture: med.seuil_rupture,
-                  stock_detail: stock.stock_detail,
-                  stock_gros: stock.stock_gros,
-                  stock_total: stock.stock_total,
-                  molecules: [],
-                } as MedicamentSafetyInfo;
-              } catch {
-                return {
-                  id: med.id,
-                  code: med.code,
-                  nom: med.nom,
-                  dosage: med.dosage,
-                  unite: med.unite,
-                  categorie: med.categorie,
-                  prescription_requise: med.prescription_requise,
-                  seuil_alerte: med.seuil_alerte,
-                  seuil_rupture: med.seuil_rupture,
-                  stock_detail: 0,
-                  stock_gros: 0,
-                  stock_total: 0,
-                  molecules: [],
-                } as MedicamentSafetyInfo;
-              }
-            });
-          
-          const results = await Promise.all(filtered);
-          
+            .slice(0, 20);
+
+          const results = filtered.length > 0
+            ? await buildOptionsFromMedicaments(filtered)
+            : fallbackMedicamentOptions.filter(
+                (m) =>
+                  m.nom.toLowerCase().includes(optionsQuery.toLowerCase()) ||
+                  (m.code || '').toLowerCase().includes(optionsQuery.toLowerCase())
+              ).slice(0, 20);
+
           if (!cancelled) {
             setMedicamentOptions(results);
-            setLoadingMedicaments(false);
           }
         } else {
           // Recherche via le service pour les requêtes de 2+ caractères
           const results = await PrescriptionSafetyService.searchMedicaments(optionsQuery);
-          
           if (!cancelled) {
             setMedicamentOptions(results);
-            setLoadingMedicaments(false);
           }
         }
       } catch (error) {
         console.error('Erreur lors de la recherche de médicaments:', error);
         if (!cancelled) {
-          setMedicamentOptions([]);
+          setMedicamentOptions(fallbackMedicamentOptions);
+        }
+      } finally {
+        if (!cancelled) {
           setLoadingMedicaments(false);
         }
       }
     };
 
-    // Debounce la recherche pour éviter trop de requêtes
-    const timeoutId = setTimeout(searchMedicaments, 300);
+    const timeoutId = setTimeout(searchMedicaments, open ? 150 : 0);
 
     return () => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [optionsQuery, allMedicaments]);
+  }, [optionsQuery, allMedicaments, open, fallbackMedicamentOptions]);
 
   useEffect(() => {
     let cancelled = false;
@@ -567,11 +607,10 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                 if (newValue && typeof newValue !== 'string') {
                   // Vérifier si le médicament n'est pas déjà sélectionné
                   const alreadySelected = lines.some(
-                    (line) => line.medicament_id === newValue.id
+                    (line) => line.medicament_id === newValue.id || line.nom_medicament === newValue.nom
                   );
                   
                   if (alreadySelected) {
-                    // Le médicament est déjà sélectionné, juste réinitialiser la recherche
                     setOptionsQuery('');
                     return;
                   }
@@ -579,22 +618,22 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                   // Créer la ligne immédiatement avec les données disponibles
                   const newLine = createEmptyLine();
                   const alerts: PrescriptionSafetyAlert[] = [];
-                  const stockAlert = PrescriptionSafetyService.getStockAlert(newValue);
-                  if (stockAlert) {
-                    alerts.push(stockAlert);
-                  }
-                  alerts.push(...PrescriptionSafetyService.getAllergyAlerts(patientAllergies, newValue));
-                  
+                  const isFallback = String(newValue.id).startsWith('fallback-');
+                  // Pour les médicaments du catalogue (non fallback), lier medicament_id
                   newLine.selectedMedicament = newValue;
-                  newLine.medicament_id = newValue.id;
+                  newLine.medicament_id = isFallback ? undefined : newValue.id;
                   newLine.nom_medicament = newValue.nom;
                   newLine.medicamentInput = newValue.nom;
+                  const stockAlert = !isFallback ? PrescriptionSafetyService.getStockAlert(newValue) : null;
+                  if (stockAlert) alerts.push(stockAlert);
+                  alerts.push(...PrescriptionSafetyService.getAllergyAlerts(patientAllergies, newValue));
                   newLine.alerts = alerts;
                   
                   setLines((prev) => [...prev, newLine]);
                   setOptionsQuery('');
 
-                  // Rafraîchir les stocks en arrière-plan
+                  // Rafraîchir les stocks en arrière-plan (sauf pour les médicaments fallback)
+                  if (!isFallback) {
                   PrescriptionSafetyService.getMedicamentStock(newValue.id)
                     .then((realTimeStock) => {
                       setLines((prevLines) =>
@@ -627,6 +666,7 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                     .catch((error) => {
                       console.error('Erreur lors de la récupération du stock:', error);
                     });
+                  }
                 } else if (typeof newValue === 'string' && newValue.trim().length > 0) {
                   // Si c'est une saisie libre, créer une ligne avec le nom saisi
                   const newLine = createEmptyLine();
@@ -656,7 +696,7 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                 <TextField
                   {...params}
                   label="Rechercher et ajouter un médicament"
-                  placeholder="Tapez pour rechercher dans le stock..."
+                  placeholder="Cliquez ou tapez pour rechercher et ajouter des médicaments..."
                   helperText={
                     loadingMedicaments
                       ? 'Chargement des médicaments...'
@@ -664,7 +704,9 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
                       ? 'Aucun médicament trouvé. Vous pouvez continuer à taper librement.'
                       : optionsQuery.length > 0 && medicamentOptions.length > 0
                       ? `${medicamentOptions.length} médicament(s) trouvé(s)`
-                      : 'Tapez pour rechercher et ajouter des médicaments'
+                      : medicamentOptions.length > 0
+                      ? `${medicamentOptions.length} médicament(s) disponibles — cliquez pour afficher ou tapez pour rechercher`
+                      : 'Cliquez ou tapez pour afficher les médicaments disponibles'
                   }
                   InputProps={{
                     ...params.InputProps,
@@ -833,7 +875,7 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
 
           {lines.filter((l) => l.medicament_id || l.nom_medicament).length === 0 && (
             <Alert severity="info" sx={{ mt: 2 }}>
-              Aucun médicament sélectionné. Utilisez le champ de recherche ci-dessus pour ajouter des médicaments.
+              Aucun médicament sélectionné. Cliquez sur le champ de recherche ci-dessus pour afficher la liste, ou tapez pour rechercher un médicament.
             </Alert>
           )}
         </Box>

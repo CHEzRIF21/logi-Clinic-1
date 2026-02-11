@@ -244,34 +244,44 @@ export const useDashboardData = (user: User | null, timeRange: 'day' | 'week' | 
           }
         }
 
-        // Données pour laboratoire
+        // Données pour laboratoire (lab_prescriptions au lieu de lab_requests inexistant)
         if (user.role === 'admin' || user.role === 'laborantin') {
           try {
-            let labPendingQuery = supabase
-              .from('lab_requests')
+            // Récupérer les patient_ids de la clinique pour filtrer
+            const { data: patientIds } = await supabase
+              .from('patients')
               .select('id')
-              .eq('status', 'EN_ATTENTE')
-              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
-            const { data: labRequestsPending, error: errPending } = await labPendingQuery;
-            if (errPending && errPending.code !== 'PGRST116') throw errPending;
+              .eq('clinic_id', clinicId);
+            const ids = (patientIds || []).map((p: { id: string }) => p.id);
 
-            let labTodayQuery = supabase
-              .from('lab_requests')
-              .select('id')
-              .gte('created_at', today.toISOString())
-              .lte('created_at', todayEnd.toISOString())
-              .eq('clinic_id', clinicId); // Toujours filtrer par clinic_id
-            const { data: labRequestsToday, error: errToday } = await labTodayQuery;
-            if (errToday && errToday.code !== 'PGRST116') throw errToday;
+            if (ids.length === 0) {
+              newStats.lab = { pending: 0, today: 0, toValidate: 0 };
+            } else {
+              let labPendingQuery = supabase
+                .from('lab_prescriptions')
+                .select('id')
+                .eq('statut', 'prescrit')
+                .in('patient_id', ids);
+              const { data: labPending, error: errPending } = await labPendingQuery;
+              if (errPending && errPending.code !== 'PGRST116') throw errPending;
 
-            newStats.lab = {
-              pending: labRequestsPending?.length || 0,
-              today: labRequestsToday?.length || 0,
-              toValidate: 0, // À implémenter selon votre logique
-            };
+              let labTodayQuery = supabase
+                .from('lab_prescriptions')
+                .select('id')
+                .gte('created_at', today.toISOString())
+                .lte('created_at', todayEnd.toISOString())
+                .in('patient_id', ids);
+              const { data: labToday, error: errToday } = await labTodayQuery;
+              if (errToday && errToday.code !== 'PGRST116') throw errToday;
+
+              newStats.lab = {
+                pending: labPending?.length || 0,
+                today: labToday?.length || 0,
+                toValidate: 0,
+              };
+            }
           } catch (err: any) {
             if (err?.code === 'PGRST116') {
-              // Table n'existe pas encore
               newStats.lab = { pending: 0, today: 0, toValidate: 0 };
             } else {
               console.error('Erreur chargement lab:', err);

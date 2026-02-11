@@ -94,8 +94,10 @@ export const LabRequestWizard: React.FC<LabRequestWizardProps> = ({
   const totalEstimate = selectedTests.reduce((sum, exam) => sum + (exam.tarif_base || 0), 0);
 
   useEffect(() => {
-    loadExamCatalog();
-  }, []);
+    if (open) {
+      loadExamCatalog();
+    }
+  }, [open]);
 
   const loadExamCatalog = async () => {
     setCatalogLoading(true);
