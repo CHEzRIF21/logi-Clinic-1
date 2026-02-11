@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getMyClinicId } from './clinicService';
 
 export interface MedicamentSafetyInfo {
   id: string;
@@ -106,10 +107,9 @@ export class PrescriptionSafetyService {
       return [];
     }
 
-    // Récupérer tous les médicaments correspondant à la recherche
-    // La table medicament_molecules n'existe pas, donc on ne l'inclut pas dans la requête
-    // On récupère les lots séparément pour pouvoir filtrer par statut='actif' et quantite_disponible > 0
-    const { data: medicamentsData, error: medicamentsError } = await supabase
+    // Isolation multi-tenant : filtrer par clinic_id (clinique courante ou globaux)
+    const clinicId = await getMyClinicId();
+    let medQuery = supabase
       .from('medicaments')
       .select(
         `
@@ -127,6 +127,14 @@ export class PrescriptionSafetyService {
       .or(`nom.ilike.%${query}%,code.ilike.%${query}%`)
       .order('nom', { ascending: true })
       .limit(20);
+
+    if (clinicId) {
+      medQuery = medQuery.or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
+    } else {
+      medQuery = medQuery.is('clinic_id', null);
+    }
+
+    const { data: medicamentsData, error: medicamentsError } = await medQuery;
 
     if (medicamentsError) {
       throw medicamentsError;

@@ -48,7 +48,7 @@ import { supabase } from '../../services/supabase';
 import { PrescriptionPrintService, OrdonnanceData } from '../../services/prescriptionPrintService';
 import { MedicamentService } from '../../services/medicamentService';
 import { MedicamentSupabase } from '../../services/stockSupabase';
-import { medicamentsFrequents } from '../../data/medicamentsFrequents';
+import { getMedicamentsFallbackOptions } from '../../data/medicamentsOptionsFallback';
 
 interface PrescriptionFormModalProps {
   open: boolean;
@@ -208,24 +208,11 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
     };
   }, [lines.map((l) => l.selectedMedicament?.id).join(',')]);
 
-  // Convertir medicamentsFrequents en MedicamentSafetyInfo pour fallback
-  const fallbackMedicamentOptions = useMemo((): MedicamentSafetyInfo[] => {
-    return medicamentsFrequents.slice(0, 30).map((m, idx) => ({
-      id: `fallback-${idx}`,
-      code: m.dci?.substring(0, 10) || `FB-${idx}`,
-      nom: m.nom,
-      dosage: m.dosage,
-      unite: m.unite,
-      categorie: m.categorie,
-      prescription_requise: false,
-      seuil_alerte: 0,
-      seuil_rupture: 0,
-      stock_detail: 0,
-      stock_gros: 0,
-      stock_total: 0,
-      molecules: [],
-    }));
-  }, []);
+  // Liste fallback unifiée (medicamentsFrequents + listeMedicamentsComplet)
+  const fallbackMedicamentOptions = useMemo(
+    () => getMedicamentsFallbackOptions(),
+    []
+  );
 
   // Rechercher les médicaments avec leurs stocks en temps réel
   useEffect(() => {
@@ -305,11 +292,7 @@ export const PrescriptionFormModal: React.FC<PrescriptionFormModalProps> = ({
 
           const results = filtered.length > 0
             ? await buildOptionsFromMedicaments(filtered)
-            : fallbackMedicamentOptions.filter(
-                (m) =>
-                  m.nom.toLowerCase().includes(optionsQuery.toLowerCase()) ||
-                  (m.code || '').toLowerCase().includes(optionsQuery.toLowerCase())
-              ).slice(0, 20);
+            : getMedicamentsFallbackOptions(optionsQuery);
 
           if (!cancelled) {
             setMedicamentOptions(results);

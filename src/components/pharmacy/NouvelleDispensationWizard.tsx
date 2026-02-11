@@ -106,7 +106,9 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
   // États pour les lots
   const [lotsDisponibles, setLotsDisponibles] = useState<Record<string, LotDisponible[]>>({});
 
-  // États pour la recherche de médicaments (avec quantite_stock enrichie)
+  // Liste complète des médicaments (source pour la recherche)
+  const [medicamentsComplet, setMedicamentsComplet] = useState<any[]>([]);
+  // Résultats de recherche affichés dans l'Autocomplete (filtrés depuis medicamentsComplet)
   const [medicamentsRecherches, setMedicamentsRecherches] = useState<any[]>([]);
   const [rechercheMedicament, setRechercheMedicament] = useState<string>('');
 
@@ -120,6 +122,19 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
       chargerAssurances();
     }
   }, [open, allMedicaments]);
+
+  // Re-filtrer quand medicamentsComplet change (ex: après chargement) et qu'une recherche est en cours
+  useEffect(() => {
+    if (rechercheMedicament && rechercheMedicament.length > 0 && medicamentsComplet.length > 0) {
+      const termeLower = rechercheMedicament.toLowerCase();
+      const resultats = medicamentsComplet.filter((med: any) =>
+        med.nom?.toLowerCase().includes(termeLower) ||
+        med.code?.toLowerCase().includes(termeLower) ||
+        med.dci?.toLowerCase().includes(termeLower)
+      );
+      setMedicamentsRecherches(resultats);
+    }
+  }, [medicamentsComplet, rechercheMedicament]);
 
   const chargerAssurances = async () => {
     try {
@@ -136,6 +151,7 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
       // Utiliser les médicaments du hook (déjà chargés et à jour)
       if (!allMedicaments || allMedicaments.length === 0) {
         console.log('Aucun médicament disponible');
+        setMedicamentsComplet([]);
         setMedicamentsRecherches([]);
         return;
       }
@@ -167,16 +183,17 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
         quantite_stock: quantitesMap.get(med.id) || 0,
       }));
 
+      setMedicamentsComplet(medsEnrichis);
       setMedicamentsRecherches(medsEnrichis);
       console.log('Médicaments chargés:', medsEnrichis.length, 'avec stock:', Array.from(quantitesMap.keys()).length);
     } catch (err: any) {
       console.error('Erreur lors du chargement des médicaments:', err);
-      // En cas d'erreur, utiliser directement les médicaments du hook
       const medsFallback = allMedicaments.map((med: any) => ({
         ...med,
         prix_unitaire_detail: med.prix_unitaire_detail || med.prix_unitaire || 0,
         quantite_stock: 0,
       }));
+      setMedicamentsComplet(medsFallback);
       setMedicamentsRecherches(medsFallback);
     }
   };
@@ -390,14 +407,14 @@ const NouvelleDispensationWizard: React.FC<NouvelleDispensationWizardProps> = ({
 
   const rechercherMedicaments = async (searchTerm: string) => {
     if (!searchTerm || searchTerm.length < 1) {
-      // Recharger tous les médicaments enrichis si pas de recherche
-      await chargerTousMedicaments();
+      // Afficher la liste complète
+      setMedicamentsRecherches(medicamentsComplet);
       return;
     }
 
-    // Filtrer localement sur les médicaments déjà chargés et enrichis
+    // Filtrer depuis la liste complète (pas depuis medicamentsRecherches)
     const termeLower = searchTerm.toLowerCase();
-    const resultats = medicamentsRecherches.filter((med: any) => 
+    const resultats = medicamentsComplet.filter((med: any) =>
       med.nom?.toLowerCase().includes(termeLower) ||
       med.code?.toLowerCase().includes(termeLower) ||
       med.dci?.toLowerCase().includes(termeLower)
