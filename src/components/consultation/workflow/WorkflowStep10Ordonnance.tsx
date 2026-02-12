@@ -11,6 +11,13 @@ import {
   Tab,
   Chip,
   CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from '@mui/material';
 import { Medication, Science, LocalHospital } from '@mui/icons-material';
 import { PrescriptionFormModal } from '../PrescriptionFormModal';
@@ -435,46 +442,57 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
                 </Typography>
               </Box>
             ) : savedMedPrescription && savedMedPrescription.lines.length > 0 ? (
-              <Alert severity="success">
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 1 }}>
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Ordonnance enregistrée
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {savedMedPrescription.numero_prescription || savedMedPrescription.id}
-                      {savedMedPrescription.created_at
-                        ? ` • ${new Date(savedMedPrescription.created_at).toLocaleString('fr-FR')}`
-                        : ''}
-                      {savedMedPrescription.statut ? ` • Statut: ${savedMedPrescription.statut}` : ''}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    {savedMedPrescription.facture?.numero_facture && (
-                      <Chip size="small" label={`Facture: ${savedMedPrescription.facture.numero_facture}`} />
-                    )}
-                    {medPaymentChip}
-                  </Box>
-                </Box>
-
-                <Box component="ul" sx={{ pl: 3, m: 0 }}>
-                  {savedMedPrescription.lines.map((l) => (
-                    <li key={l.id}>
-                      <Typography variant="body2">
-                        <strong>{l.nom_medicament}</strong>
-                        {l.posologie ? ` — ${l.posologie}` : ''}
-                        {typeof l.quantite_totale === 'number' ? ` — Qté: ${l.quantite_totale}` : ''}
-                        {typeof l.duree_jours === 'number' ? ` — Durée: ${l.duree_jours} j` : ''}
+              <Card variant="outlined" sx={{ overflow: 'hidden' }}>
+                <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        Médicaments prescrits
                       </Typography>
-                      {l.instructions ? (
-                        <Typography variant="caption" color="text.secondary">
-                          Instructions: {l.instructions}
-                        </Typography>
-                      ) : null}
-                    </li>
-                  ))}
-                </Box>
-              </Alert>
+                      <Typography variant="body2" color="text.secondary">
+                        {savedMedPrescription.numero_prescription || savedMedPrescription.id}
+                        {savedMedPrescription.created_at
+                          ? ` • ${new Date(savedMedPrescription.created_at).toLocaleString('fr-FR')}`
+                          : ''}
+                        {savedMedPrescription.statut ? ` • Statut: ${savedMedPrescription.statut}` : ''}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      {savedMedPrescription.facture?.numero_facture && (
+                        <Chip size="small" label={`Facture: ${savedMedPrescription.facture.numero_facture}`} />
+                      )}
+                      {medPaymentChip}
+                    </Box>
+                  </Box>
+
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'grey.50' }}>
+                          <TableCell><strong>Médicament</strong></TableCell>
+                          <TableCell><strong>Posologie</strong></TableCell>
+                          <TableCell align="right"><strong>Quantité</strong></TableCell>
+                          <TableCell align="right"><strong>Durée</strong></TableCell>
+                          <TableCell><strong>Mode</strong></TableCell>
+                          <TableCell><strong>Instructions</strong></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {savedMedPrescription.lines.map((l) => (
+                          <TableRow key={l.id} hover>
+                            <TableCell>{l.nom_medicament}</TableCell>
+                            <TableCell>{l.posologie || '-'}</TableCell>
+                            <TableCell align="right">{typeof l.quantite_totale === 'number' ? l.quantite_totale : '-'}</TableCell>
+                            <TableCell align="right">{typeof l.duree_jours === 'number' ? `${l.duree_jours} j` : '-'}</TableCell>
+                            <TableCell>{l.mode_administration || '-'}</TableCell>
+                            <TableCell sx={{ maxWidth: 180 }}>{l.instructions || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
             ) : (
               <Alert severity="warning">
                 <Typography variant="subtitle2" gutterBottom>
@@ -517,10 +535,12 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
                 </Typography>
               </Box>
             ) : savedLabPrescription ? (
-              <Alert severity="success">
-                <Typography variant="subtitle2" gutterBottom>
-                  Prescription d’analyses enregistrée
-                </Typography>
+              <Card variant="outlined" sx={{ overflow: 'hidden' }}>
+                <CardContent sx={{ '&:last-child': { pb: 2 } }}>
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Analyses prescrites
+                  </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   {savedLabPrescription.type_examen || 'Analyse'}
                   {savedLabPrescription.date_prescription
@@ -537,25 +557,38 @@ export const WorkflowStep10Ordonnance: React.FC<WorkflowStep10OrdonnanceProps> =
                     <strong>Contexte clinique:</strong> {savedLabPrescription.details}
                   </Typography>
                 ) : null}
+                  </Box>
 
                 {savedLabPrescription.analyses.length > 0 ? (
-                  <Box component="ul" sx={{ pl: 3, m: 0 }}>
-                    {savedLabPrescription.analyses.map((a, idx) => (
-                      <li key={a.id || `${a.code_analyse}-${idx}`}>
-                        <Typography variant="body2">
-                          <strong>{a.nom_analyse || a.code_analyse || 'Analyse'}</strong>
-                          {a.prix != null ? ` — ${Number(a.prix).toLocaleString('fr-FR')} XOF` : ''}
-                          {a.tube_requis ? ` — Tube: ${a.tube_requis}` : ''}
-                        </Typography>
-                      </li>
-                    ))}
-                  </Box>
+                  <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'grey.50' }}>
+                          <TableCell><strong>Analyse</strong></TableCell>
+                          <TableCell><strong>Code</strong></TableCell>
+                          <TableCell align="right"><strong>Prix (XOF)</strong></TableCell>
+                          <TableCell><strong>Tube requis</strong></TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {savedLabPrescription.analyses.map((a, idx) => (
+                          <TableRow key={a.id || `${a.code_analyse}-${idx}`} hover>
+                            <TableCell>{a.nom_analyse || a.code_analyse || 'Analyse'}</TableCell>
+                            <TableCell>{a.code_analyse || '-'}</TableCell>
+                            <TableCell align="right">{a.prix != null ? Number(a.prix).toLocaleString('fr-FR') : '-'}</TableCell>
+                            <TableCell>{a.tube_requis || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 ) : (
-                  <Typography variant="body2">
+                  <Typography variant="body2" color="text.secondary">
                     Les examens ont été transmis au module Laboratoire.
                   </Typography>
                 )}
-              </Alert>
+                </CardContent>
+              </Card>
             ) : (
               <Alert severity="info">
                 <Typography variant="subtitle2" gutterBottom>

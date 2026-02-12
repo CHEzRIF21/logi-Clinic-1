@@ -61,7 +61,7 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
   const [stepData, setStepData] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(false);
 
-  // Initialiser stepData depuis consultation au montage
+  // Initialiser stepData et activeStep depuis consultation au montage (reprise au bon endroit)
   useEffect(() => {
     const loadStepData = async () => {
       const initialData: Record<number, any> = {};
@@ -77,6 +77,11 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         stepsData.forEach((step: any) => {
           initialData[step.step_number - 1] = step.data;
         });
+        // Reprendre à l'étape où la consultation a été interrompue :
+        // afficher la dernière étape ayant des données (0-based index)
+        const maxStepNumber = Math.max(...stepsData.map((s: any) => s.step_number));
+        const resumeStep = Math.min(maxStepNumber - 1, STEPS.length - 1);
+        setActiveStep(Math.max(0, resumeStep));
       }
       
       // Étape 1: Motifs
