@@ -33,6 +33,7 @@ export const DB_ROLE_TO_USER_ROLE: Record<string, UserRole> = {
   LAB_TECH: 'technicien_labo',
   MIDWIFE: 'sage_femme',
   NURSE: 'infirmier',
+  STAFF_NURSE: 'infirmier',  // Infirmière (création campus-001, etc.)
   PHARMACIST: 'pharmacien',
   FINANCE: 'caissier',
 };
