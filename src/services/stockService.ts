@@ -48,6 +48,9 @@ export class StockService {
     observations?: string;
   }) {
     try {
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible d\'enregistrer la réception.');
+
       // Créer le lot dans le magasin gros
       const { data: lot, error: lotError } = await supabase
         .from('lots')
@@ -61,7 +64,8 @@ export class StockService {
           prix_achat: data.prix_achat,
           fournisseur: data.fournisseur,
           statut: 'actif',
-          magasin: 'gros'
+          magasin: 'gros',
+          clinic_id: clinicId
         })
         .select()
         .single();
@@ -84,7 +88,8 @@ export class StockService {
           magasin_source: 'externe',
           magasin_destination: 'gros',
           reference_document: data.reference_document,
-          observations: data.observations
+          observations: data.observations,
+          clinic_id: clinicId
         });
 
       if (mouvementError) throw mouvementError;
@@ -125,6 +130,9 @@ export class StockService {
         throw new Error('Le fournisseur est obligatoire');
       }
 
+      const clinicId = await getMyClinicId();
+      if (!clinicId) throw new Error('Contexte de clinique manquant. Impossible d\'enregistrer la réception.');
+
       const lotsCrees: any[] = [];
 
       // Traitement séquentiel (plus simple et évite la surcharge)
@@ -147,7 +155,8 @@ export class StockService {
             prix_achat: ligne.prix_achat,
             fournisseur: data.fournisseur,
             statut: 'actif',
-            magasin: 'gros'
+            magasin: 'gros',
+            clinic_id: clinicId
           })
           .select()
           .single();
@@ -169,7 +178,8 @@ export class StockService {
             magasin_source: 'externe',
             magasin_destination: 'gros',
             reference_document: data.reference_document,
-            observations: [data.observations, ligne.observations].filter(Boolean).join('\n')
+            observations: [data.observations, ligne.observations].filter(Boolean).join('\n'),
+            clinic_id: clinicId
           });
 
         if (mouvementError) throw mouvementError;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
 import {
   Assignment,
@@ -37,16 +37,16 @@ interface ConsultationWorkflowProps {
 
 const STEPS = [
   { id: 1, label: 'Motif de Consultation', icon: Assignment, required: true, description: 'Raison principale de la consultation' },
-  { id: 2, label: 'Anamnèse (Histoire de la Maladie)', icon: History, required: false, description: 'Description détaillée avec dictée vocale' },
-  { id: 3, label: 'Traitement en Cours', icon: Medication, required: false, description: 'Médicaments actuellement pris par le patient' },
-  { id: 4, label: 'Antécédents (Background)', icon: History, required: false, description: 'Antécédents médicaux et familiaux' },
-  { id: 5, label: 'Prévention (Vaccination & Déparasitage)', icon: Vaccines, required: false, description: 'Historique vaccinal et déparasitage' },
-  { id: 6, label: 'Allergies (Sécurité Critique)', icon: Warning, required: false, description: 'Allergies connues et réactions' },
-  { id: 7, label: 'Bilans Antérieurs', icon: Description, required: false, description: 'Examens et bilans précédents' },
+  { id: 2, label: 'AnamnÃ¨se (Histoire de la Maladie)', icon: History, required: false, description: 'Description dÃ©taillÃ©e avec dictÃ©e vocale' },
+  { id: 3, label: 'Traitement en Cours', icon: Medication, required: false, description: 'MÃ©dicaments actuellement pris par le patient' },
+  { id: 4, label: 'AntÃ©cÃ©dents (Background)', icon: History, required: false, description: 'AntÃ©cÃ©dents mÃ©dicaux et familiaux' },
+  { id: 5, label: 'PrÃ©vention (Vaccination & DÃ©parasitage)', icon: Vaccines, required: false, description: 'Historique vaccinal et dÃ©parasitage' },
+  { id: 6, label: 'Allergies (SÃ©curitÃ© Critique)', icon: Warning, required: false, description: 'Allergies connues et rÃ©actions' },
+  { id: 7, label: 'Bilans AntÃ©rieurs', icon: Description, required: false, description: 'Examens et bilans prÃ©cÃ©dents' },
   { id: 8, label: 'Examen Physique', icon: LocalHospital, required: false, description: 'Signes vitaux et examen physique' },
-  { id: 9, label: 'Diagnostic', icon: Science, required: false, description: 'Diagnostics probables et différentiels' },
-  { id: 10, label: 'Traitement (Ordonnance)', icon: Medication, required: false, description: 'Médicaments, examens et hospitalisation' },
-  { id: 11, label: 'Rendez-vous (RDV) & Clôture', icon: CheckCircle, required: true, description: 'Rendez-vous de suivi et clôture' },
+  { id: 9, label: 'Diagnostic', icon: Science, required: false, description: 'Diagnostics probables et diffÃ©rentiels' },
+  { id: 10, label: 'Traitement (Ordonnance)', icon: Medication, required: false, description: 'MÃ©dicaments, examens et hospitalisation' },
+  { id: 11, label: 'Rendez-vous (RDV) & ClÃ´ture', icon: CheckCircle, required: true, description: 'Rendez-vous de suivi et clÃ´ture' },
 ];
 
 export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
@@ -60,31 +60,31 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [stepData, setStepData] = useState<Record<number, any>>({});
   const [loading, setLoading] = useState(false);
+  const initialLoadDone = useRef(false);
 
-  // Initialiser stepData et activeStep depuis consultation au montage (reprise au bon endroit)
+  // Initialiser stepData et activeStep depuis consultation au montage (reprise Ã  l'Ã©tape oÃ¹ arrÃªt)
   useEffect(() => {
     const loadStepData = async () => {
+      initialLoadDone.current = false;
       const initialData: Record<number, any> = {};
       
-      // Charger les données depuis consultation_steps
+      // Charger les donnÃ©es depuis consultation_steps
       const { data: stepsData } = await supabase
         .from('consultation_steps')
         .select('step_number, data')
         .eq('consult_id', consultation.id);
       
-      // Mapper les données des étapes
-      if (stepsData) {
+      // Mapper les donnÃ©es des Ã©tapes et reprendre Ã  l'Ã©tape oÃ¹ la consultation a Ã©tÃ© interrompue
+      if (stepsData && stepsData.length > 0) {
         stepsData.forEach((step: any) => {
           initialData[step.step_number - 1] = step.data;
         });
-        // Reprendre à l'étape où la consultation a été interrompue :
-        // afficher la dernière étape ayant des données (0-based index)
         const maxStepNumber = Math.max(...stepsData.map((s: any) => s.step_number));
         const resumeStep = Math.min(maxStepNumber - 1, STEPS.length - 1);
         setActiveStep(Math.max(0, resumeStep));
       }
       
-      // Étape 1: Motifs
+      // Ã‰tape 1: Motifs
       if (consultation.motifs && consultation.motifs.length > 0) {
         initialData[0] = initialData[0] || {
           motif: consultation.motifs[0],
@@ -92,53 +92,53 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         };
       }
       
-      // Étape 2: Anamnèse
+      // Ã‰tape 2: AnamnÃ¨se
       if (consultation.anamnese) {
         initialData[1] = initialData[1] || { anamnese: consultation.anamnese };
       }
       
-      // Étape 3: Traitement en cours
+      // Ã‰tape 3: Traitement en cours
       if (consultation.traitement_en_cours) {
         initialData[2] = initialData[2] || { traitement_en_cours: consultation.traitement_en_cours };
       }
       
-      // Étape 4: Antécédents
+      // Ã‰tape 4: AntÃ©cÃ©dents
       if ((consultation as any).antecedents_consultation) {
         initialData[3] = initialData[3] || { antecedents: (consultation as any).antecedents_consultation };
       }
       
-      // Étape 5: Prévention - Initialiser depuis stepData si disponible, sinon vide
+      // Ã‰tape 5: PrÃ©vention - Initialiser depuis stepData si disponible, sinon vide
       if (!initialData[4]) {
         initialData[4] = { prevention: { vaccinations: [], deparasitages: [] } };
       }
       
-      // Étape 6: Allergies - Initialiser depuis patient
+      // Ã‰tape 6: Allergies - Initialiser depuis patient
       if (!initialData[5] && patient.allergies) {
         initialData[5] = { allergies: patient.allergies };
       }
       
-      // Étape 7: Bilans - Initialiser depuis stepData si disponible, sinon charger depuis consultation
+      // Ã‰tape 7: Bilans - Initialiser depuis stepData si disponible, sinon charger depuis consultation
       if (!initialData[6]) {
         try {
           const labRequests = await ConsultationService.getLabRequests(consultation.id);
           initialData[6] = {
             bilans: {
               labRequests: labRequests || [],
-              bilansAntérieurs: []
+              bilansAntÃ©rieurs: []
             }
           };
         } catch (error) {
           console.error('Erreur chargement bilans:', error);
-          initialData[6] = { bilans: { labRequests: [], bilansAntérieurs: [] } };
+          initialData[6] = { bilans: { labRequests: [], bilansAntÃ©rieurs: [] } };
         }
       }
       
-      // Étape 8: Examens cliniques
+      // Ã‰tape 8: Examens cliniques
       if (consultation.examens_cliniques) {
         initialData[7] = initialData[7] || { examens_cliniques: consultation.examens_cliniques };
       }
       
-      // Étape 9: Diagnostics
+      // Ã‰tape 9: Diagnostics
       if (consultation.diagnostics) {
         initialData[8] = initialData[8] || {
           diagnostics: consultation.diagnostics,
@@ -147,28 +147,55 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
       }
       
       setStepData(initialData);
+      initialLoadDone.current = true;
     };
     
     loadStepData();
-  }, [consultation, patient]);
+  }, [consultation.id, patient.id]);
 
-  // Vérifier quelles étapes sont complètes
+  // Sauvegarde automatique de l'Ã©tape courante (debounce 1,2 s aprÃ¨s modification)
+  useEffect(() => {
+    if (!initialLoadDone.current) return;
+    const stepNumber = activeStep + 1;
+    const dataToSave = stepData[activeStep] || {};
+    if (Object.keys(dataToSave).length === 0 && stepNumber !== 11) return;
+
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave, userId);
+        await onStepComplete(stepNumber, dataToSave);
+        setCompletedSteps((prev) => {
+          const next = new Set(prev);
+          next.add(activeStep);
+          return next;
+        });
+      } catch (error) {
+        console.error('Erreur sauvegarde automatique Ã©tape:', error);
+      } finally {
+        setLoading(false);
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [consultation.id, userId, activeStep, stepData[activeStep]]);
+
+  // VÃ©rifier quelles Ã©tapes sont complÃ¨tes
   useEffect(() => {
     const completed = new Set<number>();
     
-    // Étape 1: Motifs obligatoires
+    // Ã‰tape 1: Motifs obligatoires
     if (consultation.motifs && consultation.motifs.length > 0) completed.add(0);
     
-    // Étape 2: Anamnèse
+    // Ã‰tape 2: AnamnÃ¨se
     if (consultation.anamnese) completed.add(1);
     
-    // Étape 3: Traitement en cours
+    // Ã‰tape 3: Traitement en cours
     if (consultation.traitement_en_cours) completed.add(2);
     
-    // Étape 4: Antécédents (vérifier si modifiés)
+    // Ã‰tape 4: AntÃ©cÃ©dents (vÃ©rifier si modifiÃ©s)
     if ((consultation as any).antecedents_consultation) completed.add(3);
     
-    // Étape 5: Prévention (vérifier dans stepData ou consultation_steps)
+    // Ã‰tape 5: PrÃ©vention (vÃ©rifier dans stepData ou consultation_steps)
     if (stepData[4]?.prevention) {
       const prevention = stepData[4].prevention;
       if ((prevention.vaccinations && prevention.vaccinations.length > 0) || 
@@ -177,25 +204,25 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
       }
     }
     
-    // Étape 6: Allergies
+    // Ã‰tape 6: Allergies
     if (patient.allergies || stepData[5]?.allergies) completed.add(5);
     
-    // Étape 7: Bilans (vérifier dans stepData ou consultation_steps)
+    // Ã‰tape 7: Bilans (vÃ©rifier dans stepData ou consultation_steps)
     if (stepData[6]?.bilans) {
       const bilans = stepData[6].bilans;
       if ((bilans.labRequests && bilans.labRequests.length > 0) || 
-          (bilans.bilansAntérieurs && bilans.bilansAntérieurs.length > 0)) {
+          (bilans.bilansAntÃ©rieurs && bilans.bilansAntÃ©rieurs.length > 0)) {
         completed.add(6);
       }
     }
     
-    // Étape 8: Examens cliniques
+    // Ã‰tape 8: Examens cliniques
     if (consultation.examens_cliniques && Object.keys(consultation.examens_cliniques).length > 0) completed.add(7);
     
-    // Étape 9: Diagnostics
+    // Ã‰tape 9: Diagnostics
     if (consultation.diagnostics && consultation.diagnostics.length > 0) completed.add(8);
     
-    // Étape 11: Clôture
+    // Ã‰tape 11: ClÃ´ture
     if (consultation.status === 'CLOTURE') completed.add(10);
     
     setCompletedSteps(completed);
@@ -205,31 +232,31 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     const currentStep = STEPS[activeStep];
     const stepNumber = activeStep + 1;
 
-    // Validation pour les étapes obligatoires - bloquer la navigation si non complétée
+    // Validation pour les Ã©tapes obligatoires - bloquer la navigation si non complÃ©tÃ©e
     if (currentStep.required) {
       const currentData = stepData[activeStep];
       if (activeStep === 0) {
-        // Étape 1: Vérifier motif
+        // Ã‰tape 1: VÃ©rifier motif
         if (!currentData?.motif && !consultation.motifs?.length) {
-          console.warn('Étape obligatoire non complétée: Le motif de consultation est requis');
+          console.warn('Ã‰tape obligatoire non complÃ©tÃ©e: Le motif de consultation est requis');
           return;
         }
       }
       if (activeStep === 10) {
-        // Étape 11: Vérifier clôture
+        // Ã‰tape 11: VÃ©rifier clÃ´ture
         if (consultation.status !== 'CLOTURE') {
-          console.warn('La consultation doit être clôturée avant de terminer');
+          console.warn('La consultation doit Ãªtre clÃ´turÃ©e avant de terminer');
           return;
         }
       }
     }
 
-    // Sauvegarder les données de l'étape si disponibles (en arrière-plan, ne bloque pas la navigation)
+    // Sauvegarder les donnÃ©es de l'Ã©tape si disponibles (en arriÃ¨re-plan, ne bloque pas la navigation)
     const dataToSave = stepData[activeStep] || {};
     if (Object.keys(dataToSave).length > 0 || stepNumber === 11) {
       setLoading(true);
       try {
-        // Utiliser le service pour sauvegarder l'étape avec userId
+        // Utiliser le service pour sauvegarder l'Ã©tape avec userId
         await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave, userId);
         await onStepComplete(stepNumber, dataToSave);
         setCompletedSteps((prev) => {
@@ -239,13 +266,13 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         });
       } catch (error) {
         console.error('Erreur lors de la sauvegarde:', error);
-        // Ne pas bloquer la navigation même en cas d'erreur de sauvegarde
-        // L'utilisateur peut toujours naviguer et réessayer plus tard
+        // Ne pas bloquer la navigation mÃªme en cas d'erreur de sauvegarde
+        // L'utilisateur peut toujours naviguer et rÃ©essayer plus tard
       } finally {
         setLoading(false);
       }
     } else {
-      // Même sans données à sauvegarder, marquer l'étape comme complétée si elle est optionnelle
+      // MÃªme sans donnÃ©es Ã  sauvegarder, marquer l'Ã©tape comme complÃ©tÃ©e si elle est optionnelle
       if (!currentStep.required) {
         setCompletedSteps((prev) => {
           const newSet = new Set(prev);
@@ -255,7 +282,7 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
       }
     }
 
-    // Navigation vers l'étape suivante
+    // Navigation vers l'Ã©tape suivante
     if (activeStep < STEPS.length - 1) {
       setActiveStep((prev) => prev + 1);
     }
@@ -267,11 +294,11 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
     
     const currentData = stepData[activeStep];
     if (activeStep === 0) {
-      // Étape 1: Vérifier motif
+      // Ã‰tape 1: VÃ©rifier motif
       return currentData?.motif || consultation.motifs?.length > 0;
     }
     if (activeStep === 10) {
-      // Étape 11: Vérifier clôture
+      // Ã‰tape 11: VÃ©rifier clÃ´ture
       return consultation.status === 'CLOTURE';
     }
     return true;
@@ -280,26 +307,6 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
   const handleBack = () => {
     if (activeStep > 0) {
       setActiveStep((prev) => prev - 1);
-    }
-  };
-
-  const handleSaveStep = async () => {
-    const stepNumber = activeStep + 1;
-    const dataToSave = stepData[activeStep] || {};
-
-    // Ne rien faire s'il n'y a aucune donnée à sauvegarder (sauf étape 11)
-    if (Object.keys(dataToSave).length === 0 && stepNumber !== 11) {
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await ConsultationService.saveWorkflowStep(consultation.id, stepNumber, dataToSave, userId);
-      await onStepComplete(stepNumber, dataToSave);
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde de l’étape:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -449,8 +456,6 @@ export const ConsultationWorkflow: React.FC<ConsultationWorkflowProps> = ({
         onStepClick={handleStepClick}
         onNext={handleNext}
         onBack={handleBack}
-        onSaveStep={handleSaveStep}
-        canSaveStep={Boolean(stepData[activeStep] && Object.keys(stepData[activeStep]).length > 0)}
         canGoNext={canGoNext()}
         loading={loading}
       >

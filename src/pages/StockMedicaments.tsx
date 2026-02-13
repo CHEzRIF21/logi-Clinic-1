@@ -640,59 +640,64 @@ const StockMedicaments: React.FC = () => {
     return `MED-${prefix}-${suffix}`;
   };
 
-  const handleNouveauMedicament = () => {
-    const newId = generateMedicamentId();
-    const newCode = generateMedicamentCode(nouveauMedicamentForm.nom, nouveauMedicamentForm.dosage);
-    
-    const nouveauMedicament: Medicament = {
-      id: newId,
-      code: newCode,
-      nom: nouveauMedicamentForm.nom,
-      dci: nouveauMedicamentForm.dci,
-      forme: nouveauMedicamentForm.forme,
-      dosage: nouveauMedicamentForm.dosage,
-      unite: nouveauMedicamentForm.unite,
-      fournisseur: nouveauMedicamentForm.fournisseur,
-      quantiteStock: 0,
-      seuilMinimum: nouveauMedicamentForm.seuilMinimum,
-      seuilMaximum: nouveauMedicamentForm.seuilMaximum,
-      prixUnitaireEntree: nouveauMedicamentForm.prixUnitaireEntree,
-      prixTotalEntree: nouveauMedicamentForm.prixTotalEntree,
-      prixUnitaireDetail: nouveauMedicamentForm.prixUnitaireDetail,
-      prixUnitaire: nouveauMedicamentForm.prixUnitaireDetail, // Le prix unitaire = prix détail pour la pharmacie
-      emplacement: nouveauMedicamentForm.emplacement,
-      observations: nouveauMedicamentForm.observations
-    };
-
-    // Ajouter le nouveau médicament à la liste
-    setMedicaments(prev => [...prev, nouveauMedicament]);
-    
-    // Pré-remplir le formulaire de réception avec le nouveau médicament
-    setReceptionForm(prev => ({
-      ...prev,
-      medicamentId: newId
-    }));
-
-    // Fermer le dialog et revenir à la réception
-    setOpenNouveauMedicament(false);
-    
-    // Réinitialiser le formulaire nouveau médicament
-    setNouveauMedicamentForm({
-      nom: '',
-      dci: '',
-      forme: '',
-      dosage: '',
-      unite: '',
-      fournisseur: '',
-      seuilMinimum: 0,
-      seuilMaximum: 0,
-      prixUnitaireEntree: 0,
-      prixTotalEntree: 0,
-      prixUnitaireDetail: 0,
-      prixUnitaire: 0,
-      emplacement: '',
-      observations: ''
-    });
+  const handleNouveauMedicament = async () => {
+    if (!nouveauMedicamentForm.nom?.trim()) {
+      showNotification('Le nom du médicament est obligatoire.', 'error');
+      return;
+    }
+    try {
+      const code = nouveauMedicamentForm.nom
+        ? generateMedicamentCode(nouveauMedicamentForm.nom, nouveauMedicamentForm.dosage || '')
+        : '';
+      const medicamentData: MedicamentFormData = {
+        code: code || '', // vide = généré par le service
+        nom: nouveauMedicamentForm.nom.trim(),
+        forme: nouveauMedicamentForm.forme || 'Comprimé',
+        dosage: nouveauMedicamentForm.dosage || '',
+        unite: nouveauMedicamentForm.unite || 'Boîte',
+        fournisseur: nouveauMedicamentForm.fournisseur || '',
+        prix_unitaire: nouveauMedicamentForm.prixUnitaireDetail || 0,
+        seuil_alerte: nouveauMedicamentForm.seuilMinimum ?? 0,
+        seuil_rupture: Math.floor((nouveauMedicamentForm.seuilMinimum ?? 0) / 2),
+        emplacement: nouveauMedicamentForm.emplacement || '',
+        categorie: 'Général',
+        prescription_requise: false,
+        prix_unitaire_entree: nouveauMedicamentForm.prixUnitaireEntree,
+        prix_total_entree: nouveauMedicamentForm.prixTotalEntree,
+        prix_unitaire_detail: nouveauMedicamentForm.prixUnitaireDetail,
+        seuil_maximum: nouveauMedicamentForm.seuilMaximum,
+        dci: nouveauMedicamentForm.dci || undefined,
+        observations: nouveauMedicamentForm.observations || undefined
+      };
+      const newMedicament = await MedicamentService.createMedicament(medicamentData);
+      await refreshMedicaments();
+      const pendingLineId = (window as any).__pendingReceptionLineId;
+      if (pendingLineId) {
+        handleUpdateReceptionLine(pendingLineId, 'medicamentId', newMedicament.id);
+        (window as any).__pendingReceptionLineId = undefined;
+      }
+      setOpenNouveauMedicament(false);
+      setNouveauMedicamentForm({
+        nom: '',
+        dci: '',
+        forme: '',
+        dosage: '',
+        unite: '',
+        fournisseur: '',
+        seuilMinimum: 0,
+        seuilMaximum: 0,
+        prixUnitaireEntree: 0,
+        prixTotalEntree: 0,
+        prixUnitaireDetail: 0,
+        prixUnitaire: 0,
+        emplacement: '',
+        observations: ''
+      });
+      showNotification('Médicament créé avec succès. Il est disponible dans la liste déroulante.', 'success');
+    } catch (err: any) {
+      console.error('Erreur création médicament:', err);
+      showNotification(err?.message || 'Erreur lors de la création du médicament.', 'error');
+    }
   };
 
   const handleReception = async () => {
@@ -1644,7 +1649,8 @@ const StockMedicaments: React.FC = () => {
                     <Grid container spacing={2}>
                       <Grid item xs={12} md={6}>
                         <Autocomplete
-                          options={medicamentsSupabase.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
+                          openOnFocus
+                          options={[...medicamentsSupabase].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
                           getOptionLabel={(option) => `${option.nom} ${option.dosage ? `(${option.dosage})` : ''} - ${option.code}`}
                           value={medicamentsSupabase.find(m => m.id === line.medicamentId) || null}
                           onChange={(_, newValue) => {
@@ -1654,7 +1660,7 @@ const StockMedicaments: React.FC = () => {
                           }}
                           loading={loadingMedicaments}
                           filterOptions={(options, { inputValue }) => {
-                            if (!inputValue) return options.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                            if (!inputValue) return [...options].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
                             const searchLower = inputValue.toLowerCase();
                             return options.filter(option =>
                               option.nom.toLowerCase().includes(searchLower) ||
@@ -1668,7 +1674,7 @@ const StockMedicaments: React.FC = () => {
                               {...params}
                               label="Médicament *"
                               required
-                              helperText="Recherchez par nom, code, DCI ou dosage"
+                              helperText="Cliquez ou tapez pour rechercher par nom, code, DCI ou dosage"
                             />
                           )}
                           renderOption={(props, option) => (
@@ -1678,12 +1684,12 @@ const StockMedicaments: React.FC = () => {
                                   {option.nom}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  {option.code} • {option.forme} {option.dosage} • {option.categorie}
+                                  {option.code} • {option.forme} {option.dosage} • {option.categorie || ''}
                                 </Typography>
                               </Box>
                             </Box>
                           )}
-                          noOptionsText="Aucun médicament trouvé"
+                          noOptionsText={loadingMedicaments ? "Chargement des médicaments..." : medicamentsSupabase.length === 0 ? "Aucun médicament. Utilisez le bouton 'Nouveau Médicament' pour en créer." : "Aucun médicament trouvé"}
                         />
                       </Grid>
                       <Grid item xs={12} md={6}>

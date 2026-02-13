@@ -141,7 +141,7 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
   const [lots, setLots] = useState<LotSupabase[]>([]);
   
   // Utiliser le hook centralisé pour les médicaments
-  const { medicaments } = useMedicaments({ autoRefresh: true });
+  const { medicaments, loading: loadingMedicaments } = useMedicaments({ autoRefresh: true });
 
   // Filtrage selon le contexte:
   // - Pharmacie: ne voit que ses demandes + peut réceptionner
@@ -1324,7 +1324,8 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
                             <TableCell>
                               <Autocomplete
                                 size="small"
-                                options={medicaments}
+                                openOnFocus
+                                options={[...medicaments].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
                                 getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
                                 value={medicament || null}
                                 onChange={(_, newValue) => {
@@ -1338,14 +1339,16 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
                                     });
                                   }
                                 }}
+                                loading={loadingMedicaments}
                                 renderInput={(params) => (
                                   <TextField
                                     {...params}
                                     label="Médicament *"
                                     error={!ligne.medicament_id}
-                                    helperText={!ligne.medicament_id ? 'Sélectionnez un médicament' : ''}
+                                    helperText={!ligne.medicament_id ? 'Cliquez ou tapez pour sélectionner un médicament' : ''}
                                   />
                                 )}
+                                noOptionsText={loadingMedicaments ? "Chargement des médicaments..." : medicaments.length === 0 ? "Aucun médicament. Créez-en dans Paramètres > Médicaments." : "Aucun médicament trouvé"}
                               />
                             </TableCell>
                             <TableCell>
@@ -1535,7 +1538,8 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
                             <TableCell>
                               <Autocomplete
                                 size="small"
-                                options={medicaments}
+                                openOnFocus
+                                options={[...medicaments].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
                                 getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
                                 value={medicament || null}
                                 onChange={(_, newValue) => {
@@ -1549,16 +1553,17 @@ const GestionTransferts: React.FC<GestionTransfertsProps> = ({ context = 'stock'
                                     });
                                   }
                                 }}
+                                loading={loadingMedicaments}
                                 renderInput={(params) => (
                                   <TextField
                                     {...params}
-                                    placeholder="Sélectionner un médicament"
+                                    placeholder="Cliquez ou tapez pour sélectionner un médicament"
                                     required
                                   />
                                 )}
                                 sx={{ minWidth: 250 }}
                                 ListboxProps={{ style: { maxHeight: 200 } }}
-                                noOptionsText="Aucun médicament"
+                                noOptionsText={loadingMedicaments ? "Chargement des médicaments..." : medicaments.length === 0 ? "Aucun médicament. Créez-en dans Paramètres > Médicaments." : "Aucun médicament trouvé"}
                               />
                             </TableCell>
                             <TableCell>

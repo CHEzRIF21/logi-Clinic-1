@@ -35,6 +35,7 @@ interface EnregistrerBilanAntérieurDialogProps {
   open: boolean;
   onClose: () => void;
   patientId: string;
+  consultationId?: string; // Optionnel: pour lier le bilan à la consultation en cours (RLS)
   onSave: () => void;
 }
 
@@ -42,6 +43,7 @@ export const EnregistrerBilanAntérieurDialog: React.FC<EnregistrerBilanAntérie
   open,
   onClose,
   patientId,
+  consultationId,
   onSave
 }) => {
   const [bilan, setBilan] = useState<Partial<BilanAntérieur>>({
@@ -129,6 +131,11 @@ export const EnregistrerBilanAntérieurDialog: React.FC<EnregistrerBilanAntérie
         origine: 'consultation',
         statut: bilan.statut
       };
+
+      // Lier à la consultation en cours pour satisfaire la politique RLS
+      if (consultationId) {
+        insertData.consultation_id = consultationId;
+      }
 
       // Ajouter clinic_id seulement si la colonne existe
       // (la table lab_prescriptions devrait avoir clinic_id selon l'architecture multi-tenant)

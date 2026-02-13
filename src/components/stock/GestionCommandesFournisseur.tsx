@@ -64,7 +64,7 @@ function statutColor(statut: StatutCommandeFournisseur): 'default' | 'warning' |
 }
 
 export const GestionCommandesFournisseur: React.FC = () => {
-  const { medicaments } = useMedicaments({ autoRefresh: true });
+  const { medicaments, loading: loadingMedicaments } = useMedicaments({ autoRefresh: true });
   const [currentUserId, setCurrentUserId] = React.useState<string>('system');
   const [loading, setLoading] = React.useState(false);
 
@@ -505,7 +505,8 @@ export const GestionCommandesFournisseur: React.FC = () => {
                             <Autocomplete
                               size="small"
                               fullWidth
-                              options={medicaments}
+                              openOnFocus
+                              options={[...medicaments].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
                               getOptionLabel={(option) => `${option.nom} ${option.dosage || ''} (${option.code || ''})`}
                               value={med || null}
                               onChange={(_, newValue) => {
@@ -518,15 +519,16 @@ export const GestionCommandesFournisseur: React.FC = () => {
                                   updateLine(l.id, { medicament_id: '', prix_unitaire_estime: 0 });
                                 }
                               }}
+                              loading={loadingMedicaments}
                               renderInput={(params) => (
                                 <TextField
                                   {...params}
-                                  placeholder="Sélectionner un médicament"
+                                  placeholder="Cliquez ou tapez pour sélectionner un médicament"
                                   required
                                 />
                               )}
                               ListboxProps={{ style: { maxHeight: 250 } }}
-                              noOptionsText="Aucun médicament disponible"
+                              noOptionsText={loadingMedicaments ? "Chargement des médicaments..." : medicaments.length === 0 ? "Aucun médicament. Créez-en dans Paramètres > Médicaments." : "Aucun médicament trouvé"}
                             />
                             {med?.prix_unitaire_detail != null && (
                               <Typography variant="caption" color="text.secondary">

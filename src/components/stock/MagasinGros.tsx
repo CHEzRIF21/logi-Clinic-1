@@ -61,7 +61,7 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
   const [lots, setLots] = useState<LotSupabase[]>([]);
   
   // Utiliser le hook centralisé pour les médicaments
-  const { medicaments } = useMedicaments({ autoRefresh: true });
+  const { medicaments, loading: loadingMedicaments } = useMedicaments({ autoRefresh: true });
   
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -579,7 +579,8 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                         <TableCell sx={{ minWidth: 300 }}>
                           <Autocomplete
                             size="small"
-                            options={medicaments.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
+                            openOnFocus
+                            options={[...medicaments].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }))}
                             getOptionLabel={(option) => `${option.nom} ${option.dosage ? `(${option.dosage})` : ''} - ${option.code}`}
                             value={medicaments.find(m => m.id === ligne.medicament_id) || null}
                             onChange={(_, newValue) => {
@@ -587,8 +588,9 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                                 setReceptionLignes(prev => prev.map(l => l.id === ligne.id ? { ...l, medicament_id: newValue.id } : l));
                               }
                             }}
+                            loading={loadingMedicaments}
                             filterOptions={(options, { inputValue }) => {
-                              if (!inputValue) return options.sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
+                              if (!inputValue) return [...options].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' }));
                               const searchLower = inputValue.toLowerCase();
                               return options.filter(option =>
                                 option.nom.toLowerCase().includes(searchLower) ||
@@ -601,7 +603,7 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                               <TextField
                                 {...params}
                                 label="Médicament"
-                                placeholder="Rechercher un médicament..."
+                                placeholder="Cliquez ou tapez pour rechercher un médicament..."
                               />
                             )}
                             renderOption={(props, option) => (
@@ -611,12 +613,12 @@ const MagasinGros: React.FC<MagasinGrosProps> = ({ onRefresh }) => {
                                     {option.nom}
                                   </Typography>
                                   <Typography variant="caption" color="text.secondary">
-                                    {option.code} • {option.forme} {option.dosage} • {option.categorie}
+                                    {option.code} • {option.forme} {option.dosage} • {option.categorie || ''}
                                   </Typography>
                                 </Box>
                               </Box>
                             )}
-                            noOptionsText="Aucun médicament trouvé"
+                            noOptionsText={loadingMedicaments ? "Chargement des médicaments..." : medicaments.length === 0 ? "Aucun médicament. Créez-en dans Paramètres > Médicaments." : "Aucun médicament trouvé"}
                           />
                         </TableCell>
                         <TableCell>

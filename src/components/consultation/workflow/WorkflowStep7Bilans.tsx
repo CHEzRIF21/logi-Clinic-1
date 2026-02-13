@@ -299,6 +299,7 @@ export const WorkflowStep7Bilans: React.FC<WorkflowStep7BilansProps> = ({
           open={bilanDialogOpen}
           onClose={() => setBilanDialogOpen(false)}
           patientId={patient.id}
+          consultationId={consultationId}
           onSave={handleBilanSaved}
         />
 

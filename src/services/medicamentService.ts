@@ -142,18 +142,22 @@ export class MedicamentService {
     }
   }
 
-  // Créer un nouveau médicament
+  // Créer un nouveau médicament (associé à la clinique de l'utilisateur connecté)
   static async createMedicament(medicamentData: MedicamentFormData): Promise<MedicamentSupabase> {
     try {
+      const clinicId = await getMyClinicId();
+      // Pour "Nouveau Médicament" par clinique : associer à la clinique courante
+      const payload = { ...medicamentData, clinic_id: clinicId ?? null };
+
       // Générer automatiquement un ID unique si non fourni
-      if (!medicamentData.code || medicamentData.code.trim() === '') {
+      if (!payload.code || payload.code.trim() === '') {
         const existingIds = await this.getAllMedicamentCodes();
-        medicamentData.code = MedicamentIdGenerator.generateId(existingIds);
+        payload.code = MedicamentIdGenerator.generateId(existingIds);
       }
 
       const { data, error } = await supabase
         .from('medicaments')
-        .insert([medicamentData])
+        .insert([payload])
         .select()
         .single();
 
@@ -297,13 +301,22 @@ export class MedicamentService {
     }
   }
 
-  // Récupérer tous les codes de médicaments existants
+  // Récupérer tous les codes de médicaments existants (globaux + clinique courante)
   static async getAllMedicamentCodes(): Promise<string[]> {
     try {
-      const { data, error } = await supabase
+      const clinicId = await getMyClinicId();
+      let query = supabase
         .from('medicaments')
         .select('code')
         .order('code', { ascending: true });
+
+      if (clinicId) {
+        query = query.or(`clinic_id.is.null,clinic_id.eq.${clinicId}`);
+      } else {
+        query = query.is('clinic_id', null);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Erreur lors de la récupération des codes:', error);
